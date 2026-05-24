@@ -1,6 +1,7 @@
 import os
 import logging
-from fastapi import APIRouter, Path, HTTPException
+from fastapi import APIRouter, Path, HTTPException, Query
+from fastapi.responses import FileResponse
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from bson import ObjectId
@@ -134,3 +135,19 @@ async def get_manga_download_path(manga_id: str = Path(...)):
         "path_exists": exists,
         "base_path": base_path,
     }
+
+
+@router.get("/file")
+async def get_local_image_file(path: str = Query(..., description="Absolute path of the image file")):
+    """Serve a local image file directly from disk using FileResponse."""
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=400, detail="Path is not a file")
+    
+    # Simple extension check to prevent arbitrary file reading
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}:
+        raise HTTPException(status_code=400, detail="Only image files can be served")
+        
+    return FileResponse(path)
