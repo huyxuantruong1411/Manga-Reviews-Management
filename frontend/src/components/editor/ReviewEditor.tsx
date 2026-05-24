@@ -1040,13 +1040,15 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         </div>
 
         {/* Toolbar */}
-        <EditorToolbar
-          editor={editor}
-          onImageUpload={() => fileInputRef.current?.click()}
-          onAI={triggerAI}
-          aiLoading={aiLoading}
-          onInsertMangaRef={handleInsertMangaReference}
-        />
+        <div className="sticky top-[64px] z-30 py-2 bg-[var(--bg-card)]">
+          <EditorToolbar
+            editor={editor}
+            onImageUpload={() => fileInputRef.current?.click()}
+            onAI={triggerAI}
+            aiLoading={aiLoading}
+            onInsertMangaRef={handleInsertMangaReference}
+          />
+        </div>
 
         {/* Editor Area with slash command support */}
         <div className="relative prose prose-zinc dark:prose-invert max-w-none text-base leading-relaxed editor-content-wrapper">

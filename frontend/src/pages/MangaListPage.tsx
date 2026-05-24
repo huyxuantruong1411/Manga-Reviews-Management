@@ -66,7 +66,9 @@ export const MangaListPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState("desc");
   const [page, setPage] = useState(1);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
-  const limit = 12;
+  const [limit, setLimit] = useState<number>(() => {
+    return Number(localStorage.getItem("library_page_limit")) || 12;
+  });
 
   // Metadata/All Tags Options
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -202,6 +204,7 @@ export const MangaListPage: React.FC = () => {
     fetchLibrary();
   }, [
     page,
+    limit,
     debouncedSearch,
     readStatus,
     ratingMin,
@@ -439,6 +442,12 @@ export const MangaListPage: React.FC = () => {
     setImportTags((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     );
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    localStorage.setItem("library_page_limit", String(newLimit));
+    setPage(1);
   };
 
   const handleQuickUpdateStatus = async (mangaId: string, status: string) => {
@@ -943,50 +952,67 @@ export const MangaListPage: React.FC = () => {
 
       {/* View Switcher Toolbar */}
       {!loading && mangas.length > 0 && (
-        <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border-primary)] pb-4 gap-4">
           <span className="text-sm font-semibold text-[var(--text-secondary)]">
             Showing <span className="text-[var(--text-primary)] font-bold">{mangas.length}</span> of <span className="text-[var(--text-primary)] font-bold">{total}</span> manga
           </span>
-          <div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm">
-            <button
-              onClick={() => {
-                setViewMode("grid");
-                localStorage.setItem("library_view_mode", "grid");
-              }}
-              className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "grid"
-                ? "bg-[var(--brand-orange)] text-white"
-                : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                }`}
-              title="Grid View"
-            >
-              <Grid size={18} />
-            </button>
-            <button
-              onClick={() => {
-                setViewMode("list");
-                localStorage.setItem("library_view_mode", "list");
-              }}
-              className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "list"
-                ? "bg-[var(--brand-orange)] text-white"
-                : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                }`}
-              title="List View"
-            >
-              <ListIcon size={18} />
-            </button>
-            <button
-              onClick={() => {
-                setViewMode("card");
-                localStorage.setItem("library_view_mode", "card");
-              }}
-              className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "card"
-                ? "bg-[var(--brand-orange)] text-white"
-                : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                }`}
-              title="Detailed Card View"
-            >
-              <LayoutGrid size={18} />
-            </button>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Per Page:</span>
+              <select
+                value={limit}
+                onChange={(e) => handleLimitChange(Number(e.target.value))}
+                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+              >
+                <option value={12}>12</option>
+                <option value={24}>24</option>
+                <option value={48}>48</option>
+                <option value={60}>60</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm">
+              <button
+                onClick={() => {
+                  setViewMode("grid");
+                  localStorage.setItem("library_view_mode", "grid");
+                }}
+                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "grid"
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+                  }`}
+                title="Grid View"
+              >
+                <Grid size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode("list");
+                  localStorage.setItem("library_view_mode", "list");
+                }}
+                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "list"
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+                  }`}
+                title="List View"
+              >
+                <ListIcon size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode("card");
+                  localStorage.setItem("library_view_mode", "card");
+                }}
+                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "card"
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+                  }`}
+                title="Detailed Card View"
+              >
+                <LayoutGrid size={18} />
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -257,6 +257,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
   const lines = text.split("\n");
   const blocks: React.ReactNode[] = [];
   let currentList: string[] = [];
+  let currentNumberedList: string[] = [];
   
   const flushList = (key: string | number) => {
     if (currentList.length > 0) {
@@ -270,6 +271,18 @@ const renderMarkdown = (text: string): React.ReactNode => {
         </ul>
       );
       currentList = [];
+    }
+    if (currentNumberedList.length > 0) {
+      blocks.push(
+        <ol key={`ol-list-${key}`} className="list-decimal pl-5 my-2 space-y-1">
+          {currentNumberedList.map((item, idx) => (
+            <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+              {parseInlineMarkdown(item)}
+            </li>
+          ))}
+        </ol>
+      );
+      currentNumberedList = [];
     }
   };
 
@@ -315,12 +328,65 @@ const renderMarkdown = (text: string): React.ReactNode => {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+    const cleanLine = line.replace(/\s+/g, "");
     
-    if (line === "---") {
+    if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3) {
       flushList(i);
       blocks.push(<hr key={`hr-${i}`} className="my-4 border-[var(--border-primary)]" />);
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      if (currentNumberedList.length > 0) {
+        blocks.push(
+          <ol key={`ol-list-${i}`} className="list-decimal pl-5 my-2 space-y-1">
+            {currentNumberedList.map((item, idx) => (
+              <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                {parseInlineMarkdown(item)}
+              </li>
+            ))}
+          </ol>
+        );
+        currentNumberedList = [];
+      }
       currentList.push(line.substring(2));
+    } else if (/^\d+\.\s+(.*)$/.test(line)) {
+      if (currentList.length > 0) {
+        blocks.push(
+          <ul key={`list-${i}`} className="list-disc pl-5 my-2 space-y-1">
+            {currentList.map((item, idx) => (
+              <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                {parseInlineMarkdown(item)}
+              </li>
+            ))}
+          </ul>
+        );
+        currentList = [];
+      }
+      const match = line.match(/^\d+\.\s+(.*)$/);
+      if (match) {
+        currentNumberedList.push(match[1]);
+      }
+    } else if (line.startsWith("> ")) {
+      flushList(i);
+      blocks.push(
+        <blockquote key={`bq-${i}`} className="border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 py-1 italic text-zinc-500 my-2">
+          {parseInlineMarkdown(line.substring(2))}
+        </blockquote>
+      );
+    } else if (/^(#{1,6})\s+(.*)$/.test(line)) {
+      flushList(i);
+      const match = line.match(/^(#{1,6})\s+(.*)$/);
+      if (match) {
+        const level = match[1].length;
+        const content = match[2];
+        let fontSize = "text-base font-bold my-3";
+        if (level === 1) fontSize = "text-xl font-bold my-4";
+        if (level === 2) fontSize = "text-lg font-bold my-3.5";
+        const headingElement = React.createElement(
+          `h${level}`,
+          { key: `h-${i}`, className: `${fontSize} text-[var(--text-primary)]` },
+          parseInlineMarkdown(content)
+        );
+        blocks.push(headingElement);
+      }
     } else if (line === "") {
       flushList(i);
     } else {
