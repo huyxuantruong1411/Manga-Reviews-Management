@@ -4,16 +4,13 @@ import {
   Trash2, 
   Image as ImageIcon, 
   RefreshCw, 
-  Check, 
   CheckSquare, 
   Square, 
   Folder, 
-  AlertCircle, 
   Sparkles, 
   Layers, 
   ArrowRight, 
   ChevronDown, 
-  ChevronRight,
   Info,
   CheckCircle,
   FileCheck,
@@ -298,7 +295,6 @@ export const ImageToolsPage: React.FC = () => {
       // Filter local state to remove deleted files
       const updatedGroups = dupGroups.map((group) => {
         const remainingFiles = group.files.filter((f) => !selectedDuplicatePaths.has(f.path));
-        const fileCountChange = group.files.length - remainingFiles.length;
         const newWasted = remainingFiles.length > 1 ? group.file_size * (remainingFiles.length - 1) : 0;
         
         return {
