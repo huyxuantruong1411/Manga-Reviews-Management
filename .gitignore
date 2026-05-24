@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+var/
+Pipfile.lock
+poetry.lock
+
+# Node / JS
+node_modules/
+dist/
+dist-ssr/
+.eslintcache
+
+# Local Env
+.env
+.env.*
+!.env.example
+
+# OS / Editors
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Project specifics
+downloads/

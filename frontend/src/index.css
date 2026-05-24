@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-spartan: "League Spartan", sans-serif;
+  --font-poppins: "Poppins", sans-serif;
+}
+
+@layer base {
+  :root {
+    --bg-primary: #F9FAFB;
+    --bg-card: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #4B5563;
+    --border-primary: #E5E7EB;
+    
+    --brand-orange: #DA7500;
+    --brand-coral: #FF6740;
+  }
+
+  .dark {
+    --bg-primary: #0F0F11;
+    --bg-card: #18181C;
+    --text-primary: #E4E4E7;
+    --text-secondary: #A1A1AA;
+    --border-primary: #2A2A32;
+  }
+
+  body {
+    @apply bg-[var(--bg-primary)] text-[var(--text-primary)] font-poppins antialiased transition-colors duration-200;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-spartan font-bold;
+  }
+}
+
+/* Custom Scrollbar for modern aesthetics */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-zinc-800 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-zinc-700;
+}
+
+/* Editor utilities and Tiptap custom styling */
+.editor-content-wrapper .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-secondary);
+  pointer-events: none;
+  height: 0;
+  opacity: 0.5;
+}
+
+.editor-content-wrapper .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+.editor-content-wrapper .ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.25rem;
+}
+
+.editor-content-wrapper .ProseMirror ul[data-type="taskList"] li > label {
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.15rem;
+}
+
+.editor-content-wrapper .ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.editor-content-wrapper .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 1rem;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border-primary);
+}
+
+.editor-content-wrapper .ProseMirror blockquote {
+  border-left: 4px solid var(--brand-orange);
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.editor-content-wrapper .ProseMirror pre {
+  background: #1e1e24;
+  color: #f8f8f2;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  font-family: monospace;
+  overflow-x: auto;
+}
+
+/* Manga reference links */
+.manga-reference-link {
+  text-decoration: none !important;
+}
+
+/* Animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+

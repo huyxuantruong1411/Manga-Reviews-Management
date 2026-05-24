@@ -1,0 +1,85 @@
+import sys
+import os
+import asyncio
+import httpx
+from datetime import datetime
+from motor.motor_asyncio import AsyncIOMotorClient
+
+# Adjust Python path to load backend module
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from backend.config import settings
+
+async def seed_mangadex_tags():
+    print("--- Starting MangaDex Tags Seeding Script ---")
+    print(f"Connecting to MongoDB at: {settings.mongodb_uri} ...")
+    try:
+        client = AsyncIOMotorClient(settings.mongodb_uri)
+        db = client[settings.database_name]
+        
+        # Test connection
+        await client.admin.command('ping')
+        print("Connected to MongoDB successfully!")
+        
+        # Fetch tags from MangaDex
+        url = "https://api.mangadex.org/manga/tag"
+        print(f"Fetching tags from: {url}")
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            resp = await http_client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        
+        tags = data.get("data", [])
+        print(f"Retrieved {len(tags)} tags from MangaDex API.")
+        
+        inserted_count = 0
+        updated_count = 0
+        
+        for t in tags:
+            tag_id = t["id"]
+            attr = t.get("attributes", {})
+            name = attr.get("name", {})
+            group = attr.get("group", "custom")
+            description = attr.get("description", {})
+            
+            # Check if tag already exists by mangadex_id
+            existing = await db.tags.find_one({"mangadex_id": tag_id})
+            
+            tag_doc = {
+                "mangadex_id": tag_id,
+                "source": "mangadex",
+                "name": name,
+                "group": group,
+                "description": description,
+                "updated_at": datetime.utcnow()
+            }
+            
+            if not existing:
+                # Assign a default color based on the group
+                # MangaDex groups: genre, theme, format, content
+                group_colors = {
+                    "genre": "#E11D48",    # Rose
+                    "theme": "#7C3AED",    # Purple
+                    "format": "#0891B2",   # Cyan
+                    "content": "#EA580C"   # Orange
+                }
+                tag_doc["color"] = group_colors.get(group, "#4B5563")
+                tag_doc["created_at"] = datetime.utcnow()
+                await db.tags.insert_one(tag_doc)
+                inserted_count += 1
+            else:
+                # Update existing
+                await db.tags.update_one({"mangadex_id": tag_id}, {"$set": tag_doc})
+                updated_count += 1
+                
+        print(f"Completed! Seeded {inserted_count} new tags, updated {updated_count} existing tags.")
+        print("--- Seeding script completed successfully! ---")
+        
+    except Exception as e:
+        print(f"CRITICAL ERROR during tags seeding: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(seed_mangadex_tags())
