@@ -27,7 +27,7 @@ def _get_file_hash(filepath: str) -> Optional[str]:
         return None
 
 
-def _make_thumbnail_base64(filepath: str, max_size: Tuple[int, int] = (80, 120)) -> Optional[str]:
+def _make_thumbnail_base64(filepath: str, max_size: Tuple[int, int] = (240, 360)) -> Optional[str]:
     """Generate a small base64-encoded JPEG thumbnail for preview."""
     try:
         with Image.open(filepath) as img:

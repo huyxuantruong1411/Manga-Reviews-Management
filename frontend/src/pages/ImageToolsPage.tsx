@@ -87,6 +87,7 @@ export const ImageToolsPage: React.FC = () => {
   const [isMangaDropdownOpen, setIsMangaDropdownOpen] = useState(false);
   const [mangaSearchQuery, setMangaSearchQuery] = useState("");
   const mangaDropdownRef = useRef<HTMLDivElement>(null);
+  const [zoomedImageBase64, setZoomedImageBase64] = useState<string | null>(null);
 
   // Duplicates Scanner State
   const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
@@ -735,7 +736,13 @@ export const ImageToolsPage: React.FC = () => {
                   className="bg-[var(--bg-card)] border border-[var(--border-primary)] hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl p-4 md:p-6 transition shadow-sm flex flex-col md:flex-row gap-5"
                 >
                   {/* Image Preview Thumbnail */}
-                  <div className="relative w-24 h-36 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center group/thumb self-center md:self-start shadow-inner">
+                  <div 
+                    onClick={() => group.thumbnail && setZoomedImageBase64(group.thumbnail)}
+                    className={`relative w-24 h-36 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center group/thumb self-center md:self-start shadow-inner transition duration-150 ${
+                      group.thumbnail ? "cursor-zoom-in hover:border-zinc-400 dark:hover:border-zinc-500" : ""
+                    }`}
+                    title={group.thumbnail ? "Click to preview image in large view" : undefined}
+                  >
                     {group.thumbnail ? (
                       <img 
                         src={`data:image/jpeg;base64,${group.thumbnail}`}
@@ -1205,6 +1212,25 @@ export const ImageToolsPage: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Lightbox Zoom Overlay */}
+      {zoomedImageBase64 && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          onClick={() => setZoomedImageBase64(null)}
+        >
+          <div 
+            className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={`data:image/jpeg;base64,${zoomedImageBase64}`}
+              alt="Zoomed duplicate preview"
+              className="max-w-full max-h-[90vh] object-contain rounded-2xl"
+            />
+          </div>
         </div>
       )}
     </div>
