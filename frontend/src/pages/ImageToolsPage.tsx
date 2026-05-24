@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Wrench, 
   Trash2, 
@@ -16,7 +16,9 @@ import {
   ChevronRight,
   Info,
   CheckCircle,
-  FileCheck
+  FileCheck,
+  Search,
+  ChevronUp
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -80,6 +82,11 @@ export const ImageToolsPage: React.FC = () => {
   const [scanPath, setScanPath] = useState<string>("");
   const [isLoadingPath, setIsLoadingPath] = useState(false);
   const [isMangaLoading, setIsMangaLoading] = useState(true);
+
+  // Select Manga Search and Dropdown State
+  const [isMangaDropdownOpen, setIsMangaDropdownOpen] = useState(false);
+  const [mangaSearchQuery, setMangaSearchQuery] = useState("");
+  const mangaDropdownRef = useRef<HTMLDivElement>(null);
 
   // Duplicates Scanner State
   const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
@@ -152,6 +159,21 @@ export const ImageToolsPage: React.FC = () => {
 
     resolvePath();
   }, [selectedMangaId]);
+
+  // Handle outside click to close manga dropdown select
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (mangaDropdownRef.current && !mangaDropdownRef.current.contains(event.target as Node)) {
+        setIsMangaDropdownOpen(false);
+      }
+    };
+    if (isMangaDropdownOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isMangaDropdownOpen]);
 
   // Utility to format file sizes
   const formatBytes = (bytes: number, decimals = 2) => {
@@ -228,14 +250,40 @@ export const ImageToolsPage: React.FC = () => {
     showToast("Clean Mode: Selected all redundant copies, preserving original files.", "info");
   };
 
+  const allDupPaths = dupGroups.flatMap((group) => group.files.map((file) => file.path));
+  const isAllDupsSelected = allDupPaths.length > 0 && allDupPaths.every((path) => selectedDuplicatePaths.has(path));
+
+  const handleToggleAllDups = () => {
+    if (isAllDupsSelected) {
+      setSelectedDuplicatePaths(new Set());
+    } else {
+      setSelectedDuplicatePaths(new Set(allDupPaths));
+    }
+  };
+
   const handleDeleteSelectedDuplicates = async () => {
     if (selectedDuplicatePaths.size === 0) {
       showToast("No files selected for deletion", "warning");
       return;
     }
 
-    const confirmMessage = `Are you sure you want to permanently delete these ${selectedDuplicatePaths.size} duplicate image files? This action cannot be undone!`;
-    if (!window.confirm(confirmMessage)) return;
+    // Check if any group is completely selected for deletion
+    let willDeleteAllInAnyGroup = false;
+    for (const group of dupGroups) {
+      const allGroupSelected = group.files.every((f) => selectedDuplicatePaths.has(f.path));
+      if (allGroupSelected && group.files.length > 0) {
+        willDeleteAllInAnyGroup = true;
+        break;
+      }
+    }
+
+    if (willDeleteAllInAnyGroup) {
+      const warningMessage = `CAUTION: In one or more duplicate groups, you have selected ALL copies for deletion. This means the image will be COMPLETELY deleted, leaving you with NO copies of that page. Do you still want to delete all copies?`;
+      if (!window.confirm(warningMessage)) return;
+    } else {
+      const confirmMessage = `Are you sure you want to permanently delete these ${selectedDuplicatePaths.size} duplicate image files? This action cannot be undone!`;
+      if (!window.confirm(confirmMessage)) return;
+    }
 
     try {
       setIsDeleting(true);
@@ -476,23 +524,90 @@ export const ImageToolsPage: React.FC = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Select Manga */}
-          <div className="md:col-span-1">
+          <div className="md:col-span-1 relative" ref={mangaDropdownRef}>
             <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
               Select Target Manga
             </label>
-            <select
-              value={selectedMangaId}
-              onChange={(e) => setSelectedMangaId(e.target.value)}
-              disabled={isMangaLoading}
-              className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+            
+            {/* Custom Dropdown Trigger */}
+            <div
+              onClick={() => !isMangaLoading && setIsMangaDropdownOpen(!isMangaDropdownOpen)}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-zinc-400 dark:hover:border-zinc-600 transition cursor-pointer select-none text-sm text-[var(--text-primary)] ${
+                isMangaLoading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             >
-              <option value="">-- Custom Path / All Directories --</option>
-              {mangas.map((manga) => (
-                <option key={manga._id} value={manga._id}>
-                  {manga.title}
-                </option>
-              ))}
-            </select>
+              <span className="truncate">
+                {mangas.find(m => m._id === selectedMangaId)?.title || "-- Custom Path / All Directories --"}
+              </span>
+              <span className="text-[var(--text-secondary)] flex-shrink-0 ml-2">
+                {isMangaDropdownOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </span>
+            </div>
+
+            {/* Dropdown Panel */}
+            {isMangaDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-2 p-3 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-xl space-y-3 flex flex-col max-h-80">
+                {/* Search Box */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 text-zinc-400" size={14} />
+                  <input
+                    type="text"
+                    value={mangaSearchQuery}
+                    onChange={(e) => setMangaSearchQuery(e.target.value)}
+                    placeholder="Search manga..."
+                    className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Option list */}
+                <div className="overflow-y-auto flex-1 max-h-48 space-y-0.5 pr-1">
+                  {/* Default Custom Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMangaId("");
+                      setIsMangaDropdownOpen(false);
+                      setMangaSearchQuery("");
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-[var(--bg-primary)] transition ${
+                      selectedMangaId === "" ? "text-[var(--brand-orange)] bg-[var(--brand-orange)]/5 font-bold" : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    -- Custom Path / All Directories --
+                  </button>
+
+                  {/* Filtered list */}
+                  {(() => {
+                    const filtered = mangas.filter(m => 
+                      m.title.toLowerCase().includes(mangaSearchQuery.toLowerCase())
+                    );
+                    if (filtered.length === 0) {
+                      return <div className="text-zinc-500 text-xs py-2 text-center">No match found</div>;
+                    }
+                    return filtered.map((manga) => {
+                      const isSelected = selectedMangaId === manga._id;
+                      return (
+                        <button
+                          key={manga._id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedMangaId(manga._id);
+                            setIsMangaDropdownOpen(false);
+                            setMangaSearchQuery("");
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-[var(--bg-primary)] transition ${
+                            isSelected ? "text-[var(--brand-orange)] bg-[var(--brand-orange)]/5 font-bold" : "text-[var(--text-primary)]"
+                          }`}
+                        >
+                          {manga.title}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Directory Path Input */}
@@ -580,11 +695,20 @@ export const ImageToolsPage: React.FC = () => {
               {/* Bulk operations */}
               <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
                 <button
+                  onClick={handleToggleAllDups}
+                  className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
+                  title={isAllDupsSelected ? "Deselect All" : "Select All"}
+                >
+                  {isAllDupsSelected ? <Square size={14} /> : <CheckSquare size={14} />}
+                  <span>{isAllDupsSelected ? "Deselect All" : "Select All"}</span>
+                </button>
+                <button
                   onClick={handleSelectAllDuplicatesExceptFirst}
                   className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
+                  title="Select all redundant pages, keeping only the first original of each group"
                 >
-                  <CheckSquare size={14} />
-                  <span>Select redundant files (Clean Mode)</span>
+                  <Layers size={14} />
+                  <span>Clean Mode (Keep 1st)</span>
                 </button>
                 <button
                   onClick={handleDeleteSelectedDuplicates}
@@ -629,16 +753,48 @@ export const ImageToolsPage: React.FC = () => {
                   {/* Duplicate Group Files & Actions */}
                   <div className="flex-1 min-w-0 flex flex-col justify-between">
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold flex items-center space-x-2">
-                          <span className="text-[var(--text-secondary)]">Group #{groupIndex + 1}</span>
-                          <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                          <span className="text-rose-500 font-semibold">{group.count} duplicate files found</span>
-                        </h4>
-                        <span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
-                          Wasted: {formatBytes(group.wasted_bytes)}
-                        </span>
-                      </div>
+                      {(() => {
+                        const isGroupAllSelected = group.files.every((f) => selectedDuplicatePaths.has(f.path));
+                        const handleToggleGroupAll = () => {
+                          const updated = new Set(selectedDuplicatePaths);
+                          const groupPaths = group.files.map((f) => f.path);
+                          if (isGroupAllSelected) {
+                            groupPaths.forEach((path) => updated.delete(path));
+                          } else {
+                            groupPaths.forEach((path) => updated.add(path));
+                          }
+                          setSelectedDuplicatePaths(updated);
+                        };
+
+                        return (
+                          <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-sm font-bold flex items-center space-x-2">
+                                <span className="text-[var(--text-secondary)] font-spartan">Group #{groupIndex + 1}</span>
+                                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                                <span className="text-rose-500 font-semibold">{group.count} copies</span>
+                              </h4>
+                              
+                              <button
+                                type="button"
+                                onClick={handleToggleGroupAll}
+                                className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold border transition duration-155 select-none ${
+                                  isGroupAllSelected
+                                    ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)]/30 text-[var(--brand-orange)]"
+                                    : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-zinc-500"
+                                }`}
+                              >
+                                {isGroupAllSelected ? <CheckSquare size={11} /> : <Square size={11} />}
+                                <span>Group Select All</span>
+                              </button>
+                            </div>
+                            
+                            <span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
+                              Wasted: {formatBytes(group.wasted_bytes)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       
                       <div className="border border-[var(--border-primary)] rounded-xl overflow-hidden divide-y divide-[var(--border-primary)] bg-[var(--bg-primary)]">
                         {group.files.map((file, fileIdx) => {
