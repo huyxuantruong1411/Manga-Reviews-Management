@@ -307,7 +307,7 @@ export const ImageToolsPage: React.FC = () => {
           count: remainingFiles.length,
           wasted_bytes: newWasted
         };
-      }).filter((group) => group.count > 1); // Keep groups that still have duplicates (if any)
+      }).filter((group) => group.count > 0); // Keep groups that still have files (even if only 1 remaining copy)
 
       setDupGroups(updatedGroups);
 
@@ -337,6 +337,79 @@ export const ImageToolsPage: React.FC = () => {
     } catch (err: any) {
       console.error("Error deleting duplicates:", err);
       showToast("Failed to delete duplicates", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteGroupSelected = async (group: DuplicateGroup) => {
+    const groupPathsToDelete = group.files.filter(f => selectedDuplicatePaths.has(f.path)).map(f => f.path);
+    if (groupPathsToDelete.length === 0) {
+      showToast("No files selected for deletion in this group", "warning");
+      return;
+    }
+
+    const allSelected = group.files.every(f => selectedDuplicatePaths.has(f.path));
+    if (allSelected) {
+      const warning = `CAUTION: You have selected ALL copies in this group for deletion. The image will be COMPLETELY deleted, leaving you with NO copies of this page. Do you still want to delete all copies?`;
+      if (!window.confirm(warning)) return;
+    } else {
+      const confirm = `Are you sure you want to permanently delete these ${groupPathsToDelete.length} duplicate file(s) in this group?`;
+      if (!window.confirm(confirm)) return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const res = await client.post("/api/image-tools/delete-duplicates", {
+        file_paths: groupPathsToDelete
+      });
+
+      const { deleted_count, freed_bytes, errors } = res.data;
+
+      // Remove deleted paths from selection
+      const updatedSelected = new Set(selectedDuplicatePaths);
+      groupPathsToDelete.forEach(p => updatedSelected.delete(p));
+      setSelectedDuplicatePaths(updatedSelected);
+
+      // Update local duplicate groups list
+      const updatedGroups = dupGroups.map((g) => {
+        if (g.hash === group.hash) {
+          const remainingFiles = g.files.filter(f => !groupPathsToDelete.includes(f.path));
+          const newWasted = remainingFiles.length > 1 ? g.file_size * (remainingFiles.length - 1) : 0;
+          return {
+            ...g,
+            files: remainingFiles,
+            count: remainingFiles.length,
+            wasted_bytes: newWasted
+          };
+        }
+        return g;
+      }).filter((g) => g.count > 0); // Keep groups that have 1 or more files remaining
+
+      setDupGroups(updatedGroups);
+
+      // Recalculate stats
+      const newTotalWasted = updatedGroups.reduce((acc, g) => acc + g.wasted_bytes, 0);
+      if (dupStats) {
+        setDupStats({
+          ...dupStats,
+          total_wasted_bytes: newTotalWasted
+        });
+      }
+
+      let message = `Successfully deleted ${deleted_count} files in this group. Freed ${formatBytes(freed_bytes)}.`;
+      if (errors && errors.length > 0) {
+        message += ` Encountered ${errors.length} errors.`;
+      }
+      showAlert({
+        title: "Group Deletion Completed",
+        message: message,
+        type: errors && errors.length > 0 ? "warning" : "success"
+      });
+
+    } catch (err: any) {
+      console.error("Error deleting group duplicates:", err);
+      showToast("Failed to delete duplicates in group", "error");
     } finally {
       setIsDeleting(false);
     }
@@ -773,6 +846,24 @@ export const ImageToolsPage: React.FC = () => {
                           setSelectedDuplicatePaths(updated);
                         };
 
+                        const redundantPaths = group.files.slice(1).map((f) => f.path);
+                        const isGroupCleanSelected = redundantPaths.length > 0 && redundantPaths.every((path) => selectedDuplicatePaths.has(path)) && !selectedDuplicatePaths.has(group.files[0].path);
+                        
+                        const handleToggleGroupClean = () => {
+                          const updated = new Set(selectedDuplicatePaths);
+                          if (isGroupCleanSelected) {
+                            redundantPaths.forEach((path) => updated.delete(path));
+                          } else {
+                            redundantPaths.forEach((path) => updated.add(path));
+                            if (group.files.length > 0) {
+                              updated.delete(group.files[0].path);
+                            }
+                          }
+                          setSelectedDuplicatePaths(updated);
+                        };
+
+                        const groupSelectedCount = group.files.filter(f => selectedDuplicatePaths.has(f.path)).length;
+
                         return (
                           <div className="flex items-center justify-between">
                             <div className="flex flex-wrap items-center gap-2">
@@ -794,11 +885,40 @@ export const ImageToolsPage: React.FC = () => {
                                 {isGroupAllSelected ? <CheckSquare size={11} /> : <Square size={11} />}
                                 <span>{isGroupAllSelected ? "Group Deselect All" : "Group Select All"}</span>
                               </button>
+
+                              {group.files.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={handleToggleGroupClean}
+                                  className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold border transition duration-155 select-none ${
+                                    isGroupCleanSelected
+                                      ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)]/30 text-[var(--brand-orange)]"
+                                      : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-zinc-500"
+                                  }`}
+                                >
+                                  <Layers size={11} />
+                                  <span>{isGroupCleanSelected ? "Group Clean Deselect" : "Group Clean Mode"}</span>
+                                </button>
+                              )}
                             </div>
                             
-                            <span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
-                              Wasted: {formatBytes(group.wasted_bytes)}
-                            </span>
+                            <div className="flex items-center space-x-2">
+                              {groupSelectedCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteGroupSelected(group)}
+                                  disabled={isDeleting}
+                                  className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded-lg shadow-sm transition flex items-center space-x-1 disabled:opacity-50"
+                                >
+                                  <Trash2 size={11} />
+                                  <span>Delete Selected ({groupSelectedCount})</span>
+                                </button>
+                              )}
+                              
+                              <span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
+                                Wasted: {formatBytes(group.wasted_bytes)}
+                              </span>
+                            </div>
                           </div>
                         );
                       })()}
@@ -880,7 +1000,7 @@ export const ImageToolsPage: React.FC = () => {
                                           };
                                         }
                                         return g;
-                                      }).filter((g) => g.count > 1);
+                                      }).filter((g) => g.count > 0); // Keep groups with at least 1 file remaining
 
                                       setDupGroups(updatedGroups);
                                       
