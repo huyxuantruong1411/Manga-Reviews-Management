@@ -6,6 +6,7 @@ import MangaDetailPage from "./pages/MangaDetailPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import TagsPage from "./pages/TagsPage";
 import AuthorDetailPage from "./pages/AuthorDetailPage";
+import ImageToolsPage from "./pages/ImageToolsPage";
 import { AlertProvider } from "./hooks/useAlert";
 
 export const App: React.FC = () => {
@@ -19,6 +20,7 @@ export const App: React.FC = () => {
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="author/:name" element={<AuthorDetailPage />} />
+            <Route path="tools" element={<ImageToolsPage />} />
           </Route>
         </Routes>
       </AlertProvider>

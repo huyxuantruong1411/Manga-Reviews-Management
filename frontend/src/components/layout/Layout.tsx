@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info } from "lucide-react";
+import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
@@ -125,6 +125,20 @@ export const Layout: React.FC = () => {
           >
             <Tag size={20} />
             <span>Manage Tags</span>
+          </NavLink>
+
+          <NavLink
+            to="/tools"
+            className={({ isActive }) =>
+              `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                isActive
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`
+            }
+          >
+            <Wrench size={20} />
+            <span>Image Tools</span>
           </NavLink>
         </nav>
         
