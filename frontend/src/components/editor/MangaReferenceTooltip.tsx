@@ -98,6 +98,7 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
               src={data.cover_url}
               alt={data.title}
               className="w-16 h-24 object-cover rounded-lg shadow-sm border border-[var(--border-primary)] shrink-0"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <div className="w-16 h-24 bg-gray-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center border border-[var(--border-primary)] shrink-0">

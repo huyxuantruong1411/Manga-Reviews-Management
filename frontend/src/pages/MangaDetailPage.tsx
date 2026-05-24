@@ -983,7 +983,7 @@ export const MangaDetailPage: React.FC = () => {
           className={`w-48 md:w-56 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-lg flex-shrink-0 mx-auto md:mx-0 ${manga.cover_url ? "cursor-zoom-in" : ""}`}
         >
           {manga.cover_url ? (
-            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" />
+            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
               <span>No Cover Image</span>

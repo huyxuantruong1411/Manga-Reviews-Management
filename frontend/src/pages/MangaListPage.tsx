@@ -1054,6 +1054,7 @@ export const MangaListPage: React.FC = () => {
                         alt={manga.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
@@ -1191,7 +1192,7 @@ export const MangaListPage: React.FC = () => {
                           }}
                         >
                           {manga.cover_url ? (
-                            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" />
+                            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                           ) : (
                             <span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">No Cover</span>
                           )}
@@ -1328,6 +1329,7 @@ export const MangaListPage: React.FC = () => {
                         alt={manga.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
@@ -1628,7 +1630,7 @@ export const MangaListPage: React.FC = () => {
                             <div className="flex gap-4">
                               <div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
                                 {m.cover_url && (
-                                  <img src={m.cover_url} alt={m.title} className="w-full h-full object-cover" />
+                                  <img src={m.cover_url} alt={m.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 )}
                               </div>
                               <div className="space-y-1">
