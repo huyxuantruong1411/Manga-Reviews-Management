@@ -94,7 +94,12 @@ class DownloadService:
         chapters = task["chapters_detail"]
         total = task["total_chapters"]
         
-        base_dir = download_path or settings.download_dir
+        base_dir = download_path
+        if not base_dir:
+            db_config = await get_db().settings.find_one({"_id": "download_config"})
+            base_dir = db_config.get("base_path") if db_config else None
+        if not base_dir:
+            base_dir = settings.download_dir
         
         # Check if the manga has the "oneshot" tag
         is_oneshot = False

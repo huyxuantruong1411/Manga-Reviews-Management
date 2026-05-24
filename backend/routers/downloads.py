@@ -12,8 +12,45 @@ router = APIRouter(prefix="/api", tags=["Downloads"])
 
 @router.get("/downloads/base-path")
 async def get_base_path():
-    """Retrieve the default configured base path for downloads."""
-    return {"base_path": settings.download_dir}
+    """Retrieve the current base path for downloads (DB settings or fallback)."""
+    db = get_db()
+    doc = await db.settings.find_one({"_id": "download_config"})
+    path = doc.get("base_path") if doc else None
+    return {"base_path": path or settings.download_dir}
+
+class UpdateBasePathPayload(BaseModel):
+    base_path: str
+
+@router.put("/downloads/base-path")
+async def update_base_path(payload: UpdateBasePathPayload = Body(...)):
+    """Update the default configured base path for downloads."""
+    new_path = payload.base_path.strip()
+    if not new_path:
+        raise HTTPException(status_code=400, detail="Base path cannot be empty")
+        
+    try:
+        # Validate path feasibility/writeability before saving
+        abs_path = os.path.abspath(new_path)
+        os.makedirs(abs_path, exist_ok=True)
+        test_file = os.path.join(abs_path, f".test_write_{str(uuid.uuid4())}")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Directory is not writable")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=f"Invalid or unwriteable base path: {str(e)}")
+
+    db = get_db()
+    await db.settings.update_one(
+        {"_id": "download_config"},
+        {"$set": {"base_path": abs_path}},
+        upsert=True
+    )
+    return {"base_path": abs_path, "message": "Base path updated successfully"}
 
 
 class DownloadChapterPayload(BaseModel):
@@ -45,7 +82,13 @@ async def download_manga_chapters(
     chapters_list = [c.dict() for c in req.chapters]
     
     # Path validation
-    base_dir = req.download_path or settings.download_dir
+    base_dir = req.download_path
+    if not base_dir:
+        db_config = await get_db().settings.find_one({"_id": "download_config"})
+        base_dir = db_config.get("base_path") if db_config else None
+    if not base_dir:
+        base_dir = settings.download_dir
+        
     if not base_dir:
         raise HTTPException(status_code=400, detail="Download path cannot be empty")
         
