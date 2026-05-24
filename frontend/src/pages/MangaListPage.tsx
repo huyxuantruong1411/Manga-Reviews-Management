@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, ChevronDown, ChevronUp, Calendar, Grid, List as ListIcon, LayoutGrid } from "lucide-react";
 import client from "../api/client";
@@ -34,6 +34,7 @@ interface Manga {
 export const MangaListPage: React.FC = () => {
   const navigate = useNavigate();
   const { showAlert, showToast } = useAlert();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Library State
   const [mangas, setMangas] = useState<Manga[]>([]);
@@ -231,14 +232,28 @@ export const MangaListPage: React.FC = () => {
     }
   };
 
+  const extractMangaDexUuid = (query: string): string => {
+    const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+    const urlMatch = query.match(/\/title\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
+    if (urlMatch) {
+      return urlMatch[1];
+    }
+    const directMatch = query.match(uuidRegex);
+    if (directMatch && directMatch[0] === query.trim()) {
+      return directMatch[0];
+    }
+    return query;
+  };
+
   // Search MangaDex
   const handleDexSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dexQuery.trim()) return;
     try {
       setDexSearching(true);
+      const resolvedQuery = extractMangaDexUuid(dexQuery.trim());
       const res = await client.get("/api/mangadex/search", {
-        params: { query: dexQuery.trim() }
+        params: { query: resolvedQuery }
       });
       setDexResults(res.data);
     } catch (err) {
@@ -283,11 +298,46 @@ export const MangaListPage: React.FC = () => {
       setDexResults([]);
       setDexQuery("");
     } catch (err: any) {
-      showAlert({
-        title: "Import Failed",
-        message: err.response?.data?.detail || "Failed to import manga",
-        type: "error"
-      });
+      const errorDetail = err.response?.data?.detail;
+      if (errorDetail && typeof errorDetail === "object" && errorDetail.code === "DUPLICATE_MANGA") {
+        const title = errorDetail.title;
+        const mangaId = errorDetail.manga_id;
+        const confirmSync = window.confirm(
+          `Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`
+        );
+        if (confirmSync) {
+          try {
+            showToast("Đang đồng bộ thông tin...", "info");
+            const syncRes = await client.post(`/api/manga/${mangaId}/sync`);
+            
+            // Update local list if the manga is in the current page
+            setMangas((prev) => prev.map((m) => m._id === mangaId ? syncRes.data : m));
+            
+            showAlert({
+              title: "Đồng bộ thành công",
+              message: `Đã đồng bộ thông tin mới cho "${title}"!`,
+              type: "success"
+            });
+            setIsAddModalOpen(false);
+            setDexResults([]);
+            setDexQuery("");
+          } catch (syncErr) {
+            console.error("Failed to sync duplicate manga:", syncErr);
+            showAlert({
+              title: "Đồng bộ thất bại",
+              message: "Không thể đồng bộ thông tin manga.",
+              type: "error"
+            });
+          }
+        }
+      } else {
+        const msg = (typeof errorDetail === "string" ? errorDetail : null) || err.response?.data?.detail?.message || "Failed to import manga";
+        showAlert({
+          title: "Import Failed",
+          message: msg,
+          type: "error"
+        });
+      }
     } finally {
       setImportingManga(null);
     }
@@ -471,13 +521,28 @@ export const MangaListPage: React.FC = () => {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3.5 text-zinc-400" size={18} />
             <input
+              ref={searchInputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleSearchKeyPress}
               placeholder="Search by title, author, artist, alt titles..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setDebouncedSearch("");
+                  setPage(1);
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute right-3 top-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
 
           <div className="flex gap-2">

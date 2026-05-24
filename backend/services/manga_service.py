@@ -17,6 +17,13 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         doc["_id"] = str(doc["_id"])
     return doc
 
+class DuplicateMangaException(ValueError):
+    def __init__(self, manga_id: str, title: str):
+        self.manga_id = manga_id
+        self.title = title
+        super().__init__(f"Manga '{title}' already exists in your library")
+
+
 class MangaService:
     def _get_mangas_collection(self):
         return get_db().mangas
@@ -226,7 +233,7 @@ class MangaService:
         # 2. Check if already exists in DB
         existing = await self._get_mangas_collection().find_one({"mangadex_id": dex_data.mangadex_id})
         if existing:
-            raise ValueError(f"Manga '{existing.get('title')}' already exists in your library")
+            raise DuplicateMangaException(str(existing["_id"]), existing.get("title", "Unknown"))
 
         # 3. Resolve and create tags locally
         local_tag_ids = []

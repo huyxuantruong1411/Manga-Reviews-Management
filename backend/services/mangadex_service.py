@@ -86,19 +86,27 @@ class MangaDexService:
         """
         Search for manga on MangaDex. Returns metadata, alt titles, author, artist, and cover url.
         """
+        import re
         import uuid
+        
+        uuid_pattern = r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+        clean_query = query.strip()
+        url_match = re.search(rf"/title/({uuid_pattern})", clean_query)
+        if url_match:
+            clean_query = url_match.group(1)
+            
         is_uuid = False
         try:
-            uuid.UUID(str(query))
+            uuid.UUID(str(clean_query))
             is_uuid = True
         except ValueError:
             pass
 
         if is_uuid:
-            params = {"ids[]": [query]}
+            params = {"ids[]": [clean_query]}
         else:
             params = {
-                "title": query,
+                "title": clean_query,
                 "limit": limit,
                 "order[relevance]": "desc",
             }

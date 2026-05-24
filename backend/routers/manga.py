@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Path, UploadFile, File, Form, HTTPExceptio
 from typing import List, Optional, Dict, Any
 import json
 from backend.models.manga import MangaResponse, MangaCreate, MangaCreateDex, MangaUpdate, ReadStatus, MangaPaginationResponse
-from backend.services.manga_service import manga_service
+from backend.services.manga_service import manga_service, DuplicateMangaException
 
 router = APIRouter(prefix="/api/manga", tags=["Manga"])
 
@@ -79,6 +79,16 @@ async def add_manga_from_dex(data: MangaCreateDex):
     try:
         manga = await manga_service.add_manga_by_dex(data)
         return manga
+    except DuplicateMangaException as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "DUPLICATE_MANGA",
+                "message": str(e),
+                "manga_id": e.manga_id,
+                "title": e.title
+            }
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
