@@ -785,7 +785,7 @@ export const ImageToolsPage: React.FC = () => {
                                 }`}
                               >
                                 {isGroupAllSelected ? <CheckSquare size={11} /> : <Square size={11} />}
-                                <span>Group Select All</span>
+                                <span>{isGroupAllSelected ? "Group Deselect All" : "Group Select All"}</span>
                               </button>
                             </div>
                             
