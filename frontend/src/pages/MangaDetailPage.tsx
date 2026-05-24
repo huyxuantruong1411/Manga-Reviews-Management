@@ -435,10 +435,32 @@ export const MangaDetailPage: React.FC = () => {
     setCustomPath(cleaned);
   };
 
-  const appendMangaTitleToPath = () => {
-    if (!manga?.title) return;
-    // Clean manga title to make it a valid folder name (remove \ / : * ? " < > |)
-    const cleanedTitle = manga.title.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim();
+  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
+
+  const getTitleOptions = () => {
+    if (!manga) return [];
+    const options = [{ label: manga.title, value: manga.title }];
+    if (manga.alt_titles && manga.alt_titles.length > 0) {
+      manga.alt_titles.forEach((alt: string) => {
+        const parts = alt.split("|");
+        if (parts.length >= 2) {
+          const lang = parts[0];
+          const val = parts.slice(1).join("|");
+          if (!options.some(opt => opt.value === val)) {
+            options.push({ label: `${val} (${lang.toUpperCase()})`, value: val });
+          }
+        } else {
+          if (!options.some(opt => opt.value === alt)) {
+            options.push({ label: alt, value: alt });
+          }
+        }
+      });
+    }
+    return options;
+  };
+
+  const appendCleanedTitle = (titleStr: string) => {
+    const cleanedTitle = titleStr.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim();
     if (!cleanedTitle) return;
     
     let newPath = customPath.trim();
@@ -1503,15 +1525,40 @@ export const MangaDetailPage: React.FC = () => {
                     placeholder="e.g. C:\Downloads\Manga"
                     className="flex-1 px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
                   />
-                  <button
-                    type="button"
-                    onClick={appendMangaTitleToPath}
-                    title="Append cleaned manga title as subfolder"
-                    className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap"
-                  >
-                    <Plus size={14} className="stroke-[3]" />
-                    <span>Append Title</span>
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowTitleDropdown(!showTitleDropdown)}
+                      title="Select and append manga title or alternative title as subfolder"
+                      className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
+                    >
+                      <Plus size={14} className="stroke-[3]" />
+                      <span>Append Title</span>
+                    </button>
+                    {showTitleDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-[115]" onClick={() => setShowTitleDropdown(false)} />
+                        <div className="absolute right-0 mt-1 w-64 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] shadow-xl z-[120] max-h-60 overflow-y-auto py-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                          <div className="px-3 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider border-b border-[var(--border-primary)] mb-1">
+                            Chọn Title để thêm
+                          </div>
+                          {getTitleOptions().map((opt, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                appendCleanedTitle(opt.value);
+                                setShowTitleDropdown(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs text-[var(--text-primary)] hover:bg-[var(--brand-orange)]/10 hover:text-[var(--brand-orange)] transition-colors line-clamp-2 cursor-pointer font-medium"
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
                   <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
