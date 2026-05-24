@@ -1,5 +1,8 @@
 import httpx
 import logging
+import random
+import os
+import asyncio
 from typing import List, Dict, Any, Optional
 from backend.utils.rate_limiter import mangadex_rate_limiter
 
@@ -8,24 +11,76 @@ logger = logging.getLogger(__name__)
 class MangaDexService:
     BASE_URL = "https://api.mangadex.org"
     
-    HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://mangadex.org/",
-        "Origin": "https://mangadex.org",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Connection": "keep-alive"
-    }
+    USER_AGENTS = [
+        # Chrome (Windows, macOS, Linux)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        
+        # Firefox (Windows, macOS, Linux)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/122.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/120.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/122.0",
+        "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/120.0",
+        "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        
+        # Safari (macOS, iOS)
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1.15",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1.15",
+        "Mozilla/5.0 (iPad; CPU OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1.15",
+        
+        # Edge (Windows, macOS)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+        
+        # Chrome Mobile (Android)
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+        
+        # Firefox Mobile (Android)
+        "Mozilla/5.0 (Android 14; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0",
+        "Mozilla/5.0 (Android 14; Mobile; rv:121.0) Gecko/121.0 Firefox/121.0"
+    ]
     
     CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
+
+    def _get_headers(self) -> Dict[str, str]:
+        ua = random.choice(self.USER_AGENTS)
+        return {
+            "User-Agent": ua,
+            "Referer": "https://mangadex.org/",
+            "Origin": "https://mangadex.org",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Connection": "keep-alive"
+        }
 
     async def _request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         # Enforce Rate Limiter
         await mangadex_rate_limiter.acquire()
         
         url = f"{self.BASE_URL}{endpoint}"
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        from backend.config import settings
+        proxies = settings.mangadex_proxy if settings.mangadex_proxy else None
+        headers = self._get_headers()
+        
+        async with httpx.AsyncClient(proxy=proxies, timeout=20.0) as client:
             try:
-                resp = await client.get(url, params=params, headers=self.HEADERS)
+                resp = await client.get(url, params=params, headers=headers)
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 5))
                     logger.warning(f"MangaDex rate limited (429). Sleeping for {retry_after}s...")
@@ -38,9 +93,161 @@ class MangaDexService:
             except httpx.HTTPStatusError as e:
                 logger.error(f"HTTP Error calling MangaDex ({endpoint}): {e.response.status_code} - {e.response.text}")
                 return None
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.NetworkError) as e:
+                logger.warning(f"Network error calling MangaDex ({endpoint}): {e}. Attempting browser simulation fallback...")
+                fallback_data = await self._request_via_playwright(endpoint, params)
+                if fallback_data is not None:
+                    return fallback_data
+                logger.error(f"Browser simulation fallback also failed for MangaDex ({endpoint}).")
+                return None
             except Exception as e:
                 logger.error(f"Error calling MangaDex ({endpoint}): {e}")
                 return None
+
+    def _request_via_playwright_sync(self, url: str, proxy_url: Optional[str]) -> Optional[Dict[str, Any]]:
+        from playwright.sync_api import sync_playwright
+        import json
+        try:
+            with sync_playwright() as p:
+                ua = random.choice(self.USER_AGENTS)
+                context_options = {
+                    "user_agent": ua,
+                    "viewport": {"width": 1280, "height": 720},
+                    "extra_http_headers": {
+                        "Referer": "https://mangadex.org/",
+                        "Origin": "https://mangadex.org",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    }
+                }
+                
+                if proxy_url:
+                    context_options["proxy"] = {"server": proxy_url}
+                
+                try:
+                    browser = p.chromium.launch(headless=True)
+                except Exception as launch_err:
+                    logger.error(
+                        f"Failed to launch Playwright Chromium: {launch_err}. "
+                        "Make sure you have run 'playwright install' or 'playwright install chromium'."
+                    )
+                    return None
+
+                try:
+                    context = browser.new_context(**context_options)
+                    page = context.new_page()
+                    
+                    response = page.goto(url, wait_until="commit", timeout=15000)
+                    if not response:
+                        raise Exception("No response received from page.goto")
+                        
+                    status = response.status
+                    if status == 429:
+                        logger.warning("MangaDex rate limit (429) hit in Playwright.")
+                        return None
+                        
+                    content = response.text()
+                    
+                    if status >= 400:
+                        logger.error(f"Playwright request failed with status {status}: {content[:200]}")
+                        return None
+                        
+                    return json.loads(content)
+                finally:
+                    browser.close()
+        except Exception as e:
+            logger.error(f"Playwright sync browser simulation failed: {e}")
+            return None
+
+    async def _request_via_playwright(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            logger.warning("Playwright is not installed. Skipping browser-simulation fallback.")
+            return None
+
+        import urllib.parse
+        import asyncio
+        url = f"{self.BASE_URL}{endpoint}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params, doseq=True)
+
+        from backend.config import settings
+        proxy_url = settings.mangadex_proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+        if proxy_url:
+            if not (proxy_url.startswith("http://") or proxy_url.startswith("https://") or proxy_url.startswith("socks5://") or proxy_url.startswith("socks4://")):
+                proxy_url = f"http://{proxy_url}"
+
+        logger.info(f"Attempting browser simulation fallback via Playwright (Sync in Thread) for: {url}")
+        try:
+            return await asyncio.to_thread(self._request_via_playwright_sync, url, proxy_url)
+        except Exception as e:
+            logger.error(f"Failed running playwright sync in thread: {e}")
+            return None
+
+    def _download_via_playwright_sync(self, url: str, proxy_url: Optional[str]) -> Optional[bytes]:
+        from playwright.sync_api import sync_playwright
+        try:
+            with sync_playwright() as p:
+                ua = random.choice(self.USER_AGENTS)
+                context_options = {
+                    "user_agent": ua,
+                    "extra_http_headers": {
+                        "Referer": "https://mangadex.org/",
+                        "Origin": "https://mangadex.org",
+                    }
+                }
+                
+                if proxy_url:
+                    context_options["proxy"] = {"server": proxy_url}
+                
+                try:
+                    browser = p.chromium.launch(headless=True)
+                except Exception as launch_err:
+                    logger.error(
+                        f"Failed to launch Playwright Chromium: {launch_err}. "
+                        "Make sure you have run 'playwright install' or 'playwright install chromium'."
+                    )
+                    return None
+
+                try:
+                    context = browser.new_context(**context_options)
+                    page = context.new_page()
+                    
+                    response = page.goto(url, wait_until="commit", timeout=20000)
+                    if not response:
+                        raise Exception("No response received from page.goto for image download")
+                        
+                    status = response.status
+                    if status >= 400:
+                        raise Exception(f"Failed to fetch image, status code {status}")
+                        
+                    return response.body()
+                finally:
+                    browser.close()
+        except Exception as e:
+            logger.error(f"Playwright sync image download failed: {e}")
+            return None
+
+    async def _download_via_playwright(self, url: str) -> Optional[bytes]:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            logger.warning("Playwright is not installed. Skipping browser-simulation download fallback.")
+            return None
+
+        import asyncio
+        from backend.config import settings
+        proxy_url = settings.mangadex_proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+        if proxy_url:
+            if not (proxy_url.startswith("http://") or proxy_url.startswith("https://") or proxy_url.startswith("socks5://") or proxy_url.startswith("socks4://")):
+                proxy_url = f"http://{proxy_url}"
+
+        logger.info(f"Attempting browser simulation image download via Playwright (Sync in Thread) for: {url}")
+        try:
+            return await asyncio.to_thread(self._download_via_playwright_sync, url, proxy_url)
+        except Exception as e:
+            logger.error(f"Failed running playwright sync download in thread: {e}")
+            return None
 
     def parse_mangadex_links(self, links_dict: Optional[Dict[str, str]], mangadex_id: str) -> List[Dict[str, str]]:
         resolved = []
@@ -385,11 +592,23 @@ class MangaDexService:
         """
         # Enforce rate limits
         await mangadex_rate_limiter.acquire()
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        
+        from backend.config import settings
+        proxies = settings.mangadex_proxy if settings.mangadex_proxy else None
+        headers = self._get_headers()
+        
+        async with httpx.AsyncClient(proxy=proxies, timeout=30.0) as client:
             try:
-                resp = await client.get(url, headers=self.HEADERS)
+                resp = await client.get(url, headers=headers)
                 resp.raise_for_status()
                 return resp.content
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.NetworkError) as e:
+                logger.warning(f"Network error downloading image {url}: {e}. Attempting browser simulation fallback...")
+                fallback_bytes = await self._download_via_playwright(url)
+                if fallback_bytes is not None:
+                    return fallback_bytes
+                logger.error(f"Browser simulation fallback also failed for downloading image {url}.")
+                return None
             except Exception as e:
                 logger.error(f"Error downloading image bytes from {url}: {e}")
                 return None

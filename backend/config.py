@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 import os
+from typing import Optional
 
 class Settings(BaseSettings):
     mongodb_uri: str = Field(default="mongodb://localhost:27017")
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="")
     
     download_dir: str = Field(default="d:/Projects/Manga/Manga-Reviews-Management/downloads")
+    
+    mangadex_proxy: Optional[str] = Field(default=None)
     
     port: int = 8000
     host: str = "0.0.0.0"
