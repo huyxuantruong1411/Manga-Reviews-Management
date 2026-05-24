@@ -17,6 +17,7 @@ import {
   X,
   FolderPlus,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -455,6 +456,8 @@ export const MangaDetailPage: React.FC = () => {
   };
   const [downloading, setDownloading] = useState(false);
   const [loadingChapters, setLoadingChapters] = useState(false);
+  const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false);
+  const [overwriteWarningMsg, setOverwriteWarningMsg] = useState("");
 
   // Active Download Tasks (poll status)
   const [activeTask, setActiveTask] = useState<DownloadTask | null>(null);
@@ -655,7 +658,7 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
-  const triggerDownload = async () => {
+  const triggerDownload = async (force: boolean = false) => {
     if (selectedChapters.length === 0) {
       showAlert({
         title: "No Chapters Selected",
@@ -677,6 +680,7 @@ export const MangaDetailPage: React.FC = () => {
             volume: c.volume,
           })),
         lang: selectedLang,
+        force,
       };
       if (customPath.trim()) payload.download_path = customPath.trim();
 
@@ -692,12 +696,17 @@ export const MangaDetailPage: React.FC = () => {
       startTaskPolling(res.data.task_id);
     } catch (err: any) {
       console.error("Download failed:", err);
-      const errMsg = err.response?.data?.detail || "Failed to queue download.";
-      showAlert({
-        title: "Download Failed",
-        message: errMsg,
-        type: "error",
-      });
+      if (err.response?.status === 409) {
+        setOverwriteWarningMsg(err.response.data.detail || "Thư mục đích không trống.");
+        setIsOverwriteConfirmOpen(true);
+      } else {
+        const errMsg = err.response?.data?.detail || "Failed to queue download.";
+        showAlert({
+          title: "Download Failed",
+          message: errMsg,
+          type: "error",
+        });
+      }
     } finally {
       setDownloading(false);
     }
@@ -1562,11 +1571,59 @@ export const MangaDetailPage: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={triggerDownload}
+                onClick={() => triggerDownload(false)}
                 disabled={downloading || selectedChapters.length === 0}
                 className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
               >
                 {downloading ? "Starting..." : `Download Selected (${selectedChapters.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overwrite Confirmation Modal */}
+      {isOverwriteConfirmOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-md overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center space-x-2 text-amber-500">
+                <AlertTriangle size={20} />
+                <span>Cảnh báo thư mục tải xuống</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsOverwriteConfirmOpen(false)}
+                className="p-1 rounded text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-6 text-sm text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
+              {overwriteWarningMsg}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-[var(--border-primary)] flex justify-end space-x-3 bg-gray-50/50 dark:bg-zinc-900/30">
+              <button
+                type="button"
+                onClick={() => setIsOverwriteConfirmOpen(false)}
+                className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOverwriteConfirmOpen(false);
+                  triggerDownload(true);
+                }}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition"
+              >
+                Tiếp tục & Ghi đè
               </button>
             </div>
           </div>

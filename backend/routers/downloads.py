@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from fastapi import APIRouter, Path, Query, Body, BackgroundTasks, HTTPException, status
 from typing import List, Optional, Dict, Any
 from bson import ObjectId
@@ -7,6 +8,9 @@ from pydantic import BaseModel, Field
 from backend.database.connection import get_db
 from backend.services.download_service import download_service
 from backend.config import settings
+from backend.utils.file_utils import clean_filename
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Downloads"])
 
@@ -63,6 +67,7 @@ class DownloadRequest(BaseModel):
     chapters: List[DownloadChapterPayload]
     lang: str = "en"
     download_path: Optional[str] = None
+    force: bool = False
 
 @router.post("/manga/{manga_id}/download", status_code=status.HTTP_202_ACCEPTED)
 async def download_manga_chapters(
@@ -109,6 +114,75 @@ async def download_manga_chapters(
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=400, detail=f"Invalid or unwriteable download path: {str(e)}")
+
+    # Resolve target directory (checking oneshot status)
+    is_oneshot = False
+    try:
+        tag_ids = manga.get("tag_ids", [])
+        oid_list = []
+        for tid in tag_ids:
+            if isinstance(tid, str) and ObjectId.is_valid(tid):
+                oid_list.append(ObjectId(tid))
+            elif isinstance(tid, ObjectId):
+                oid_list.append(tid)
+        
+        if oid_list:
+            local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
+            for tag in local_tags:
+                tag_name = tag.get("name")
+                if isinstance(tag_name, dict):
+                    en_name = tag_name.get("en", "")
+                    if en_name.lower() == "oneshot":
+                        is_oneshot = True
+                        break
+                elif isinstance(tag_name, str):
+                    if tag_name.lower() == "oneshot":
+                        is_oneshot = True
+                        break
+    except Exception as e:
+        logger.error(f"Error checking oneshot status during path validation: {e}")
+
+    if is_oneshot:
+        target_dir = abs_path
+    else:
+        target_dir = os.path.join(abs_path, clean_filename(manga["title"]))
+
+    # Validate target directory content (check if contains files/folders)
+    if not req.force:
+        is_dirty = False
+        if os.path.exists(target_dir) and os.path.isdir(target_dir):
+            try:
+                contents = os.listdir(target_dir)
+                if contents:
+                    if is_oneshot:
+                        # Oneshot target folder contains images. If folders or non-image files are present, it's dirty
+                        for item in contents:
+                            item_path = os.path.join(target_dir, item)
+                            if os.path.isdir(item_path):
+                                is_dirty = True
+                                break
+                            ext = os.path.splitext(item)[1].lower()
+                            if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                                is_dirty = True
+                                break
+                    else:
+                        # Normal manga target folder should only contain chapter folders.
+                        for item in contents:
+                            item_path = os.path.join(target_dir, item)
+                            if os.path.isfile(item_path):
+                                is_dirty = True
+                                break
+                            if not item.lower().startswith("chapter"):
+                                is_dirty = True
+                                break
+            except Exception as le:
+                logger.error(f"Error listing target directory contents: {le}")
+                
+        if is_dirty:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Thư mục tải xuống chứa các tệp hoặc thư mục khác. Tiếp tục tải xuống có thể ghi đè các tệp trùng tên. Bạn có muốn tiếp tục không?"
+            )
 
     # Create task in DB
     task_id = await download_service.create_task(
