@@ -15,6 +15,8 @@ import {
   FileText,
   Upload,
   X,
+  FolderPlus,
+  Info,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -1474,27 +1476,39 @@ export const MangaDetailPage: React.FC = () => {
               )}
 
               {/* Custom Download Path */}
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
-                  Custom Save Path
-                </label>
+              <div className="p-4 bg-[var(--brand-orange)]/5 border border-[var(--brand-orange)]/25 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1">
+                    <FolderPlus size={14} />
+                    <span>Download Destination Path</span>
+                  </label>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
+                    Editable Base Path
+                  </span>
+                </div>
                 <div className="flex space-x-2">
                   <input
                     type="text"
                     value={customPath}
                     onChange={(e) => handlePathChange(e.target.value)}
                     placeholder="e.g. C:\Downloads\Manga"
-                    className="flex-1 px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--brand-orange)] transition"
+                    className="flex-1 px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
                   />
                   <button
                     type="button"
                     onClick={appendMangaTitleToPath}
                     title="Append cleaned manga title as subfolder"
-                    className="px-3 py-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-400 dark:hover:border-zinc-600 transition flex items-center space-x-1 whitespace-nowrap"
+                    className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap"
                   >
-                    <Plus size={14} className="text-[var(--brand-orange)]" />
+                    <Plus size={14} className="stroke-[3]" />
                     <span>Append Title</span>
                   </button>
+                </div>
+                <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
+                  <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
+                  <span>
+                    This path is initialized from the default base path configuration. You can edit/delete it directly. Click <strong>Append Title</strong> to create a dedicated subfolder using the manga name.
+                  </span>
                 </div>
               </div>
 
