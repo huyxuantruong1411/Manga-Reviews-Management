@@ -1,11 +1,20 @@
+import os
+import uuid
 from fastapi import APIRouter, Path, Query, Body, BackgroundTasks, HTTPException, status
 from typing import List, Optional, Dict, Any
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from backend.database.connection import get_db
 from backend.services.download_service import download_service
+from backend.config import settings
 
 router = APIRouter(prefix="/api", tags=["Downloads"])
+
+@router.get("/downloads/base-path")
+async def get_base_path():
+    """Retrieve the default configured base path for downloads."""
+    return {"base_path": settings.download_dir}
+
 
 class DownloadChapterPayload(BaseModel):
     id: str
@@ -35,6 +44,29 @@ async def download_manga_chapters(
     # Format payload
     chapters_list = [c.dict() for c in req.chapters]
     
+    # Path validation
+    base_dir = req.download_path or settings.download_dir
+    if not base_dir:
+        raise HTTPException(status_code=400, detail="Download path cannot be empty")
+        
+    try:
+        # Resolve path to absolute
+        abs_path = os.path.abspath(base_dir)
+        # Try to make directories (creating folder hierarchy up to the end)
+        os.makedirs(abs_path, exist_ok=True)
+        # Test write access by writing a temporary mock file
+        test_file = os.path.join(abs_path, f".test_write_{str(uuid.uuid4())}")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Directory is not writable")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=f"Invalid or unwriteable download path: {str(e)}")
+
     # Create task in DB
     task_id = await download_service.create_task(
         manga_id=manga_id,

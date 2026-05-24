@@ -10,13 +10,10 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
-  X,
   Calendar,
   Search,
   Filter,
-  User,
-  Globe,
-  MessageSquare
+  User
 } from "lucide-react";
 import {
   BarChart,
@@ -32,8 +29,7 @@ import {
   LineChart,
   Line,
   AreaChart,
-  Area,
-  Legend
+  Area
 } from "recharts";
 import client from "../api/client";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
@@ -140,7 +136,6 @@ export const AnalyticsPage: React.FC = () => {
 
   // UI States
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   // Analytics API Data States
   const [overview, setOverview] = useState<OverviewStats | null>(null);
@@ -177,7 +172,6 @@ export const AnalyticsPage: React.FC = () => {
   // Fetch Unified Analytics Data
   const fetchAnalytics = async () => {
     try {
-      setLoading(true);
       const params: any = {
         timeline_group_by: timelineGroupBy
       };
@@ -214,8 +208,6 @@ export const AnalyticsPage: React.FC = () => {
       setRatingInsights(res.data.rating_insights);
     } catch (err) {
       console.error("Error loading library analytics:", err);
-    } finally {
-      setLoading(false);
     }
   };
 

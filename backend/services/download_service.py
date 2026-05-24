@@ -5,10 +5,12 @@ import random
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from bson import ObjectId
 from backend.database.connection import get_db
 from backend.services.mangadex_service import mangadex_service
 from backend.utils.file_utils import clean_filename
 from backend.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,40 @@ class DownloadService:
         total = task["total_chapters"]
         
         base_dir = download_path or settings.download_dir
-        manga_dir = os.path.join(base_dir, clean_filename(manga_title))
+        
+        # Check if the manga has the "oneshot" tag
+        is_oneshot = False
+        try:
+            manga = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
+            if manga:
+                tag_ids = manga.get("tag_ids", [])
+                oid_list = []
+                for tid in tag_ids:
+                    if isinstance(tid, str) and ObjectId.is_valid(tid):
+                        oid_list.append(ObjectId(tid))
+                    elif isinstance(tid, ObjectId):
+                        oid_list.append(tid)
+                
+                if oid_list:
+                    local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
+                    for tag in local_tags:
+                        tag_name = tag.get("name")
+                        if isinstance(tag_name, dict):
+                            en_name = tag_name.get("en", "")
+                            if en_name.lower() == "oneshot":
+                                is_oneshot = True
+                                break
+                        elif isinstance(tag_name, str):
+                            if tag_name.lower() == "oneshot":
+                                is_oneshot = True
+                                break
+        except Exception as e:
+            logger.error(f"Error checking oneshot status for manga {manga_id}: {e}")
+            
+        if is_oneshot:
+            target_dir = base_dir
+        else:
+            target_dir = os.path.join(base_dir, clean_filename(manga_title))
         
         # Update state to downloading
         await self._get_tasks_collection().update_one(
@@ -102,7 +137,7 @@ class DownloadService:
         )
         
         try:
-            os.makedirs(manga_dir, exist_ok=True)
+            os.makedirs(target_dir, exist_ok=True)
             completed_count = 0
             
             for idx, chap in enumerate(chapters):
@@ -121,7 +156,7 @@ class DownloadService:
                 else:
                     folder_name = clean_filename(f"Chapter {chap_num}")
                     
-                chap_path = os.path.join(manga_dir, folder_name)
+                chap_path = os.path.join(target_dir, folder_name)
                 
                 # Update individual chapter status to downloading
                 await self._update_chapter_status(task_id, chap_id, "downloading")
@@ -131,7 +166,7 @@ class DownloadService:
                     img_urls = await mangadex_service.get_chapter_images(chap_id)
                     if not img_urls:
                         raise ValueError("No images found for this chapter.")
-                        
+                    
                     os.makedirs(chap_path, exist_ok=True)
                     
                     # Download images concurrently in batches of 4
@@ -181,6 +216,33 @@ class DownloadService:
                         }
                     }
                 )
+                
+                # If completed successfully, update manga download_path
+                if status == "completed":
+                    try:
+                        abs_target_dir = os.path.abspath(target_dir)
+                        # Get old path for audit logs
+                        manga_doc = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
+                        old_download_path = manga_doc.get("download_path") if manga_doc else None
+                        
+                        await self._get_mangas_collection().update_one(
+                            {"_id": ObjectId(manga_id)},
+                            {"$set": {"download_path": abs_target_dir, "updated_at": datetime.utcnow()}}
+                        )
+                        
+                        # Add audit log entry
+                        await get_db().audit_logs.insert_one({
+                            "entity_type": "manga",
+                            "entity_id": manga_id,
+                            "action": "update_metadata",
+                            "field": "download_path",
+                            "old_value": old_download_path,
+                            "new_value": abs_target_dir,
+                            "timestamp": datetime.utcnow(),
+                            "note": "Updated download path on successful download"
+                        })
+                    except Exception as db_err:
+                        logger.error(f"Error saving download_path for manga {manga_id}: {db_err}")
                 
         except Exception as e:
             logger.error(f"Critical error in task {task_id}: {e}")

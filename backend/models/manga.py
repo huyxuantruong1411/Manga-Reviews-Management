@@ -33,6 +33,7 @@ class MangaBase(BaseModel):
     content_rating: Optional[str] = None
     publication_demographic: Optional[str] = None
     original_language: Optional[str] = None
+    download_path: Optional[str] = None
 
     @field_validator("personal_rating")
     @classmethod
@@ -71,6 +72,7 @@ class MangaUpdate(BaseModel):
     content_rating: Optional[str] = None
     publication_demographic: Optional[str] = None
     original_language: Optional[str] = None
+    download_path: Optional[str] = None
     
     @field_validator("personal_rating")
     @classmethod

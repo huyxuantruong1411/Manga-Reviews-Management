@@ -417,6 +417,40 @@ export const MangaDetailPage: React.FC = () => {
   const [chapters, setChapters] = useState<any[]>([]);
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [customPath, setCustomPath] = useState("");
+  const handlePathChange = (val: string) => {
+    // Remove characters that are absolutely forbidden in paths: * ? " < > |
+    let cleaned = val.replace(/[*?"<>|]/g, '');
+    
+    // For colon (:), only allow it as part of a Windows drive letter (e.g. C: at start)
+    if (/^[A-Za-z]:/.test(cleaned)) {
+      const drive = cleaned.slice(0, 2);
+      const rest = cleaned.slice(2).replace(/:/g, '');
+      cleaned = drive + rest;
+    } else {
+      cleaned = cleaned.replace(/:/g, '');
+    }
+    setCustomPath(cleaned);
+  };
+
+  const appendMangaTitleToPath = () => {
+    if (!manga?.title) return;
+    // Clean manga title to make it a valid folder name (remove \ / : * ? " < > |)
+    const cleanedTitle = manga.title.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim();
+    if (!cleanedTitle) return;
+    
+    let newPath = customPath.trim();
+    if (newPath) {
+      const separator = newPath.includes('\\') ? '\\' : '/';
+      if (newPath.endsWith('/') || newPath.endsWith('\\')) {
+        newPath = `${newPath}${cleanedTitle}`;
+      } else {
+        newPath = `${newPath}${separator}${cleanedTitle}`;
+      }
+    } else {
+      newPath = cleanedTitle;
+    }
+    handlePathChange(newPath);
+  };
   const [downloading, setDownloading] = useState(false);
   const [loadingChapters, setLoadingChapters] = useState(false);
 
@@ -563,8 +597,17 @@ export const MangaDetailPage: React.FC = () => {
   const openDownloadModal = async () => {
     if (!manga?.mangadex_id) return;
     setIsDownloadOpen(true);
+    setCustomPath("");
     try {
       setLoadingChapters(true);
+      // Fetch default download path
+      try {
+        const pathRes = await client.get("/api/downloads/base-path");
+        setCustomPath(pathRes.data.base_path || "");
+      } catch (pathErr) {
+        console.error("Failed to load default download path:", pathErr);
+      }
+      
       // Fetch available languages
       const langRes = await client.get(`/api/mangadex/manga/${manga.mangadex_id}/languages`);
       setLanguages(langRes.data);
@@ -645,11 +688,12 @@ export const MangaDetailPage: React.FC = () => {
 
       // Start polling status
       startTaskPolling(res.data.task_id);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Download failed:", err);
+      const errMsg = err.response?.data?.detail || "Failed to queue download.";
       showAlert({
         title: "Download Failed",
-        message: "Failed to queue download.",
+        message: errMsg,
         type: "error",
       });
     } finally {
@@ -1432,15 +1476,26 @@ export const MangaDetailPage: React.FC = () => {
               {/* Custom Download Path */}
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
-                  Custom Save Path (Optional - Leave blank for default)
+                  Custom Save Path
                 </label>
-                <input
-                  type="text"
-                  value={customPath}
-                  onChange={(e) => setCustomPath(e.target.value)}
-                  placeholder="e.g. C:\Downloads\Manga"
-                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                />
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={customPath}
+                    onChange={(e) => handlePathChange(e.target.value)}
+                    placeholder="e.g. C:\Downloads\Manga"
+                    className="flex-1 px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--brand-orange)] transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={appendMangaTitleToPath}
+                    title="Append cleaned manga title as subfolder"
+                    className="px-3 py-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-400 dark:hover:border-zinc-600 transition flex items-center space-x-1 whitespace-nowrap"
+                  >
+                    <Plus size={14} className="text-[var(--brand-orange)]" />
+                    <span>Append Title</span>
+                  </button>
+                </div>
               </div>
 
               {/* Chapters List */}
