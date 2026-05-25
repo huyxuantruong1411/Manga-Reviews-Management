@@ -57,6 +57,71 @@ async def update_base_path(payload: UpdateBasePathPayload = Body(...)):
     return {"base_path": abs_path, "message": "Base path updated successfully"}
 
 
+class VerifyPathPayload(BaseModel):
+    path: str
+
+@router.post("/downloads/verify-path")
+async def verify_download_path(payload: VerifyPathPayload = Body(...)):
+    """Check if a folder path exists and is writable."""
+    path_str = payload.path.strip()
+    if not path_str:
+        raise HTTPException(status_code=400, detail="Đường dẫn không được để trống")
+        
+    try:
+        abs_path = os.path.abspath(path_str)
+        exists = os.path.exists(abs_path) and os.path.isdir(abs_path)
+        
+        # Test write access
+        writable = False
+        test_dir = abs_path
+        if not exists:
+            parent_dir = os.path.dirname(abs_path)
+            while parent_dir and not os.path.exists(parent_dir):
+                parent_dir = os.path.dirname(parent_dir)
+            if parent_dir:
+                test_dir = parent_dir
+            else:
+                test_dir = "."
+                
+        test_file = os.path.join(test_dir, f".test_write_{str(uuid.uuid4())}")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+            writable = True
+        except Exception:
+            writable = False
+            
+        if exists:
+            if writable:
+                return {
+                    "exists": True,
+                    "writable": True,
+                    "message": "Thư mục đã tồn tại sẵn trên hệ thống và có quyền ghi."
+                }
+            else:
+                return {
+                    "exists": True,
+                    "writable": False,
+                    "message": "Thư mục đã tồn tại sẵn nhưng không có quyền ghi (thiếu quyền truy cập)."
+                }
+        else:
+            if writable:
+                return {
+                    "exists": False,
+                    "writable": True,
+                    "message": "Thư mục chưa tồn tại (sẽ được tự động tạo mới khi bắt đầu tải)."
+                }
+            else:
+                return {
+                    "exists": False,
+                    "writable": False,
+                    "message": "Thư mục chưa tồn tại và không thể tạo mới trong đường dẫn cha (đường dẫn không hợp lệ hoặc thiếu quyền)."
+                }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Đường dẫn không hợp lệ: {str(e)}")
+
+
 class DownloadChapterPayload(BaseModel):
     id: str
     chapter: str

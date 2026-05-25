@@ -18,6 +18,8 @@ import {
   FolderPlus,
   Info,
   AlertTriangle,
+  Check,
+  Loader2,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -629,11 +631,35 @@ export const MangaDetailPage: React.FC = () => {
       newPath = cleanedTitle;
     }
     handlePathChange(newPath);
+    setVerifyResult(null);
   };
   const [downloading, setDownloading] = useState(false);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false);
   const [overwriteWarningMsg, setOverwriteWarningMsg] = useState("");
+
+  // Path validation states
+  const [verifyResult, setVerifyResult] = useState<{ exists: boolean; writable: boolean; message: string } | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  const handleVerifyPath = async () => {
+    if (!customPath.trim()) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await client.post("/api/downloads/verify-path", { path: customPath.trim() });
+      setVerifyResult(res.data);
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || "Không thể xác thực đường dẫn.";
+      setVerifyResult({
+        exists: false,
+        writable: false,
+        message: errMsg
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   // Global downloads context
   const { tasks, cancelTask: cancelGlobalTask, registerNewTask } = useDownload();
@@ -800,6 +826,7 @@ export const MangaDetailPage: React.FC = () => {
     if (!manga?.mangadex_id) return;
     setIsDownloadOpen(true);
     setCustomPath("");
+    setVerifyResult(null);
     try {
       setLoadingChapters(true);
       // Fetch default download path
@@ -1768,26 +1795,57 @@ export const MangaDetailPage: React.FC = () => {
                     Editable Base Path
                   </span>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2">
                   <input
                     type="text"
                     value={customPath}
-                    onChange={(e) => handlePathChange(e.target.value)}
+                    onChange={(e) => {
+                      handlePathChange(e.target.value);
+                      setVerifyResult(null);
+                    }}
                     placeholder="e.g. C:\Downloads\Manga"
-                    className="flex-1 px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
+                    className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
                   />
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsTitleModalOpen(true)}
-                      title="Select and append manga title or alternative title as subfolder"
-                      className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
-                    >
-                      <Plus size={14} className="stroke-[3]" />
-                      <span>Append Title</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleVerifyPath}
+                    disabled={verifying || !customPath.trim()}
+                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                  >
+                    {verifying ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Check size={14} />
+                    )}
+                    <span>Verify Path</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTitleModalOpen(true);
+                      setVerifyResult(null);
+                    }}
+                    title="Select and append manga title or alternative title as subfolder"
+                    className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Plus size={14} className="stroke-[3]" />
+                    <span>Append Title</span>
+                  </button>
                 </div>
+                {verifyResult && (
+                  <div className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
+                    verifyResult.writable 
+                      ? (verifyResult.exists ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400")
+                      : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                  }`}>
+                    {verifyResult.writable ? (
+                      verifyResult.exists ? <Check size={14} className="shrink-0 mt-0.5" /> : <Info size={14} className="shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-relaxed">{verifyResult.message}</span>
+                  </div>
+                )}
                 <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
                   <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
                   <span>
