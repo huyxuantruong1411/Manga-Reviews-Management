@@ -561,18 +561,29 @@ class MangaDexService:
         """
         Get all available translated languages for a manga.
         """
-        params = {
-            "manga": mangadex_id,
-            "limit": 100,
-            "contentRating[]": self.CONTENT_RATINGS
-        }
-        data = await self._request("/chapter", params)
         langs = set()
-        if data and "data" in data:
+        offset = 0
+        limit = 500
+        while True:
+            params = {
+                "limit": limit,
+                "offset": offset,
+                "contentRating[]": self.CONTENT_RATINGS,
+                "includeFutureUpdates": 0
+            }
+            data = await self._request(f"/manga/{mangadex_id}/feed", params)
+            if not data or "data" not in data:
+                break
+            
             for c in data["data"]:
                 lang = c["attributes"].get("translatedLanguage")
                 if lang:
                     langs.add(lang)
+            
+            if offset + limit >= data.get("total", 0):
+                break
+            offset += limit
+            
         return list(langs)
 
     async def get_chapter_images(self, chapter_id: str) -> List[str]:
