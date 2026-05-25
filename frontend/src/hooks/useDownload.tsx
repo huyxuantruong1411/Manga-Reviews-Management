@@ -103,7 +103,7 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
     timeoutRef.current = setTimeout(runPoll, nextInterval);
   };
 
-  const registerNewTask = (taskId: string) => {
+  const registerNewTask = (_taskId: string) => {
     // Open widget to show progress
     setIsWidgetOpen(true);
     // Trigger immediate refresh of tasks to pick up the new task quickly

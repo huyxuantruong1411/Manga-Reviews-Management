@@ -1,7 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useDownload, DownloadTask } from "../../hooks/useDownload";
-import { Download, X, AlertTriangle, CheckCircle, Trash2, Loader2, StopCircle, ChevronDown, ListChecks } from "lucide-react";
+import { useDownload } from "../../hooks/useDownload";
+import type { DownloadTask } from "../../hooks/useDownload";
+import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks } from "lucide-react";
 
 export const DownloadWidget: React.FC = () => {
   const navigate = useNavigate();

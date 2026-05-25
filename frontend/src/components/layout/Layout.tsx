@@ -244,6 +244,7 @@ export const Layout: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
         </div>
       )}
       
