@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
+import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 
@@ -243,9 +244,11 @@ export const Layout: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
         </div>
       )}
+      
+      {/* Global floating download widget */}
+      <DownloadWidget />
     </div>
   );
 };

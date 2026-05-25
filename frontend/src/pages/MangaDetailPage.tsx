@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
+import { useDownload } from "../hooks/useDownload";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
 
 interface Tag {
@@ -500,18 +501,7 @@ interface AuditLog {
   note?: string;
 }
 
-interface DownloadTask {
-  _id: string;
-  status: string;
-  total_chapters: number;
-  completed_chapters: number;
-  progress: number;
-  error_message?: string;
-  current_chapter_name?: string;
-  current_page_number?: number;
-  current_page_total?: number;
-  current_page_preview?: string;
-}
+// DownloadTask interface is imported from useDownload.tsx
 
 
 export const MangaDetailPage: React.FC = () => {
@@ -645,9 +635,33 @@ export const MangaDetailPage: React.FC = () => {
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false);
   const [overwriteWarningMsg, setOverwriteWarningMsg] = useState("");
 
-  // Active Download Tasks (poll status)
-  const [activeTask, setActiveTask] = useState<DownloadTask | null>(null);
-  const pollInterval = useRef<any>(null);
+  // Global downloads context
+  const { tasks, cancelTask: cancelGlobalTask, registerNewTask } = useDownload();
+  const [dismissedTaskId, setDismissedTaskId] = useState<string | null>(null);
+  const [seenActiveTaskIds, setSeenActiveTaskIds] = useState<Record<string, boolean>>({});
+
+  // Sync active tasks seen in this session
+  useEffect(() => {
+    const active = tasks.filter(
+      (t) => t.manga_id === id && ["pending", "downloading"].includes(t.status)
+    );
+    if (active.length > 0) {
+      setSeenActiveTaskIds((prev) => {
+        const next = { ...prev };
+        active.forEach((t) => {
+          next[t._id] = true;
+        });
+        return next;
+      });
+    }
+  }, [tasks, id]);
+
+  const activeTask = tasks.find((t) => {
+    if (t.manga_id !== id) return false;
+    if (t._id === dismissedTaskId) return false;
+    if (["pending", "downloading"].includes(t.status)) return true;
+    return seenActiveTaskIds[t._id] === true;
+  });
 
   // Review states
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
@@ -682,9 +696,6 @@ export const MangaDetailPage: React.FC = () => {
 
   useEffect(() => {
     fetchMangaDetails();
-    return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
-    };
   }, [id]);
 
   // Sync details from MangaDex
@@ -878,8 +889,8 @@ export const MangaDetailPage: React.FC = () => {
       });
       setIsDownloadOpen(false);
 
-      // Start polling status
-      startTaskPolling(res.data.task_id);
+      // Register task globally
+      registerNewTask(res.data.task_id);
     } catch (err: any) {
       console.error("Download failed:", err);
       if (err.response?.status === 409) {
@@ -898,38 +909,14 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
-  const startTaskPolling = (taskId: string) => {
-    if (pollInterval.current) clearInterval(pollInterval.current);
-    
-    pollInterval.current = setInterval(async () => {
-      try {
-        const res = await client.get(`/api/downloads/tasks/${taskId}`);
-        setActiveTask(res.data);
-        if (["completed", "failed", "cancelled"].includes(res.data.status)) {
-          clearInterval(pollInterval.current);
-        }
-      } catch (err) {
-        clearInterval(pollInterval.current);
-      }
-    }, 1000);
-  };
-
   const cancelActiveTask = async () => {
     if (!activeTask) return;
-    try {
-      await client.post(`/api/downloads/tasks/${activeTask._id}/cancel`);
-      setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
-      if (pollInterval.current) clearInterval(pollInterval.current);
+    const success = await cancelGlobalTask(activeTask._id);
+    if (success) {
       showAlert({
         title: "Cancel Requested",
         message: "Cancellation request sent.",
         type: "info",
-      });
-    } catch (err) {
-      showAlert({
-        title: "Cancel Failed",
-        message: "Could not cancel task.",
-        type: "error",
       });
     }
   };
@@ -1398,13 +1385,20 @@ export const MangaDetailPage: React.FC = () => {
             )}
           </div>
 
-          {/* Action button: Cancel */}
-          {!["completed", "failed", "cancelled"].includes(activeTask.status) && (
+          {/* Action button: Cancel or Dismiss */}
+          {!["completed", "failed", "cancelled"].includes(activeTask.status) ? (
             <button
               onClick={cancelActiveTask}
               className="w-full md:w-auto px-5 py-2.5 bg-zinc-100 hover:bg-red-50 dark:bg-zinc-800/60 dark:hover:bg-red-950/20 border border-zinc-200 dark:border-zinc-700 hover:border-red-500/20 text-zinc-700 dark:text-zinc-300 hover:text-red-500 dark:hover:text-red-400 font-bold text-xs rounded-xl transition duration-150 shadow-sm flex-shrink-0"
             >
               Cancel Download
+            </button>
+          ) : (
+            <button
+              onClick={() => setDismissedTaskId(activeTask._id)}
+              className="w-full md:w-auto px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl transition duration-150 shadow-sm flex-shrink-0"
+            >
+              Dismiss
             </button>
           )}
         </div>

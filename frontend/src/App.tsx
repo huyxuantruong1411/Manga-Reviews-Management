@@ -8,21 +8,24 @@ import TagsPage from "./pages/TagsPage";
 import AuthorDetailPage from "./pages/AuthorDetailPage";
 import ImageToolsPage from "./pages/ImageToolsPage";
 import { AlertProvider } from "./hooks/useAlert";
+import { DownloadProvider } from "./hooks/useDownload";
 
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AlertProvider>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<MangaListPage />} />
-            <Route path="manga/:id" element={<MangaDetailPage />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
-            <Route path="tags" element={<TagsPage />} />
-            <Route path="author/:name" element={<AuthorDetailPage />} />
-            <Route path="tools" element={<ImageToolsPage />} />
-          </Route>
-        </Routes>
+        <DownloadProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<MangaListPage />} />
+              <Route path="manga/:id" element={<MangaDetailPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="tags" element={<TagsPage />} />
+              <Route path="author/:name" element={<AuthorDetailPage />} />
+              <Route path="tools" element={<ImageToolsPage />} />
+            </Route>
+          </Routes>
+        </DownloadProvider>
       </AlertProvider>
     </BrowserRouter>
   );
