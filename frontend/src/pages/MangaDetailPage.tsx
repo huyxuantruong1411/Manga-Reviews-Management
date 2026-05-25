@@ -318,12 +318,12 @@ const renderMarkdown = (text: string): React.ReactNode => {
         blocks.push(
           <div key={`table-wrapper-${key}`} className="overflow-x-auto my-4 rounded-xl border border-[var(--border-primary)] shadow-sm bg-[var(--bg-card)]">
             <table className="min-w-full divide-y divide-[var(--border-primary)] text-sm">
-              <thead className="bg-zinc-50 dark:bg-zinc-850 bg-opacity-70 dark:bg-opacity-50">
+              <thead className="bg-zinc-100/70 dark:bg-zinc-800/40 border-b border-[var(--border-primary)]">
                 <tr>
                   {headers.map((header, idx) => (
                     <th
                       key={idx}
-                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] border-b border-[var(--border-primary)]"
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-[var(--border-primary)]"
                     >
                       {parseInlineMarkdown(header.trim())}
                     </th>
@@ -334,7 +334,14 @@ const renderMarkdown = (text: string): React.ReactNode => {
                 {dataRows.map((row, rowIdx) => (
                   <tr key={rowIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition duration-150">
                     {row.map((cell, cellIdx) => (
-                      <td key={cellIdx} className="px-4 py-2.5 text-[var(--text-secondary)] leading-relaxed font-medium">
+                      <td
+                        key={cellIdx}
+                        className={`px-4 py-2.5 leading-relaxed text-sm ${
+                          cellIdx === 0
+                            ? "text-[var(--text-primary)] font-bold"
+                            : "text-[var(--text-secondary)] font-medium"
+                        }`}
+                      >
                         {parseInlineMarkdown(cell.trim())}
                       </td>
                     ))}
