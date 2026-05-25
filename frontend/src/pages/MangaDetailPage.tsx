@@ -254,10 +254,27 @@ const getDemographicBadge = (demographic: string | null | undefined) => {
 const renderMarkdown = (text: string): React.ReactNode => {
   if (!text) return <span className="text-zinc-400 italic">No synopsis available.</span>;
   
-  const lines = text.split("\n");
+  // Pre-process: Remove empty lines between table rows.
+  // A table row starts with '|' and ends with '|'.
+  const rawLines = text.split("\n");
+  const lines: string[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const current = rawLines[i].trim();
+    if (current === "" && i > 0 && i < rawLines.length - 1) {
+      const prev = rawLines[i - 1].trim();
+      const next = rawLines[i + 1].trim();
+      if (prev.startsWith("|") && prev.endsWith("|") && next.startsWith("|") && next.endsWith("|")) {
+        // Sandwich empty line between table rows - skip it!
+        continue;
+      }
+    }
+    lines.push(rawLines[i]);
+  }
+
   const blocks: React.ReactNode[] = [];
   let currentList: string[] = [];
   let currentNumberedList: string[] = [];
+  let currentTableRows: string[][] = [];
   
   const flushList = (key: string | number) => {
     if (currentList.length > 0) {
@@ -284,6 +301,57 @@ const renderMarkdown = (text: string): React.ReactNode => {
       );
       currentNumberedList = [];
     }
+  };
+
+  const flushTable = (key: string | number) => {
+    if (currentTableRows.length > 0) {
+      // Filter out separator rows like | :- | :- |
+      const validRows = currentTableRows.filter(row => {
+        const joined = row.join("").trim();
+        return !(/^[:\-\s]+$/.test(joined));
+      });
+
+      if (validRows.length > 0) {
+        const headers = validRows[0];
+        const dataRows = validRows.slice(1);
+        
+        blocks.push(
+          <div key={`table-wrapper-${key}`} className="overflow-x-auto my-4 rounded-xl border border-[var(--border-primary)] shadow-sm bg-[var(--bg-card)]">
+            <table className="min-w-full divide-y divide-[var(--border-primary)] text-sm">
+              <thead className="bg-zinc-50 dark:bg-zinc-850 bg-opacity-70 dark:bg-opacity-50">
+                <tr>
+                  {headers.map((header, idx) => (
+                    <th
+                      key={idx}
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] border-b border-[var(--border-primary)]"
+                    >
+                      {parseInlineMarkdown(header.trim())}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-primary)] bg-[var(--bg-card)]">
+                {dataRows.map((row, rowIdx) => (
+                  <tr key={rowIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition duration-150">
+                    {row.map((cell, cellIdx) => (
+                      <td key={cellIdx} className="px-4 py-2.5 text-[var(--text-secondary)] leading-relaxed font-medium">
+                        {parseInlineMarkdown(cell.trim())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      currentTableRows = [];
+    }
+  };
+
+  const flushAll = (key: string | number) => {
+    flushList(key);
+    flushTable(key);
   };
 
   const parseInlineMarkdown = (line: string): React.ReactNode[] => {
@@ -330,8 +398,12 @@ const renderMarkdown = (text: string): React.ReactNode => {
     const line = lines[i].trim();
     const cleanLine = line.replace(/\s+/g, "");
     
-    if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3) {
+    if (line.startsWith("|") && line.endsWith("|")) {
       flushList(i);
+      const cells = line.split("|").slice(1, -1);
+      currentTableRows.push(cells);
+    } else if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3) {
+      flushAll(i);
       blocks.push(<hr key={`hr-${i}`} className="my-4 border-[var(--border-primary)]" />);
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
       if (currentNumberedList.length > 0) {
@@ -365,14 +437,14 @@ const renderMarkdown = (text: string): React.ReactNode => {
         currentNumberedList.push(match[1]);
       }
     } else if (line.startsWith("> ")) {
-      flushList(i);
+      flushAll(i);
       blocks.push(
         <blockquote key={`bq-${i}`} className="border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 py-1 italic text-zinc-500 my-2">
           {parseInlineMarkdown(line.substring(2))}
         </blockquote>
       );
     } else if (/^(#{1,6})\s+(.*)$/.test(line)) {
-      flushList(i);
+      flushAll(i);
       const match = line.match(/^(#{1,6})\s+(.*)$/);
       if (match) {
         const level = match[1].length;
@@ -388,9 +460,9 @@ const renderMarkdown = (text: string): React.ReactNode => {
         blocks.push(headingElement);
       }
     } else if (line === "") {
-      flushList(i);
+      flushAll(i);
     } else {
-      flushList(i);
+      flushAll(i);
       blocks.push(
         <p key={`p-${i}`} className="text-sm leading-relaxed text-[var(--text-secondary)] mb-3">
           {parseInlineMarkdown(lines[i])}
@@ -398,7 +470,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
       );
     }
   }
-  flushList("end");
+  flushAll("end");
   
   return <div className="space-y-1">{blocks}</div>;
 };
