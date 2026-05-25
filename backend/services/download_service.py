@@ -3,9 +3,12 @@ import asyncio
 import logging
 import random
 import uuid
+import io
+import base64
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
+from PIL import Image
 from backend.database.connection import get_db
 from backend.services.mangadex_service import mangadex_service
 from backend.utils.file_utils import clean_filename
@@ -175,7 +178,7 @@ class DownloadService:
                     os.makedirs(chap_path, exist_ok=True)
                     
                     # Download images concurrently in batches of 4
-                    success = await self._download_images_concurrently(img_urls, chap_path)
+                    success = await self._download_images_concurrently(img_urls, chap_path, task_id, chap_num)
                     
                     if success:
                         await self._update_chapter_status(task_id, chap_id, "completed")
@@ -280,7 +283,51 @@ class DownloadService:
             }
         )
 
-    async def _download_images_concurrently(self, urls: List[str], chap_path: str, max_sem: int = 4) -> bool:
+    def _read_file(self, path: str) -> bytes:
+        with open(path, "rb") as f:
+            return f.read()
+
+    def _generate_base64_thumbnail(self, bytes_data: bytes, width: int = 120) -> Optional[str]:
+        try:
+            img = Image.open(io.BytesIO(bytes_data))
+            if img.mode not in ('RGB', 'RGBA'):
+                img = img.convert('RGB')
+            w_percent = (width / float(img.size[0]))
+            h_size = int((float(img.size[1]) * float(w_percent)))
+            img = img.resize((width, h_size), Image.Resampling.LANCZOS)
+            buffered = io.BytesIO()
+            if img.mode == 'RGBA':
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])
+                img = background
+            img.save(buffered, format="JPEG", quality=75)
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            return f"data:image/jpeg;base64,{img_str}"
+        except Exception as e:
+            logger.error(f"Error generating thumbnail: {e}")
+            return None
+
+    async def _update_page_progress(self, task_id: str, chap_num: str, page_num: int, page_total: int, bytes_data: bytes):
+        try:
+            # Generate thumbnail preview asynchronously
+            preview_base64 = await asyncio.to_thread(self._generate_base64_thumbnail, bytes_data)
+            
+            await self._get_tasks_collection().update_one(
+                {"_id": task_id},
+                {
+                    "$set": {
+                        "current_chapter_name": f"Chapter {chap_num}",
+                        "current_page_number": page_num,
+                        "current_page_total": page_total,
+                        "current_page_preview": preview_base64,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to update page progress for task {task_id}: {e}")
+
+    async def _download_images_concurrently(self, urls: List[str], chap_path: str, task_id: str, chap_num: str, max_sem: int = 4) -> bool:
         sem = asyncio.Semaphore(max_sem)
         
         async def download_page(idx: int, url: str) -> bool:
@@ -295,6 +342,14 @@ class DownloadService:
                 
                 # Check if already exists
                 if os.path.exists(full_path) and os.path.getsize(full_path) > 0:
+                    try:
+                        # Read the cached image bytes
+                        loop = asyncio.get_running_loop()
+                        bytes_data = await loop.run_in_executor(None, self._read_file, full_path)
+                        if bytes_data:
+                            await self._update_page_progress(task_id, chap_num, idx + 1, len(urls), bytes_data)
+                    except Exception as e:
+                        logger.error(f"Error reading cached image for preview: {e}")
                     return True
                     
                 bytes_data = await mangadex_service.download_image_bytes(url)
@@ -306,6 +361,8 @@ class DownloadService:
                     # Write inside worker thread to avoid blocking loop
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, self._write_file, full_path, bytes_data)
+                    # Update progress
+                    await self._update_page_progress(task_id, chap_num, idx + 1, len(urls), bytes_data)
                     return True
                 except Exception as e:
                     logger.error(f"Error saving image {file_name}: {e}")

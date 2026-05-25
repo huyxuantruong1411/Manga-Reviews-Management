@@ -438,6 +438,36 @@ export const MangaListPage: React.FC = () => {
     setPage(1);
   };
 
+  const handleGroupClick = (groupName: string) => {
+    const groupTags = allTags.filter((t) => (t.group || "other") === groupName);
+    if (groupTags.length === 0) return;
+
+    const tagIds = groupTags.map((t) => t._id);
+    const allIncluded = tagIds.every((id) => selectedTags.includes(id));
+    const allExcluded = tagIds.every((id) => excludeTags.includes(id));
+
+    if (!allIncluded && !allExcluded) {
+      // Step 1: Must Include all tags in this group
+      setSelectedTags((prev) => {
+        const filtered = prev.filter((id) => !tagIds.includes(id));
+        return [...filtered, ...tagIds];
+      });
+      setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+    } else if (allIncluded) {
+      // Step 2: Must Exclude all tags in this group
+      setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+      setExcludeTags((prev) => {
+        const filtered = prev.filter((id) => !tagIds.includes(id));
+        return [...filtered, ...tagIds];
+      });
+    } else {
+      // Step 3: Ignore all tags in this group (Neutral)
+      setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+      setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+    }
+    setPage(1);
+  };
+
   const toggleImportTag = (tagId: string) => {
     setImportTags((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
@@ -865,9 +895,38 @@ export const MangaListPage: React.FC = () => {
                     if (groupTags.length === 0) return null;
                     return (
                       <div key={groupName} className="space-y-1.5">
-                        <h4 className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider border-b border-[var(--border-primary)] pb-0.5 capitalize">
-                          {groupName}
-                        </h4>
+                        <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleGroupClick(groupName)}
+                            className="group text-[10px] font-bold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] uppercase tracking-wider cursor-pointer select-none transition flex items-center gap-1.5 capitalize focus:outline-none"
+                          >
+                            <span>{groupName}</span>
+                            {(() => {
+                              const tagIds = groupTags.map((t) => t._id);
+                              const allIncluded = tagIds.every((id) => selectedTags.includes(id));
+                              const allExcluded = tagIds.every((id) => excludeTags.includes(id));
+                              if (allIncluded) {
+                                return (
+                                  <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-extrabold normal-case">
+                                    all included
+                                  </span>
+                                );
+                              } else if (allExcluded) {
+                                return (
+                                  <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded text-[8px] font-extrabold normal-case">
+                                    all excluded
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-[8px] text-zinc-400 group-hover:text-[var(--brand-orange)]/80 font-medium normal-case transition">
+                                  (toggle all)
+                                </span>
+                              );
+                            })()}
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {groupTags.map((tag) => {
                             const isIncluded = selectedTags.includes(tag._id);

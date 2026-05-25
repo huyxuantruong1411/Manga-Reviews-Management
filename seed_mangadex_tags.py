@@ -55,15 +55,18 @@ async def seed_mangadex_tags():
             }
             
             if not existing:
-                # Assign a default color based on the group
-                # MangaDex groups: genre, theme, format, content
-                group_colors = {
-                    "genre": "#E11D48",    # Rose
-                    "theme": "#7C3AED",    # Purple
-                    "format": "#0891B2",   # Cyan
-                    "content": "#EA580C"   # Orange
-                }
-                tag_doc["color"] = group_colors.get(group, "#4B5563")
+                # Assign a default color based on custom theme rules
+                name_en = name.get("en", "")
+                name_lower = name_en.lower()
+                if name_lower in ["gore", "sexual violence", "mature"]:
+                    color_val = "#ef4444"
+                elif name_lower in ["suggestive"]:
+                    color_val = "#eab308"
+                elif name_lower in ["doujinshi"]:
+                    color_val = "#7c3aed"
+                else:
+                    color_val = "#3f3f46"
+                tag_doc["color"] = color_val
                 tag_doc["created_at"] = datetime.utcnow()
                 await db.tags.insert_one(tag_doc)
                 inserted_count += 1

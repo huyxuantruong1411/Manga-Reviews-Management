@@ -79,3 +79,46 @@ async def delete_custom_tag(tag_id: str = Path(...)):
     
     await coll.delete_one({"_id": ObjectId(tag_id)})
     return None
+
+@router.put("/{tag_id}", response_model=TagResponse)
+async def update_tag(tag_id: str = Path(...), data: TagCreate = ...):
+    """Update a custom tag. Standard tags' color/description can be updated too."""
+    if not ObjectId.is_valid(tag_id):
+        raise HTTPException(status_code=400, detail="Invalid tag ID")
+        
+    coll = get_db().tags
+    tag = await coll.find_one({"_id": ObjectId(tag_id)})
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+        
+    en_name = data.name.get("en", "").strip()
+    if not en_name:
+        raise HTTPException(status_code=400, detail="Tag English name is required")
+        
+    # Check if name is changed and if new name is duplicate
+    if en_name.lower() != tag["name"]["en"].lower():
+        existing = await coll.find_one({
+            "_id": {"$ne": ObjectId(tag_id)},
+            "name.en": {"$regex": f"^{re.escape(en_name)}$", "$options": "i"}
+        })
+        if existing:
+            raise HTTPException(status_code=400, detail="Another tag with this name already exists")
+            
+    # Prepare update (fully updates all properties)
+    update_doc = {
+        "color": data.color,
+        "description": data.description,
+        "group": data.group or "custom",
+        "name": {
+            "en": en_name,
+            "vi": data.name.get("vi", "").strip() or None
+        }
+    }
+        
+    await coll.update_one({"_id": ObjectId(tag_id)}, {"$set": update_doc})
+    
+    updated_tag = await coll.find_one({"_id": ObjectId(tag_id)})
+    if updated_tag:
+        updated_tag["_id"] = str(updated_tag["_id"])
+    return updated_tag
+

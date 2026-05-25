@@ -507,6 +507,10 @@ interface DownloadTask {
   completed_chapters: number;
   progress: number;
   error_message?: string;
+  current_chapter_name?: string;
+  current_page_number?: number;
+  current_page_total?: number;
+  current_page_preview?: string;
 }
 
 
@@ -580,23 +584,38 @@ export const MangaDetailPage: React.FC = () => {
     setCustomPath(cleaned);
   };
 
-  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
+  const [isTitleModalOpen, setIsTitleModalOpen] = useState(false);
 
   const getTitleOptions = () => {
     if (!manga) return [];
-    const options = [{ label: manga.title, value: manga.title }];
+    const options = [{
+      title: manga.title,
+      lang: manga.original_language || "en",
+      label: manga.title,
+      value: manga.title
+    }];
     if (manga.alt_titles && manga.alt_titles.length > 0) {
       manga.alt_titles.forEach((alt: string) => {
-        const parts = alt.split("|");
-        if (parts.length >= 2) {
+        if (alt.includes("|")) {
+          const parts = alt.split("|");
           const lang = parts[0];
           const val = parts.slice(1).join("|");
           if (!options.some(opt => opt.value === val)) {
-            options.push({ label: `${val} (${lang.toUpperCase()})`, value: val });
+            options.push({
+              title: val,
+              lang: lang,
+              label: `${val} (${lang.toUpperCase()})`,
+              value: val
+            });
           }
         } else {
           if (!options.some(opt => opt.value === alt)) {
-            options.push({ label: alt, value: alt });
+            options.push({
+              title: alt,
+              lang: "en",
+              label: alt,
+              value: alt
+            });
           }
         }
       });
@@ -892,7 +911,7 @@ export const MangaDetailPage: React.FC = () => {
       } catch (err) {
         clearInterval(pollInterval.current);
       }
-    }, 2000);
+    }, 1000);
   };
 
   const cancelActiveTask = async () => {
@@ -1039,6 +1058,22 @@ export const MangaDetailPage: React.FC = () => {
   const providers = manga.links.filter((link) =>
     !trackerTitles.includes(link.title.toLowerCase())
   );
+
+  const formatHistoryValue = (field: string | undefined, val: string | undefined) => {
+    if (!val) return val;
+    if (field === "tag_ids") {
+      const hex24Regex = /[0-9a-fA-F]{24}/g;
+      const ids = val.match(hex24Regex);
+      if (ids && ids.length > 0) {
+        const names = ids.map(id => {
+          const tag = allTags.find(t => t._id === id);
+          return tag ? tag.name.en : `Unknown (${id.slice(-4)})`;
+        });
+        return `[${names.map(name => `'${name}'`).join(", ")}]`;
+      }
+    }
+    return val;
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-24">
@@ -1262,35 +1297,112 @@ export const MangaDetailPage: React.FC = () => {
 
       {/* Download Active Progress Tracker */}
       {activeTask && (
-        <div className="p-5 bg-zinc-50 dark:bg-zinc-900 border border-[var(--border-primary)] rounded-2xl flex items-center justify-between">
-          <div className="flex items-center space-x-4 flex-1 pr-4">
-            <div className="p-3 bg-orange-100 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg">
-              <Download className="animate-bounce" size={20} />
-            </div>
-            <div className="space-y-1.5 flex-1">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-bold">Downloading chapters: {activeTask.status}</span>
-                <span className="font-semibold text-zinc-500">
-                  {Math.round(activeTask.progress * 100)}% ({activeTask.completed_chapters}/{activeTask.total_chapters})
-                </span>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-[var(--brand-orange)] h-full transition-all duration-300"
-                  style={{ width: `${activeTask.progress * 100}%` }}
-                />
-              </div>
-              {activeTask.error_message && (
-                <p className="text-xs text-red-500 font-semibold">{activeTask.error_message}</p>
+        <div className="p-6 bg-zinc-50/90 dark:bg-zinc-900/90 backdrop-blur-md border border-[var(--border-primary)] rounded-3xl shadow-xl flex flex-col md:flex-row gap-6 items-center transition-all duration-300 relative overflow-hidden">
+          {/* Animated glow accent */}
+          {!["completed", "failed", "cancelled"].includes(activeTask.status) && (
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-400 via-coral-500 to-amber-500 animate-pulse" />
+          )}
+
+          {/* Left side: Premium Image Live Preview */}
+          {!["completed", "failed", "cancelled"].includes(activeTask.status) && (
+            <div className="relative w-24 h-36 rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 border border-[var(--border-primary)] shadow-md flex-shrink-0 flex items-center justify-center group">
+              {activeTask.current_page_preview ? (
+                <>
+                  <img
+                    src={activeTask.current_page_preview}
+                    alt="Page preview"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  {activeTask.current_page_number && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-zinc-950/80 backdrop-blur-sm text-[10px] font-bold text-white px-2 py-0.5 rounded-full border border-white/10 whitespace-nowrap shadow">
+                      Page {activeTask.current_page_number}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center space-y-2 text-zinc-400 dark:text-zinc-500 p-2 text-center">
+                  <Download className="animate-bounce" size={24} />
+                  <span className="text-[10px] font-bold tracking-wider uppercase animate-pulse">Waiting...</span>
+                </div>
               )}
             </div>
+          )}
+
+          {/* Right side: Detailed Stats and Progress Bars */}
+          <div className="flex-1 space-y-4 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h4 className="font-spartan font-bold text-base text-[var(--text-primary)] flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand-orange)] animate-ping" />
+                  <span>Download Active: {activeTask.status.toUpperCase()}</span>
+                </h4>
+                {activeTask.current_chapter_name ? (
+                  <p className="text-xs text-[var(--text-secondary)] font-medium mt-1">
+                    {activeTask.current_chapter_name}
+                    {activeTask.current_page_number && activeTask.current_page_total && (
+                      <span className="font-semibold text-[var(--brand-orange)]">
+                        {" • "}Page {activeTask.current_page_number} of {activeTask.current_page_total}
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic mt-1">Starting download process...</p>
+                )}
+              </div>
+              
+              <div className="text-right sm:text-right flex-shrink-0">
+                <span className="text-sm font-extrabold text-[var(--brand-orange)]">
+                  {Math.round(activeTask.progress * 100)}%
+                </span>
+                <span className="text-xs font-bold text-zinc-400 block sm:inline sm:ml-1">
+                  ({activeTask.completed_chapters}/{activeTask.total_chapters} chapters)
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Overall Progress Bar */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
+                  <span>Overall Chapter Progress</span>
+                </div>
+                <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner border border-zinc-300/10">
+                  <div
+                    className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 rounded-full"
+                    style={{ width: `${activeTask.progress * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Page-by-page progress bar (only show if currently active and page numbers are present) */}
+              {!["completed", "failed", "cancelled"].includes(activeTask.status) && activeTask.current_page_number && activeTask.current_page_total && (
+                <div className="space-y-1 animate-fade-in">
+                  <div className="flex justify-between text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
+                    <span>Page Progress ({activeTask.current_page_number}/{activeTask.current_page_total})</span>
+                  </div>
+                  <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden shadow-inner border border-zinc-300/10">
+                    <div
+                      className="bg-amber-400 h-full transition-all duration-200 rounded-full"
+                      style={{ width: `${(activeTask.current_page_number / activeTask.current_page_total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {activeTask.error_message && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle size={14} />
+                <span>{activeTask.error_message}</span>
+              </div>
+            )}
           </div>
 
+          {/* Action button: Cancel */}
           {!["completed", "failed", "cancelled"].includes(activeTask.status) && (
             <button
               onClick={cancelActiveTask}
-              className="px-4 py-2 border border-red-500/20 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-bold text-xs rounded-xl transition"
+              className="w-full md:w-auto px-5 py-2.5 bg-zinc-100 hover:bg-red-50 dark:bg-zinc-800/60 dark:hover:bg-red-950/20 border border-zinc-200 dark:border-zinc-700 hover:border-red-500/20 text-zinc-700 dark:text-zinc-300 hover:text-red-500 dark:hover:text-red-400 font-bold text-xs rounded-xl transition duration-150 shadow-sm flex-shrink-0"
             >
               Cancel Download
             </button>
@@ -1400,7 +1512,7 @@ export const MangaDetailPage: React.FC = () => {
                         )}
                         {log.old_value !== undefined && log.new_value !== undefined && (
                           <span className="text-[var(--text-secondary)] block text-[11px] pt-0.5">
-                            Changed from "{log.old_value}" to "{log.new_value}"
+                            Changed from "{formatHistoryValue(log.field, log.old_value)}" to "{formatHistoryValue(log.field, log.new_value)}"
                           </span>
                         )}
                       </p>
@@ -1673,36 +1785,13 @@ export const MangaDetailPage: React.FC = () => {
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setShowTitleDropdown(!showTitleDropdown)}
+                      onClick={() => setIsTitleModalOpen(true)}
                       title="Select and append manga title or alternative title as subfolder"
                       className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
                     >
                       <Plus size={14} className="stroke-[3]" />
                       <span>Append Title</span>
                     </button>
-                    {showTitleDropdown && (
-                      <>
-                        <div className="fixed inset-0 z-[115]" onClick={() => setShowTitleDropdown(false)} />
-                        <div className="absolute right-0 mt-1 w-64 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] shadow-xl z-[120] max-h-60 overflow-y-auto py-1 animate-in fade-in slide-in-from-top-2 duration-150">
-                          <div className="px-3 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider border-b border-[var(--border-primary)] mb-1">
-                            Chọn Title để thêm
-                          </div>
-                          {getTitleOptions().map((opt, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                appendCleanedTitle(opt.value);
-                                setShowTitleDropdown(false);
-                              }}
-                              className="w-full text-left px-3 py-2 text-xs text-[var(--text-primary)] hover:bg-[var(--brand-orange)]/10 hover:text-[var(--brand-orange)] transition-colors line-clamp-2 cursor-pointer font-medium"
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
                   </div>
                 </div>
                 <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
@@ -1843,6 +1932,88 @@ export const MangaDetailPage: React.FC = () => {
               alt="Zoomed cover"
               className="max-w-full max-h-[90vh] object-contain"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Select Title to Append Popup Modal */}
+      {isTitleModalOpen && (
+        <div className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-[var(--border-primary)] pb-3">
+              <div>
+                <h3 className="text-lg font-spartan font-bold text-[var(--text-primary)]">
+                  Select Title to Append
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Choose a title format to append to your download destination path.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTitleModalOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* List of Titles */}
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              {getTitleOptions().map((opt, idx) => {
+                const flag = getFlagInfo(opt.lang);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      appendCleanedTitle(opt.value);
+                      setIsTitleModalOpen(false);
+                    }}
+                    className="w-full text-left p-3.5 border border-[var(--border-primary)] rounded-2xl flex items-start gap-3.5 hover:bg-[var(--brand-orange)]/5 hover:border-[var(--brand-orange)]/30 transition duration-150 group cursor-pointer"
+                  >
+                    {/* Flag and language indicator */}
+                    <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                      <img
+                        src={flag.flagUrl}
+                        alt={flag.label}
+                        className="w-6 h-4 object-cover rounded shadow-sm border border-zinc-200/20"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png";
+                        }}
+                      />
+                      <span className="text-[9px] font-extrabold text-zinc-400 group-hover:text-[var(--brand-orange)] transition uppercase">
+                        {flag.label}
+                      </span>
+                    </div>
+
+                    {/* Title string */}
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition leading-relaxed break-words whitespace-pre-wrap">
+                        {opt.title}
+                      </p>
+                      {flag.isRomanized && (
+                        <span className="inline-block px-1.5 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-extrabold uppercase scale-90 origin-left">
+                          Romanized (RO)
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Cancel Footer */}
+            <div className="pt-3 border-t border-[var(--border-primary)] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsTitleModalOpen(false)}
+                className="px-5 py-2 border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

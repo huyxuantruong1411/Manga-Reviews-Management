@@ -17,6 +17,17 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         doc["_id"] = str(doc["_id"])
     return doc
 
+def get_tag_default_color(name_en: str) -> str:
+    name_lower = name_en.lower()
+    if name_lower in ["gore", "sexual violence", "mature"]:
+        return "#ef4444"
+    elif name_lower in ["suggestive"]:
+        return "#eab308"
+    elif name_lower in ["doujinshi"]:
+        return "#7c3aed"
+    else:
+        return "#3f3f46"
+
 class DuplicateMangaException(ValueError):
     def __init__(self, manga_id: str, title: str):
         self.manga_id = manga_id
@@ -258,6 +269,7 @@ class MangaService:
                     "name": t["name"],
                     "group": t["group"],
                     "description": t["description"],
+                    "color": get_tag_default_color(t["name"].get("en", "")),
                     "created_at": datetime.utcnow()
                 }
                 res = await tags_coll.insert_one(new_tag)
@@ -478,6 +490,7 @@ class MangaService:
                     "name": t["name"],
                     "group": t["group"],
                     "description": t["description"],
+                    "color": get_tag_default_color(t["name"].get("en", "")),
                     "created_at": datetime.utcnow()
                 }
                 res = await tags_coll.insert_one(new_tag)
