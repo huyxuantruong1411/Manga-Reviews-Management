@@ -224,6 +224,7 @@ export const DownloadWidget: React.FC = () => {
             )}
           </div>
         </div>
+      )}
     </div>
   );
 };

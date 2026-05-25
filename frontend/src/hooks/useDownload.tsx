@@ -11,6 +11,7 @@ export interface DownloadTask {
   total_chapters: number;
   completed_chapters: number;
   progress: number;
+  download_path?: string;
   error_message?: string;
   current_chapter_name?: string;
   current_page_number?: number;
