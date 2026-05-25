@@ -838,7 +838,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   }, [handleSave]);
 
   return (
-    <div className={`mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}>
+    <div className={`review-editor-container mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}>
       {/* Hidden file input for image uploads */}
       <input
         ref={fileInputRef}

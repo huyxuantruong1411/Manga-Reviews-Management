@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDownload } from "../../hooks/useDownload";
 import type { DownloadTask } from "../../hooks/useDownload";
@@ -14,6 +14,24 @@ export const DownloadWidget: React.FC = () => {
     isWidgetOpen,
     setIsWidgetOpen,
   } = useDownload();
+
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  useEffect(() => {
+    const checkEditor = () => {
+      const editorExists = document.querySelector(".review-editor-container") !== null;
+      setIsEditorOpen(editorExists);
+    };
+
+    // Initial check
+    checkEditor();
+
+    // Observe DOM changes to catch editor mounts/unmounts dynamically
+    const observer = new MutationObserver(checkEditor);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleMangaClick = (mangaId: string) => {
     navigate(`/manga/${mangaId}`);
@@ -82,9 +100,10 @@ export const DownloadWidget: React.FC = () => {
   }
 
   const activeTasks = tasks.filter((t) => ["pending", "downloading"].includes(t.status));
+  const positionClass = isEditorOpen ? "right-24" : "right-6";
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 font-poppins">
+    <div className={`fixed bottom-6 ${positionClass} z-40 font-poppins transition-all duration-300`}>
       {/* FLOATING TRIGGER BUTTON (When closed) */}
       {!isWidgetOpen && (
         <button
