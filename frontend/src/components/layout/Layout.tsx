@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench } from "lucide-react";
+import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
@@ -140,6 +140,20 @@ export const Layout: React.FC = () => {
           >
             <Wrench size={20} />
             <span>Image Tools</span>
+          </NavLink>
+
+          <NavLink
+            to="/downloads"
+            className={({ isActive }) =>
+              `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                isActive
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`
+            }
+          >
+            <DownloadCloud size={20} />
+            <span>Downloads</span>
           </NavLink>
         </nav>
         

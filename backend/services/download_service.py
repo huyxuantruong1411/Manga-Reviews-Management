@@ -138,10 +138,16 @@ class DownloadService:
         else:
             target_dir = os.path.join(base_dir, clean_filename(manga_title))
         
-        # Update state to downloading
+        # Update state to downloading and store resolved download path
         await self._get_tasks_collection().update_one(
             {"_id": task_id},
-            {"$set": {"status": "downloading", "updated_at": datetime.utcnow()}}
+            {
+                "$set": {
+                    "status": "downloading",
+                    "download_path": os.path.abspath(target_dir),
+                    "updated_at": datetime.utcnow()
+                }
+            }
         )
         
         try:
