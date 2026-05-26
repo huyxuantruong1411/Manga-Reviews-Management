@@ -82,37 +82,60 @@ def _convert_single_image(filepath: str, target_ext: str) -> Dict[str, Any]:
 
 
 class ImageToolsService:
+    def __init__(self):
+        self.progress = {
+            "total_files": 0,
+            "scanned_files": 0,
+            "duplicates_found": 0,
+            "is_active": False
+        }
 
     def scan_duplicates(self, folder_path: str) -> Dict[str, Any]:
         """
         Scan a folder recursively for duplicate images using MD5 hashing.
         Returns duplicate groups (hash -> list of file paths).
         """
-        if not os.path.isdir(folder_path):
-            return {"error": f"Directory not found: {folder_path}", "groups": [], "stats": {}}
-
-        # Collect all image files
-        all_files: List[str] = []
-        for dirpath, _, filenames in os.walk(folder_path):
-            for f in filenames:
-                if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS:
-                    all_files.append(os.path.join(dirpath, f))
-
-        if not all_files:
-            return {"groups": [], "stats": {"total_files": 0, "total_groups": 0, "total_wasted_bytes": 0}}
-
-        # Hash files in parallel
-        hash_map: Dict[str, List[str]] = {}
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_path = {executor.submit(_get_file_hash, p): p for p in all_files}
-            for future in as_completed(future_to_path):
-                fpath = future_to_path[future]
-                try:
-                    h = future.result()
-                    if h:
-                        hash_map.setdefault(h, []).append(fpath)
-                except Exception:
-                    pass
+        self.progress = {
+            "total_files": 0,
+            "scanned_files": 0,
+            "duplicates_found": 0,
+            "is_active": True
+        }
+        try:
+            if not os.path.isdir(folder_path):
+                return {"error": f"Directory not found: {folder_path}", "groups": [], "stats": {}}
+    
+            # Collect all image files
+            all_files: List[str] = []
+            for dirpath, _, filenames in os.walk(folder_path):
+                for f in filenames:
+                    if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS:
+                        all_files.append(os.path.join(dirpath, f))
+    
+            self.progress["total_files"] = len(all_files)
+    
+            if not all_files:
+                return {"groups": [], "stats": {"total_files": 0, "total_groups": 0, "total_wasted_bytes": 0}}
+    
+            # Hash files in parallel
+            hash_map: Dict[str, List[str]] = {}
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_path = {executor.submit(_get_file_hash, p): p for p in all_files}
+                for future in as_completed(future_to_path):
+                    fpath = future_to_path[future]
+                    self.progress["scanned_files"] += 1
+                    try:
+                        h = future.result()
+                        if h:
+                            hash_map.setdefault(h, []).append(fpath)
+                            if len(hash_map[h]) == 2:
+                                self.progress["duplicates_found"] += 2
+                            elif len(hash_map[h]) > 2:
+                                self.progress["duplicates_found"] += 1
+                    except Exception:
+                        pass
+        finally:
+            self.progress["is_active"] = False
 
         # Filter to only duplicate groups (2+ files with same hash)
         duplicate_groups = {k: v for k, v in hash_map.items() if len(v) > 1}

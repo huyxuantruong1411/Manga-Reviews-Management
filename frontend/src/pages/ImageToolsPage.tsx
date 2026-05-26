@@ -15,7 +15,8 @@ import {
   CheckCircle,
   FileCheck,
   Search,
-  ChevronUp
+  ChevronUp,
+  Loader2
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -88,6 +89,13 @@ export const ImageToolsPage: React.FC = () => {
 
   // Duplicates Scanner State
   const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{
+    total_files: number;
+    scanned_files: number;
+    duplicates_found: number;
+    is_active: boolean;
+  } | null>(null);
+  const scanProgressIntervalRef = useRef<any>(null);
   const [dupGroups, setDupGroups] = useState<DuplicateGroup[]>([]);
   const [dupStats, setDupStats] = useState<DuplicateStats | null>(null);
   const [selectedDuplicatePaths, setSelectedDuplicatePaths] = useState<Set<string>>(new Set());
@@ -118,6 +126,15 @@ export const ImageToolsPage: React.FC = () => {
       }
     };
     fetchMangas();
+  }, []);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (scanProgressIntervalRef.current) {
+        clearInterval(scanProgressIntervalRef.current);
+      }
+    };
   }, []);
 
   // Update path when selected manga changes
@@ -196,6 +213,24 @@ export const ImageToolsPage: React.FC = () => {
       setDupGroups([]);
       setDupStats(null);
       setSelectedDuplicatePaths(new Set());
+      setScanProgress({
+        total_files: 0,
+        scanned_files: 0,
+        duplicates_found: 0,
+        is_active: true
+      });
+
+      // Poll progress endpoint every 400ms
+      scanProgressIntervalRef.current = setInterval(async () => {
+        try {
+          const progRes = await client.get("/api/image-tools/scan-progress");
+          if (progRes.data) {
+            setScanProgress(progRes.data);
+          }
+        } catch (pollErr) {
+          console.error("Error polling scan progress:", pollErr);
+        }
+      }, 400);
 
       const res = await client.post("/api/image-tools/scan-duplicates", {
         path: scanPath.trim(),
@@ -221,6 +256,11 @@ export const ImageToolsPage: React.FC = () => {
         type: "error"
       });
     } finally {
+      if (scanProgressIntervalRef.current) {
+        clearInterval(scanProgressIntervalRef.current);
+        scanProgressIntervalRef.current = null;
+      }
+      setScanProgress(null);
       setIsScanningDuplicates(false);
     }
   };
@@ -731,17 +771,64 @@ export const ImageToolsPage: React.FC = () => {
         <div className="space-y-6">
           {/* Scanning Overlay / Loader */}
           {isScanningDuplicates && (
-            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-6 max-w-xl mx-auto animate-in fade-in duration-200">
               <div className="relative w-16 h-16 mx-auto">
                 <div className="absolute inset-0 rounded-full border-4 border-[var(--border-primary)]"></div>
                 <div className="absolute inset-0 rounded-full border-4 border-t-[var(--brand-orange)] animate-spin"></div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold">Scanning for Duplicate Images</h3>
-                <p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto mt-1">
+              <div className="space-y-2">
+                <h3 className="text-xl font-spartan font-bold text-[var(--text-primary)]">
+                  Scanning for Duplicate Images
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
                   Computing MD5 hashes in parallel across image folders. This processes hundreds of files in seconds...
                 </p>
               </div>
+
+              {scanProgress && (
+                <div className="space-y-4 max-w-sm mx-auto p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl">
+                  {scanProgress.total_files === 0 ? (
+                    <div className="text-xs font-semibold text-[var(--text-secondary)] animate-pulse flex items-center justify-center space-x-2">
+                      <Loader2 className="animate-spin text-[var(--brand-orange)]" size={14} />
+                      <span>Walking directory and counting image files...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Stats */}
+                      <div className="flex justify-between text-xs font-bold text-[var(--text-secondary)]">
+                        <span>Progress</span>
+                        <span className="text-[var(--brand-orange)] font-extrabold">
+                          {Math.round((scanProgress.scanned_files / scanProgress.total_files) * 100)}%
+                        </span>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner">
+                        <div
+                          className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 rounded-full"
+                          style={{ width: `${(scanProgress.scanned_files / scanProgress.total_files) * 100}%` }}
+                        />
+                      </div>
+
+                      {/* Details */}
+                      <div className="flex flex-col space-y-1 text-[11px] font-semibold text-[var(--text-secondary)] text-left border-t border-[var(--border-primary)] pt-2.5 mt-2">
+                        <div className="flex justify-between">
+                          <span>Files Scanned:</span>
+                          <span className="font-bold text-[var(--text-primary)]">
+                            {scanProgress.scanned_files} / {scanProgress.total_files}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-rose-500">
+                          <span>Duplicates Detected:</span>
+                          <span className="font-extrabold">
+                            {scanProgress.duplicates_found} pages
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

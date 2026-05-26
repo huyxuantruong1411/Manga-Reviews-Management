@@ -77,6 +77,11 @@ async def _resolve_scan_path(path: Optional[str], manga_id: Optional[str]) -> st
 
 # ─── Endpoints ────────────────────────────────────────────────────────
 
+@router.get("/scan-progress")
+async def get_scan_progress():
+    """Get the progress of the active duplicate images scan."""
+    return image_tools_service.progress
+
 @router.post("/scan-duplicates")
 async def scan_duplicates(req: ScanDuplicatesRequest):
     """Scan a folder for duplicate images using MD5 hashing."""
