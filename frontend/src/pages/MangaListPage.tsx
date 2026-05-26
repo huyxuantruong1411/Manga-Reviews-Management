@@ -12,7 +12,7 @@ interface Tag {
   name: { en: string; vi?: string | null };
   color?: string;
   source: string;
-  group: string;
+  group?: string;
 }
 
 interface Manga {
@@ -470,11 +470,7 @@ export const MangaListPage: React.FC = () => {
     setPage(1);
   };
 
-  const toggleImportTag = (tagId: string) => {
-    setImportTags((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
-  };
+
 
   const handleLimitChange = (newLimit: number) => {
     setLimit(newLimit);

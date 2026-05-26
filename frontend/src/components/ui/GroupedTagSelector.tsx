@@ -6,7 +6,7 @@ interface Tag {
   name: { en: string; vi?: string | null };
   color?: string;
   source: string;
-  group: string;
+  group?: string;
 }
 
 interface GroupedTagSelectorProps {
