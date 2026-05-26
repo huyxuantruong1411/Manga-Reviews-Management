@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 active_cancellations = {}
 
 class DownloadService:
+    def __init__(self):
+        self.running_tasks = set()
+
     def _get_tasks_collection(self):
         return get_db().download_tasks
 
@@ -84,12 +87,74 @@ class DownloadService:
         )
         return True
 
+    async def resume_task(self, task_id: str, background_tasks: Any) -> bool:
+        task = await self.get_task_status(task_id)
+        if not task:
+            return False
+            
+        if task_id in self.running_tasks:
+            logger.info(f"Task {task_id} is already running.")
+            return True
+            
+        # Reset cancellations tracker
+        active_cancellations[task_id] = False
+        
+        # Reset stuck/failed/cancelled chapters to pending
+        chapters = task.get("chapters_detail", [])
+        for chap in chapters:
+            if chap.get("status") in ["failed", "downloading", "pending"]:
+                chap["status"] = "pending"
+                chap["error"] = None
+                
+        await self._get_tasks_collection().update_one(
+            {"_id": task_id},
+            {
+                "$set": {
+                    "status": "pending",
+                    "error_message": None,
+                    "chapters_detail": chapters,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        background_tasks.add_task(
+            self.start_download_background,
+            task_id=task_id,
+            download_path=task.get("download_path")
+        )
+        return True
+
+    async def auto_resume_tasks(self):
+        try:
+            cursor = self._get_tasks_collection().find({"status": {"$in": ["downloading", "pending"]}})
+            async for task in cursor:
+                task_id = task["_id"]
+                if task_id not in self.running_tasks:
+                    logger.info(f"Auto-resuming task {task_id} on startup...")
+                    # Reset cancellations tracker
+                    active_cancellations[task_id] = False
+                    asyncio.create_task(
+                        self.start_download_background(
+                            task_id=task_id,
+                            download_path=task.get("download_path")
+                        )
+                    )
+        except Exception as e:
+            logger.error(f"Error during auto-resuming tasks on startup: {e}")
+
     async def start_download_background(self, task_id: str, download_path: Optional[str] = None):
         """
         Runs the download process in the background.
         """
+        if task_id in self.running_tasks:
+            logger.warning(f"Task {task_id} is already running. Skipping duplicate execution.")
+            return
+        self.running_tasks.add(task_id)
+        
         task = await self.get_task_status(task_id)
         if not task:
+            self.running_tasks.discard(task_id)
             return
             
         manga_id = task["manga_id"]
@@ -152,7 +217,7 @@ class DownloadService:
         
         try:
             os.makedirs(target_dir, exist_ok=True)
-            completed_count = 0
+            completed_count = sum(1 for c in chapters if c.get("status") == "completed")
             
             for idx, chap in enumerate(chapters):
                 # Check cancellation
@@ -163,7 +228,11 @@ class DownloadService:
                 chap_id = chap["id"]
                 chap_num = chap["chapter"]
                 chap_title = chap.get("title", "")
+                chap_status = chap.get("status", "pending")
                 
+                if chap_status == "completed":
+                    continue
+                    
                 # Determine folder name based on chapter title existence
                 if chap_title:
                     folder_name = clean_filename(f"Chapter {chap_num} - {chap_title}")
@@ -188,6 +257,7 @@ class DownloadService:
                     
                     if success:
                         await self._update_chapter_status(task_id, chap_id, "completed")
+                        completed_count += 1
                     else:
                         raise RuntimeError("Failed to download one or more pages.")
                         
@@ -195,10 +265,8 @@ class DownloadService:
                     logger.error(f"Error downloading chapter {chap_num}: {e}")
                     await self._update_chapter_status(task_id, chap_id, "failed", str(e))
                 
-                completed_count += 1
-                progress = completed_count / total
-                
                 # Update task progress
+                progress = completed_count / total
                 await self._get_tasks_collection().update_one(
                     {"_id": task_id},
                     {
@@ -272,6 +340,7 @@ class DownloadService:
             )
         finally:
             active_cancellations.pop(task_id, None)
+            self.running_tasks.discard(task_id)
 
     async def _check_db_cancelled(self, task_id: str) -> bool:
         doc = await self.get_task_status(task_id)

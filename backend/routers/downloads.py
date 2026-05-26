@@ -285,3 +285,14 @@ async def cancel_download_task(task_id: str = Path(...)):
     if not cancelled:
         raise HTTPException(status_code=400, detail="Task cannot be cancelled or already finished")
     return {"message": "Cancellation request submitted"}
+
+@router.post("/downloads/tasks/{task_id}/resume")
+async def resume_download_task(
+    background_tasks: BackgroundTasks,
+    task_id: str = Path(...)
+):
+    """Resume a download task that is stuck, failed, or cancelled."""
+    resumed = await download_service.resume_task(task_id, background_tasks)
+    if not resumed:
+        raise HTTPException(status_code=400, detail="Task cannot be resumed or not found")
+    return {"message": "Download task resume request submitted"}

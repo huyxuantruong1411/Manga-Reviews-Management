@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI):
     try:
         await connect_to_mongo()
         await init_db_indexes()
+        # Auto-resume stuck or pending downloads
+        from backend.services.download_service import download_service
+        await download_service.auto_resume_tasks()
     except Exception as e:
         logger.critical(f"Failed to start database connections: {e}")
     yield

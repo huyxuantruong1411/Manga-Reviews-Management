@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDownload } from "../../hooks/useDownload";
 import type { DownloadTask } from "../../hooks/useDownload";
-import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks } from "lucide-react";
+import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks, Play, RotateCcw } from "lucide-react";
 
 export const DownloadWidget: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +10,7 @@ export const DownloadWidget: React.FC = () => {
     tasks,
     activeTasksCount,
     cancelTask,
+    resumeTask,
     refreshTasks,
     isWidgetOpen,
     setIsWidgetOpen,
@@ -95,11 +96,11 @@ export const DownloadWidget: React.FC = () => {
     );
   };
 
-  if (activeTasksCount === 0 && !isWidgetOpen) {
+  const activeTasks = tasks.filter((t) => ["pending", "downloading", "failed", "cancelled"].includes(t.status));
+
+  if (activeTasks.length === 0 && !isWidgetOpen) {
     return null;
   }
-
-  const activeTasks = tasks.filter((t) => ["pending", "downloading"].includes(t.status));
   const positionClass = isEditorOpen ? "right-24" : "right-6";
 
   return (
@@ -200,15 +201,34 @@ export const DownloadWidget: React.FC = () => {
                         </div>
                       </div>
 
-                      {isActive && (
-                        <button
-                          onClick={() => cancelTask(task._id)}
-                          title="Cancel Download"
-                          className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-red-500/20 text-zinc-400 hover:text-red-500 hover:bg-red-500/5 transition cursor-pointer"
-                        >
-                          <StopCircle size={14} />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isActive ? (
+                          <>
+                            <button
+                              onClick={() => resumeTask(task._id)}
+                              title="Force Resume / Restart Task"
+                              className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-emerald-500/20 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/5 transition cursor-pointer"
+                            >
+                              <Play size={13} />
+                            </button>
+                            <button
+                              onClick={() => cancelTask(task._id)}
+                              title="Cancel Download"
+                              className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-red-500/20 text-zinc-400 hover:text-red-500 hover:bg-red-500/5 transition cursor-pointer"
+                            >
+                              <StopCircle size={13} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => resumeTask(task._id)}
+                            title="Resume / Retry Download"
+                            className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-emerald-500/20 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/5 transition cursor-pointer"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Progress Bar */}

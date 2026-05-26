@@ -25,6 +25,7 @@ interface DownloadContextType {
   tasks: DownloadTask[];
   activeTasksCount: number;
   cancelTask: (taskId: string) => Promise<boolean>;
+  resumeTask: (taskId: string) => Promise<boolean>;
   refreshTasks: () => Promise<void>;
   registerNewTask: (taskId: string) => void;
   isWidgetOpen: boolean;
@@ -41,11 +42,16 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
   const timeoutRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
   const tasksRef = useRef<DownloadTask[]>([]);
+  const isWidgetOpenRef = useRef<boolean>(false);
 
-  // Sync tasks ref for polling checks
+  // Sync refs
   useEffect(() => {
     tasksRef.current = tasks;
   }, [tasks]);
+
+  useEffect(() => {
+    isWidgetOpenRef.current = isWidgetOpen;
+  }, [isWidgetOpen]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -80,15 +86,40 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
       (t) => t.status === "pending" || t.status === "downloading"
     );
 
-    // Fast poll when downloading, slow poll when idle
+    // Stop polling if the widget is closed AND there are no active tasks running
+    if (!isWidgetOpenRef.current && !hasActive) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      return;
+    }
+
+    // Fast poll when downloading, slow poll when idle (widget is open but idle)
     const nextInterval = hasActive ? 1500 : 8000;
     timeoutRef.current = setTimeout(runPoll, nextInterval);
   };
 
-  // Start polling on mount
+  // Start polling on mount if there are active tasks, otherwise remain idle
   useEffect(() => {
-    runPoll();
+    const initCheck = async () => {
+      const fetchedTasks = await fetchTasks();
+      const hasActive = (fetchedTasks || []).some(
+        (t) => t.status === "pending" || t.status === "downloading"
+      );
+      if (hasActive || isWidgetOpenRef.current) {
+        runPoll();
+      }
+    };
+    initCheck();
   }, []);
+
+  // Restart polling whenever the widget is opened
+  useEffect(() => {
+    if (isWidgetOpen) {
+      runPoll();
+    }
+  }, [isWidgetOpen]);
 
   const refreshTasks = async () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -100,8 +131,10 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
       (t) => t.status === "pending" || t.status === "downloading"
     );
     
-    const nextInterval = hasActive ? 1500 : 8000;
-    timeoutRef.current = setTimeout(runPoll, nextInterval);
+    if (hasActive || isWidgetOpenRef.current) {
+      const nextInterval = hasActive ? 1500 : 8000;
+      timeoutRef.current = setTimeout(runPoll, nextInterval);
+    }
   };
 
   const registerNewTask = (_taskId: string) => {
@@ -131,6 +164,26 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
+  const resumeTask = async (taskId: string): Promise<boolean> => {
+    try {
+      await client.post(`/api/downloads/tasks/${taskId}/resume`);
+      showToast("Download resume requested", "success");
+      
+      // Update local state immediately for fast feedback
+      setTasks((prev) =>
+        prev.map((t) => (t._id === taskId ? { ...t, status: "pending" } : t))
+      );
+      
+      // Trigger a refresh
+      refreshTasks();
+      return true;
+    } catch (err) {
+      console.error("Failed to resume task:", err);
+      showToast("Failed to resume download task", "error");
+      return false;
+    }
+  };
+
   const activeTasksCount = tasks.filter(
     (t) => t.status === "pending" || t.status === "downloading"
   ).length;
@@ -141,6 +194,7 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
         tasks,
         activeTasksCount,
         cancelTask,
+        resumeTask,
         refreshTasks,
         registerNewTask,
         isWidgetOpen,
