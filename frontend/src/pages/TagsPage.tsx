@@ -399,7 +399,7 @@ export const TagsPage: React.FC = () => {
         </div>
 
         {/* Tags List */}
-        <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col">
+        <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col h-fit">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <h2 className="text-xl font-bold flex items-center space-x-2">
               <TagIcon size={20} className="text-[var(--brand-orange)]" />
@@ -434,7 +434,7 @@ export const TagsPage: React.FC = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[680px] overflow-y-auto pr-2 pb-8 flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[680px] overflow-y-auto pr-2 pb-0 flex-1">
               {filteredTags.map((tag) => (
                 <div
                   key={tag._id}
