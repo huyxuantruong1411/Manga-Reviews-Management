@@ -821,6 +821,68 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
+  // Alt Titles Edit States & Handlers
+  const [isEditingAltTitles, setIsEditingAltTitles] = useState(false);
+  const [localAltTitles, setLocalAltTitles] = useState<string[]>([]);
+  const [newAltTitle, setNewAltTitle] = useState("");
+  const [newAltLang, setNewAltLang] = useState("vi");
+  const [savingAltTitles, setSavingAltTitles] = useState(false);
+
+  const handleStartEditAltTitles = () => {
+    setLocalAltTitles(manga?.alt_titles || []);
+    setNewAltTitle("");
+    setNewAltLang("vi");
+    setIsEditingAltTitles(true);
+  };
+
+  const handleAddAltTitle = () => {
+    if (!newAltTitle.trim()) return;
+    const item = `${newAltLang.trim().toLowerCase()}|${newAltTitle.trim()}`;
+    if (!localAltTitles.includes(item)) {
+      setLocalAltTitles([...localAltTitles, item]);
+    }
+    setNewAltTitle("");
+  };
+
+  const handleDeleteAltTitle = (index: number) => {
+    setLocalAltTitles(localAltTitles.filter((_, idx) => idx !== index));
+  };
+
+  const handleSaveAltTitles = async () => {
+    if (!manga) return;
+    try {
+      setSavingAltTitles(true);
+      const payload = {
+        alt_titles: localAltTitles,
+      };
+
+      const formData = new FormData();
+      formData.append("metadata", JSON.stringify(payload));
+
+      const res = await client.put(`/api/manga/${manga._id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setManga(res.data);
+      setIsEditingAltTitles(false);
+
+      // Reload history
+      const historyRes = await client.get(`/api/manga/${id}/history`);
+      setHistory(historyRes.data);
+
+      showToast({ message: "Alternative titles updated successfully!", type: "success" });
+    } catch (err) {
+      console.error("Failed to save alt titles:", err);
+      showAlert({
+        title: "Update Failed",
+        message: "Failed to update alternative titles.",
+        type: "error",
+      });
+    } finally {
+      setSavingAltTitles(false);
+    }
+  };
+
   // Start Downloading
   const openDownloadModal = async () => {
     if (!manga?.mangadex_id) return;
@@ -1436,45 +1498,181 @@ export const MangaDetailPage: React.FC = () => {
         {/* Left Column: Description & Audit Timeline */}
         <div className="lg:col-span-2 space-y-8">
           {/* Alternative Titles */}
-          {manga.alt_titles && manga.alt_titles.length > 0 && (
-            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold">Alternative Titles</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <tbody>
-                    {manga.alt_titles.map((alt, idx) => {
-                      let lang = "en";
-                      let title = alt;
-                      if (alt.includes("|")) {
-                        const parts = alt.split("|");
-                        lang = parts[0];
-                        title = parts.slice(1).join("|");
-                      }
-                      const flag = getFlagInfo(lang);
-                      return (
-                        <tr key={idx} className="border-b border-[var(--border-primary)]/40 last:border-0">
-                          <td className="py-2.5 pr-4 flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
-                            <img src={flag.flagUrl} alt={flag.label} className="w-5 h-3.5 object-cover rounded shadow-sm" onError={(e) => {
-                              (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png"; // Fallback
-                            }} />
-                            <span className="min-w-[20px]">{flag.label}</span>
-                            {flag.isRomanized && (
-                              <span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
-                                RO
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
-                            {title}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {!isEditingAltTitles ? (
+                <button
+                  onClick={handleStartEditAltTitles}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+                >
+                  <Edit2 size={12} />
+                  <span>Edit</span>
+                </button>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleSaveAltTitles}
+                    disabled={savingAltTitles}
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-sm"
+                  >
+                    {savingAltTitles ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Check size={12} />
+                    )}
+                    <span>Save</span>
+                  </button>
+                  <button
+                    onClick={() => setIsEditingAltTitles(false)}
+                    disabled={savingAltTitles}
+                    className="flex items-center space-x-1 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+                  >
+                    <X size={12} />
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+
+            {!isEditingAltTitles ? (
+              manga.alt_titles && manga.alt_titles.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <tbody>
+                      {manga.alt_titles.map((alt, idx) => {
+                        let lang = "en";
+                        let title = alt;
+                        if (alt.includes("|")) {
+                          const parts = alt.split("|");
+                          lang = parts[0];
+                          title = parts.slice(1).join("|");
+                        }
+                        const flag = getFlagInfo(lang);
+                        return (
+                          <tr key={idx} className="border-b border-[var(--border-primary)]/40 last:border-0">
+                            <td className="py-2.5 pr-4 flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
+                              <img src={flag.flagUrl} alt={flag.label} className="w-5 h-3.5 object-cover rounded shadow-sm" onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png"; // Fallback
+                              }} />
+                              <span className="min-w-[20px]">{flag.label}</span>
+                              {flag.isRomanized && (
+                                <span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+                                  RO
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
+                              {title}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-sm text-[var(--text-secondary)] italic py-2">
+                  No alternative titles available. Click Edit to add titles.
+                </div>
+              )
+            ) : (
+              <div className="space-y-4">
+                {localAltTitles.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <tbody>
+                        {localAltTitles.map((alt, idx) => {
+                          let lang = "en";
+                          let title = alt;
+                          if (alt.includes("|")) {
+                            const parts = alt.split("|");
+                            lang = parts[0];
+                            title = parts.slice(1).join("|");
+                          }
+                          const flag = getFlagInfo(lang);
+                          return (
+                            <tr key={idx} className="border-b border-[var(--border-primary)]/40 last:border-0">
+                              <td className="py-2.5 pr-4 flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
+                                <img src={flag.flagUrl} alt={flag.label} className="w-5 h-3.5 object-cover rounded shadow-sm" onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png"; // Fallback
+                                }} />
+                                <span className="min-w-[20px]">{flag.label}</span>
+                                {flag.isRomanized && (
+                                  <span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+                                    RO
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
+                                {title}
+                              </td>
+                              <td className="py-2.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAltTitle(idx)}
+                                  className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 hover:text-red-700 rounded transition"
+                                  title="Delete alternative title"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-sm text-[var(--text-secondary)] italic py-2">
+                    No alternative titles. Use the form below to add.
+                  </div>
+                )}
+
+                {/* Add new Alt Title Form */}
+                <div className="pt-3 border-t border-[var(--border-primary)]/40 flex items-center gap-3">
+                  <select
+                    value={newAltLang}
+                    onChange={(e) => setNewAltLang(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none"
+                  >
+                    <option value="vi">VI (Vietnamese)</option>
+                    <option value="ja">JA (Japanese)</option>
+                    <option value="ja-ro">JA-RO (Romanized)</option>
+                    <option value="en">EN (English)</option>
+                    <option value="ko">KO (Korean)</option>
+                    <option value="ko-ro">KO-RO (Romanized)</option>
+                    <option value="zh">ZH (Chinese)</option>
+                    <option value="zh-ro">ZH-RO (Romanized)</option>
+                    <option value="fr">FR (French)</option>
+                    <option value="de">DE (German)</option>
+                    <option value="es">ES (Spanish)</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newAltTitle}
+                    onChange={(e) => setNewAltTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddAltTitle();
+                      }
+                    }}
+                    placeholder="Enter alternative title..."
+                    className="flex-1 px-3 py-1.5 text-sm rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddAltTitle}
+                    className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm flex-shrink-0"
+                  >
+                    <Plus size={12} />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Synopsis */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
