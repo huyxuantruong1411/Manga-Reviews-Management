@@ -23,9 +23,10 @@ import {
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
-import { useDownload } from "../hooks/useDownload";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
+import { useMangaBlur } from "../hooks/useMangaBlur";
+import { BlurredCover } from "../components/ui/BlurredCover";
 
 interface Tag {
   _id: string;
@@ -511,6 +512,7 @@ export const MangaDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showAlert, showToast } = useAlert();
+  const { shouldBlur } = useMangaBlur();
 
   // Core States
   const [manga, setManga] = useState<Manga | null>(null);
@@ -773,16 +775,72 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
+  // Quick Update Status
+  const handleQuickUpdateStatus = async (newStatus: string) => {
+    if (!manga) return;
+    try {
+      const payload = {
+        read_status: newStatus,
+        tag_ids: manga.tag_ids,
+        personal_rating: manga.personal_rating,
+      };
+      const formData = new FormData();
+      formData.append("metadata", JSON.stringify(payload));
+      
+      const res = await client.put(`/api/manga/${manga._id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      
+      setManga(res.data);
+      setEditReadStatus(newStatus);
+      // Refresh history
+      const historyRes = await client.get(`/api/manga/${id}/history`);
+      setHistory(historyRes.data);
+      showToast("Read status updated!", "success");
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      showToast("Failed to update read status.", "error");
+    }
+  };
+
+  // Quick Update Rating
+  const handleQuickUpdateRating = async (newRating: number | null) => {
+    if (!manga) return;
+    try {
+      const payload = {
+        read_status: manga.read_status,
+        tag_ids: manga.tag_ids,
+        personal_rating: newRating,
+      };
+      const formData = new FormData();
+      formData.append("metadata", JSON.stringify(payload));
+      
+      const res = await client.put(`/api/manga/${manga._id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      
+      setManga(res.data);
+      setEditRating(newRating ?? "");
+      // Refresh history
+      const historyRes = await client.get(`/api/manga/${id}/history`);
+      setHistory(historyRes.data);
+      showToast("Personal rating updated!", "success");
+    } catch (err) {
+      console.error("Failed to update rating:", err);
+      showToast("Failed to update personal rating.", "error");
+    }
+  };
+
   // Save Edit Metadata
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setUpdating(true);
       const payload: any = {
-        read_status: editReadStatus,
+        read_status: manga?.read_status || "unread",
         tag_ids: editTags,
+        personal_rating: manga?.personal_rating ?? null,
       };
-      payload.personal_rating = editRating !== "" ? Number(editRating) : null;
 
       const formData = new FormData();
       formData.append("metadata", JSON.stringify(payload));
@@ -1169,37 +1227,85 @@ export const MangaDetailPage: React.FC = () => {
         <div className="absolute top-0 right-0 w-80 h-80 bg-[var(--brand-orange)]/10 rounded-full blur-[80px] pointer-events-none" />
 
         {/* Cover */}
-        <div 
-          onClick={() => manga.cover_url && setZoomedCoverUrl(manga.cover_url)}
-          className={`w-48 md:w-56 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-lg flex-shrink-0 mx-auto md:mx-0 ${manga.cover_url ? "cursor-zoom-in" : ""}`}
-        >
-          {manga.cover_url ? (
-            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-              <span>No Cover Image</span>
+        {(() => {
+          const isCoverBlurred = shouldBlur(manga);
+          return (
+            <div 
+              onClick={() => {
+                if (isCoverBlurred) return;
+                if (manga.cover_url) setZoomedCoverUrl(manga.cover_url);
+              }}
+              className={`w-48 md:w-56 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-lg flex-shrink-0 mx-auto md:mx-0 ${manga.cover_url && !isCoverBlurred ? "cursor-zoom-in" : ""}`}
+            >
+              {manga.cover_url ? (
+                <BlurredCover
+                  src={manga.cover_url}
+                  alt={manga.title}
+                  className="w-full h-full object-cover"
+                  shouldBlur={isCoverBlurred}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-650 text-xs">
+                  <span>No Cover Image</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Metadata Details */}
         <div className="flex-1 flex flex-col justify-between space-y-4">
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-2 items-center">
-              {(() => {
-                const statusInfo = getReadStatusInfo(manga.read_status);
-                return (
-                  <span className={`px-3 py-1 border rounded-full text-xs font-bold uppercase ${statusInfo.badgeClass}`}>
-                    {statusInfo.label}
-                  </span>
-                );
-              })()}
-              {manga.personal_rating !== null && (
-                <span className="px-3 py-1 bg-yellow-500/10 text-yellow-500 rounded-full text-xs font-bold flex items-center space-x-1">
-                  <Star size={12} className="fill-yellow-500" />
-                  <span>{manga.personal_rating} / 10</span>
-                </span>
-              )}
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* Read Status Interactive Select */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={manga.read_status}
+                  onChange={(e) => handleQuickUpdateStatus(e.target.value)}
+                  className={`px-3 py-1 pr-8 border rounded-full text-xs font-bold uppercase cursor-pointer outline-none transition hover:brightness-95 appearance-none bg-no-repeat bg-[right_0.5rem_center] ${getReadStatusInfo(manga.read_status).badgeClass}`}
+                  style={{ 
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, 
+                    backgroundSize: '1.25rem' 
+                  }}
+                  title="Click to change read status"
+                >
+                  <option value="unread" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Unread</option>
+                  <option value="reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Reading</option>
+                  <option value="completed" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Completed</option>
+                  <option value="dropped" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Dropped</option>
+                  <option value="on_hold" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">On Hold</option>
+                  <option value="plan_to_read" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Plan to Read</option>
+                  <option value="re_reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Re-Reading</option>
+                </select>
+              </div>
+
+              {/* Personal Rating Interactive Select */}
+              <div className="relative inline-flex items-center">
+                <Star size={12} className="absolute left-3 text-yellow-500 fill-yellow-500 pointer-events-none" />
+                <select
+                  value={manga.personal_rating ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? null : Number(e.target.value);
+                    handleQuickUpdateRating(val);
+                  }}
+                  className="pl-8 pr-8 py-1 border rounded-full text-xs font-bold outline-none cursor-pointer appearance-none transition bg-yellow-500/10 border-yellow-500/30 text-yellow-600 dark:text-yellow-400 bg-no-repeat bg-[right_0.5rem_center]"
+                  style={{ 
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23eab308' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, 
+                    backgroundSize: '1.25rem' 
+                  }}
+                  title="Click to change personal rating"
+                >
+                  <option value="" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">★ No Rating</option>
+                  {Array.from({ length: 21 }, (_, i) => {
+                    const num = 10 - i * 0.5;
+                    return (
+                      <option key={num} value={num} className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">
+                        {num.toFixed(1)} / 10
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
             </div>
 
             <h1 className="text-3xl md:text-4xl font-spartan font-extrabold tracking-tight leading-tight text-[var(--text-primary)]">
@@ -1826,40 +1932,7 @@ export const MangaDetailPage: React.FC = () => {
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
-                Read Status
-              </label>
-              <select
-                value={editReadStatus}
-                onChange={(e) => setEditReadStatus(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-              >
-                <option value="unread">Unread</option>
-                <option value="reading">Reading</option>
-                <option value="completed">Completed</option>
-                <option value="dropped">Dropped</option>
-                <option value="on_hold">On Hold</option>
-                <option value="plan_to_read">Plan to Read</option>
-                <option value="re_reading">Re-Reading</option>
-              </select>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
-                Personal Rating (0-10)
-              </label>
-              <input
-                type="number"
-                value={editRating}
-                onChange={(e) => setEditRating(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="e.g. 9.5"
-                min="0"
-                max="10"
-                step="0.5"
-                className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-              />
-            </div>
 
             {/* Custom Tag Assignment */}
             {allTags.length > 0 && (

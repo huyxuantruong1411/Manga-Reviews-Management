@@ -6,6 +6,8 @@ import { useAlert } from "../hooks/useAlert";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
+import { useMangaBlur } from "../hooks/useMangaBlur";
+import { BlurredCover } from "../components/ui/BlurredCover";
 
 interface Tag {
   _id: string;
@@ -37,6 +39,7 @@ export const MangaListPage: React.FC = () => {
   const navigate = useNavigate();
   const { showAlert, showToast } = useAlert();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { shouldBlur } = useMangaBlur();
 
   // Library State
   const [mangas, setMangas] = useState<Manga[]>([]);
@@ -1106,12 +1109,11 @@ export const MangaListPage: React.FC = () => {
                     }}
                   >
                     {manga.cover_url ? (
-                      <img
+                      <BlurredCover
                         src={manga.cover_url}
                         alt={manga.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
+                        shouldBlur={shouldBlur(manga)}
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
@@ -1249,7 +1251,12 @@ export const MangaListPage: React.FC = () => {
                           }}
                         >
                           {manga.cover_url ? (
-                            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <BlurredCover
+                              src={manga.cover_url}
+                              alt={manga.title}
+                              className="w-full h-full object-cover"
+                              shouldBlur={shouldBlur(manga)}
+                            />
                           ) : (
                             <span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">No Cover</span>
                           )}
@@ -1381,12 +1388,11 @@ export const MangaListPage: React.FC = () => {
                     }}
                   >
                     {manga.cover_url ? (
-                      <img
+                      <BlurredCover
                         src={manga.cover_url}
                         alt={manga.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
+                        shouldBlur={shouldBlur(manga)}
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
@@ -1671,7 +1677,12 @@ export const MangaListPage: React.FC = () => {
                             <div className="flex gap-4">
                               <div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
                                 {m.cover_url && (
-                                  <img src={m.cover_url} alt={m.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  <BlurredCover
+                                    src={m.cover_url}
+                                    alt={m.title}
+                                    className="w-full h-full object-cover"
+                                    shouldBlur={shouldBlur(m)}
+                                  />
                                 )}
                               </div>
                               <div className="space-y-1">

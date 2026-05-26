@@ -17,6 +17,8 @@ import Link from "@tiptap/extension-link";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Search, Loader2, X, BookOpen, HelpCircle } from "lucide-react";
+import { useMangaBlur } from "../../hooks/useMangaBlur";
+import { BlurredCover } from "../ui/BlurredCover";
 
 import { EditorToolbar } from "./EditorToolbar.tsx";
 import { SlashCommandMenu } from "./SlashCommandMenu.tsx";
@@ -153,6 +155,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   const { showToast } = useAlert();
   const [editorWidth, setEditorWidth] = useState<EditorWidth>("standard");
   const [isSaving, setIsSaving] = useState(false);
+  const { shouldBlur } = useMangaBlur();
 
   // AI state
   const [, setAiMode] = useState<"rewrite" | "intro" | "ideas" | null>(null);
@@ -1121,10 +1124,11 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
                   className="w-full flex space-x-3.5 p-3 rounded-2xl border border-transparent hover:border-[var(--brand-orange)]/30 hover:bg-[var(--brand-orange)]/5 transition text-left items-start group"
                 >
                   {item.cover_url ? (
-                    <img
+                    <BlurredCover
                       src={item.cover_url}
                       alt={item.title}
                       className="w-10 h-14 object-cover rounded-lg border border-[var(--border-primary)] shadow-sm shrink-0"
+                      shouldBlur={shouldBlur(item)}
                     />
                   ) : (
                     <div className="w-10 h-14 bg-gray-50 dark:bg-zinc-800 rounded-lg flex items-center justify-center border border-[var(--border-primary)] shrink-0">

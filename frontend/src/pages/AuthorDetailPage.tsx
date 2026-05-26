@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
+import { useMangaBlur } from "../hooks/useMangaBlur";
+import { BlurredCover } from "../components/ui/BlurredCover";
 
 interface MangaDexWork {
   id: string;
@@ -41,6 +43,7 @@ export const AuthorDetailPage: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { showAlert } = useAlert();
+  const { shouldBlur } = useMangaBlur();
 
   // State
   const [author, setAuthor] = useState<any>(null);
@@ -491,12 +494,11 @@ export const AuthorDetailPage: React.FC = () => {
                     {/* Cover Frame */}
                     <div className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                       {manga.coverUrl ? (
-                        <img
+                        <BlurredCover
                           src={manga.coverUrl}
                           alt={manga.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-pointer"
-                          onClick={() => setZoomedCoverUrl(manga.coverUrl)}
-                          loading="lazy"
+                          shouldBlur={shouldBlur(localManga)}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
@@ -597,12 +599,11 @@ export const AuthorDetailPage: React.FC = () => {
                           <td className="p-3">
                             <div className="w-10 aspect-[3/4] rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                               {manga.coverUrl ? (
-                                <img
+                                <BlurredCover
                                   src={manga.coverUrl}
                                   alt={manga.title}
                                   className="w-full h-full object-cover cursor-pointer"
-                                  onClick={() => setZoomedCoverUrl(manga.coverUrl)}
-                                  loading="lazy"
+                                  shouldBlur={shouldBlur(localManga)}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400">No cover</div>
@@ -678,12 +679,11 @@ export const AuthorDetailPage: React.FC = () => {
                     {/* Cover (Larger) */}
                     <div className="w-32 md:w-36 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-md flex-shrink-0 mx-auto md:mx-0">
                       {manga.coverUrl ? (
-                        <img
+                        <BlurredCover
                           src={manga.coverUrl}
                           alt={manga.title}
                           className="w-full h-full object-cover hover:scale-105 transition duration-300 cursor-pointer"
-                          onClick={() => setZoomedCoverUrl(manga.coverUrl)}
-                          loading="lazy"
+                          shouldBlur={shouldBlur(localManga)}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 text-xs">

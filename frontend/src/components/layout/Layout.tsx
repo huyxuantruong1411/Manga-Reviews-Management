@@ -5,12 +5,17 @@ import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+import { useMangaBlur, BlurSettings } from "../../hooks/useMangaBlur";
+import { GroupedTagSelector } from "../ui/GroupedTagSelector";
 
 export const Layout: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [basePath, setBasePath] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
   const { showAlert } = useAlert();
+
+  const { settings: blurSettings, updateSettings, tags: allTags } = useMangaBlur();
+  const [tempBlurSettings, setTempBlurSettings] = useState<BlurSettings | null>(null);
 
   const fetchBasePath = async () => {
     try {
@@ -24,6 +29,7 @@ export const Layout: React.FC = () => {
   useEffect(() => {
     if (isSettingsOpen) {
       fetchBasePath();
+      setTempBlurSettings(blurSettings);
     }
   }, [isSettingsOpen]);
 
@@ -53,9 +59,14 @@ export const Layout: React.FC = () => {
     try {
       setSavingSettings(true);
       await client.put("/api/downloads/base-path", { base_path: basePath.trim() });
+      
+      if (tempBlurSettings) {
+        updateSettings(tempBlurSettings);
+      }
+
       showAlert({
         title: "Settings Saved",
-        message: "Global download base path updated successfully!",
+        message: "Global settings updated successfully!",
         type: "success",
       });
       setIsSettingsOpen(false);
@@ -218,7 +229,7 @@ export const Layout: React.FC = () => {
 
             {/* Form */}
             <form onSubmit={handleSaveSettings}>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh] border-b border-[var(--border-primary)]">
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
                     Default Download Base Path
@@ -237,10 +248,146 @@ export const Layout: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                <hr className="border-[var(--border-primary)] my-4" />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                        Livestream Mode (Cover Blur)
+                      </label>
+                      <span className="text-[10px] text-[var(--text-secondary)]">
+                        Blur NSFW or selected tag covers while browsing.
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={tempBlurSettings?.enabled || false}
+                        onChange={(e) =>
+                          setTempBlurSettings((prev) =>
+                            prev ? { ...prev, enabled: e.target.checked } : null
+                          )
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-zinc-200 dark:bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--brand-orange)]"></div>
+                    </label>
+                  </div>
+
+                  {tempBlurSettings?.enabled && (
+                    <div className="space-y-4 pl-2 border-l-2 border-[var(--border-primary)] animate-in slide-in-from-left-2 duration-200">
+                      {/* Content Ratings */}
+                      <div className="space-y-2">
+                        <span className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                          Blur Content Ratings
+                        </span>
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex items-center space-x-2 text-xs cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={tempBlurSettings.blurSuggestive}
+                              onChange={(e) =>
+                                setTempBlurSettings((prev) =>
+                                  prev ? { ...prev, blurSuggestive: e.target.checked } : null
+                                )
+                              }
+                              className="rounded border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)]"
+                            />
+                            <span>Suggestive</span>
+                          </label>
+                          <label className="flex items-center space-x-2 text-xs cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={tempBlurSettings.blurErotica}
+                              onChange={(e) =>
+                                setTempBlurSettings((prev) =>
+                                  prev ? { ...prev, blurErotica: e.target.checked } : null
+                                )
+                              }
+                              className="rounded border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)]"
+                            />
+                            <span>Erotica</span>
+                          </label>
+                          <label className="flex items-center space-x-2 text-xs cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={tempBlurSettings.blurPornographic}
+                              onChange={(e) =>
+                                setTempBlurSettings((prev) =>
+                                  prev ? { ...prev, blurPornographic: e.target.checked } : null
+                                )
+                              }
+                              className="rounded border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)]"
+                            />
+                            <span>Pornographic</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Tag Groups to Blur */}
+                      <div className="space-y-2">
+                        <span className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                          Blur entire Tag Groups
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.from(new Set(allTags.map((t) => t.group).filter(Boolean) as string[]))
+                            .sort()
+                            .map((g) => {
+                              const groupLower = g.toLowerCase();
+                              const isSelected = tempBlurSettings.blurGroups.includes(groupLower);
+                              return (
+                                <button
+                                  type="button"
+                                  key={groupLower}
+                                  onClick={() =>
+                                    setTempBlurSettings((prev) => {
+                                      if (!prev) return null;
+                                      const groups = isSelected
+                                        ? prev.blurGroups.filter((x) => x !== groupLower)
+                                        : [...prev.blurGroups, groupLower];
+                                      return { ...prev, blurGroups: groups };
+                                    })
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition ${
+                                    isSelected
+                                      ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+                                      : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-orange)]"
+                                  }`}
+                                >
+                                  {g}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {/* Specific Tags to Blur */}
+                      {allTags.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                            Blur specific Tags
+                          </span>
+                          <GroupedTagSelector
+                            allTags={allTags}
+                            selectedTags={tempBlurSettings.blurTags}
+                            onChange={(tags) =>
+                              setTempBlurSettings((prev) =>
+                                prev ? { ...prev, blurTags: tags } : null
+                              )
+                            }
+                            placeholder="Select tags to blur..."
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t border-[var(--border-primary)] flex justify-end space-x-3 bg-gray-50/50 dark:bg-zinc-900/30">
+              <div className="p-6 flex justify-end space-x-3 bg-gray-50/50 dark:bg-zinc-900/30">
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(false)}

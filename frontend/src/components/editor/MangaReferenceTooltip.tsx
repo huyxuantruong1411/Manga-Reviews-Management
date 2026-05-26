@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Star, User, BookOpen, Loader2 } from "lucide-react";
 import client from "../../api/client";
+import { useMangaBlur } from "../../hooks/useMangaBlur";
+import { BlurredCover } from "../ui/BlurredCover";
 
 interface MangaReferenceTooltipProps {
   mangaId: string;
@@ -16,6 +18,8 @@ interface MangaData {
   author?: string;
   status?: string;
   personal_rating?: number | null;
+  content_rating?: string | null;
+  tag_ids?: string[];
 }
 
 // Module-level cache to prevent duplicate fetches
@@ -30,6 +34,7 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
   const [data, setData] = useState<MangaData | null>(mangaCache[mangaId] || null);
   const [loading, setLoading] = useState(!data);
   const [error, setError] = useState<string | null>(null);
+  const { shouldBlur } = useMangaBlur();
 
   useEffect(() => {
     if (data) return;
@@ -94,11 +99,11 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
       {data && !loading && !error && (
         <>
           {data.cover_url ? (
-            <img
+            <BlurredCover
               src={data.cover_url}
               alt={data.title}
               className="w-16 h-24 object-cover rounded-lg shadow-sm border border-[var(--border-primary)] shrink-0"
-              referrerPolicy="no-referrer"
+              shouldBlur={shouldBlur(data)}
             />
           ) : (
             <div className="w-16 h-24 bg-gray-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center border border-[var(--border-primary)] shrink-0">
