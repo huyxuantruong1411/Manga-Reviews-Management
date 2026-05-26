@@ -512,9 +512,16 @@ class MangaService:
         else:
             minio_cover_key = manga.get("minio_cover_key")
 
+        existing_alts = manga.get("alt_titles") or []
+        new_alts = details.get("alt_titles") or []
+        merged_alts = list(existing_alts)
+        for alt in new_alts:
+            if alt not in merged_alts:
+                merged_alts.append(alt)
+
         update_fields = {
             "title": details["title"],
-            "alt_titles": details["alt_titles"],
+            "alt_titles": merged_alts,
             "description": details["description"],
             "author": details["author"],
             "artist": details["artist"],
