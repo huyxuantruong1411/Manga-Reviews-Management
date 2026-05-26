@@ -37,6 +37,8 @@ interface LocalManga {
   title: string;
   read_status: string;
   personal_rating: number | null;
+  content_rating?: string | null;
+  tag_ids?: string[];
 }
 
 export const AuthorDetailPage: React.FC = () => {

@@ -5,7 +5,7 @@ interface Tag {
   _id: string;
   name: { en: string; vi?: string | null };
   color?: string;
-  source: string;
+  source?: string;
   group?: string;
 }
 

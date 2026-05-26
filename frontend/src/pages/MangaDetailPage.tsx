@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
+import { useDownload } from "../hooks/useDownload";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useMangaBlur } from "../hooks/useMangaBlur";
@@ -550,8 +551,6 @@ export const MangaDetailPage: React.FC = () => {
 
   // Edit Modal States
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editRating, setEditRating] = useState<number | "">("");
-  const [editReadStatus, setEditReadStatus] = useState("unread");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
   const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null);
@@ -713,8 +712,6 @@ export const MangaDetailPage: React.FC = () => {
       setAllTags(tagsRes.data);
 
       // Prepopulate edit inputs
-      setEditRating(mangaRes.data.personal_rating ?? "");
-      setEditReadStatus(mangaRes.data.read_status);
       setEditTags(mangaRes.data.tag_ids);
     } catch (err) {
       console.error("Error loading details:", err);
@@ -792,7 +789,6 @@ export const MangaDetailPage: React.FC = () => {
       });
       
       setManga(res.data);
-      setEditReadStatus(newStatus);
       // Refresh history
       const historyRes = await client.get(`/api/manga/${id}/history`);
       setHistory(historyRes.data);
@@ -820,7 +816,6 @@ export const MangaDetailPage: React.FC = () => {
       });
       
       setManga(res.data);
-      setEditRating(newRating ?? "");
       // Refresh history
       const historyRes = await client.get(`/api/manga/${id}/history`);
       setHistory(historyRes.data);

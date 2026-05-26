@@ -5,7 +5,7 @@ import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
-import { useMangaBlur, BlurSettings } from "../../hooks/useMangaBlur";
+import { useMangaBlur, type BlurSettings } from "../../hooks/useMangaBlur";
 import { GroupedTagSelector } from "../ui/GroupedTagSelector";
 
 export const Layout: React.FC = () => {
