@@ -870,7 +870,7 @@ export const MangaDetailPage: React.FC = () => {
       const historyRes = await client.get(`/api/manga/${id}/history`);
       setHistory(historyRes.data);
 
-      showToast({ message: "Alternative titles updated successfully!", type: "success" });
+      showToast("Alternative titles updated successfully!", "success");
     } catch (err) {
       console.error("Failed to save alt titles:", err);
       showAlert({
