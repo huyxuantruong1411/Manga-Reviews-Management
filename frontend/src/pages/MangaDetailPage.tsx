@@ -25,6 +25,7 @@ import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
 import { useDownload } from "../hooks/useDownload";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
+import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 
 interface Tag {
   _id: string;
@@ -1862,36 +1863,13 @@ export const MangaDetailPage: React.FC = () => {
 
             {/* Custom Tag Assignment */}
             {allTags.length > 0 && (
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase">
-                  Assign Tags
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {allTags.map((tag) => {
-                    const isSelected = editTags.includes(tag._id);
-                    return (
-                      <button
-                        key={tag._id}
-                        type="button"
-                        onClick={() =>
-                          setEditTags((prev) =>
-                            prev.includes(tag._id)
-                              ? prev.filter((id) => id !== tag._id)
-                              : [...prev, tag._id]
-                          )
-                        }
-                        className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${
-                          isSelected
-                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
-                            : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)]"
-                        }`}
-                      >
-                        {tag.name.en}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <GroupedTagSelector
+                allTags={allTags}
+                selectedTags={editTags}
+                onChange={setEditTags}
+                label="Assign Tags"
+                placeholder="Search tags to assign..."
+              />
             )}
 
             {/* Replace cover */}

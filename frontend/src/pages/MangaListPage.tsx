@@ -4,6 +4,8 @@ import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, Ch
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
+import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
+import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 
 interface Tag {
   _id: string;
@@ -1651,31 +1653,15 @@ export const MangaListPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Tag checklist */}
+                    {/* Tag selector */}
                     {allTags.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-[var(--text-secondary)]">
-                          Assign Custom Tags on Import
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {allTags.map((tag) => {
-                            const isSelected = importTags.includes(tag._id);
-                            return (
-                              <button
-                                key={tag._id}
-                                type="button"
-                                onClick={() => toggleImportTag(tag._id)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${isSelected
-                                  ? "bg-zinc-700 dark:bg-zinc-200 border-zinc-700 dark:border-zinc-200 text-white dark:text-zinc-900"
-                                  : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)]"
-                                  }`}
-                              >
-                                {tag.name.en}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      <GroupedTagSelector
+                        allTags={allTags}
+                        selectedTags={importTags}
+                        onChange={setImportTags}
+                        label="Assign Custom Tags on Import"
+                        placeholder="Search tags to assign..."
+                      />
                     )}
                   </div>
 
@@ -1731,27 +1717,21 @@ export const MangaListPage: React.FC = () => {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Author</label>
-                      <input
-                        type="text"
-                        value={manualAuthor}
-                        onChange={(e) => setManualAuthor(e.target.value)}
-                        placeholder="e.g. Oda Eiichiro"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-                      />
-                    </div>
+                    <CreatorLiveSearchInput
+                      label="Author"
+                      role="author"
+                      value={manualAuthor}
+                      onChange={setManualAuthor}
+                      placeholder="e.g. Oda Eiichiro"
+                    />
 
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Artist</label>
-                      <input
-                        type="text"
-                        value={manualArtist}
-                        onChange={(e) => setManualArtist(e.target.value)}
-                        placeholder="e.g. Yusuke Murata"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-                      />
-                    </div>
+                    <CreatorLiveSearchInput
+                      label="Artist"
+                      role="artist"
+                      value={manualArtist}
+                      onChange={setManualArtist}
+                      placeholder="e.g. Yusuke Murata"
+                    />
 
                     <div>
                       <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Release Year</label>
@@ -1824,28 +1804,15 @@ export const MangaListPage: React.FC = () => {
                   </div>
 
                   {/* Assign Tags (reuses checklist code) */}
+                  {/* Assign Tags */}
                   {allTags.length > 0 && (
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase">Assign Custom Tags</label>
-                      <div className="flex flex-wrap gap-2">
-                        {allTags.map((tag) => {
-                          const isSelected = importTags.includes(tag._id);
-                          return (
-                            <button
-                              key={tag._id}
-                              type="button"
-                              onClick={() => toggleImportTag(tag._id)}
-                              className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${isSelected
-                                ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
-                                : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)]"
-                                }`}
-                            >
-                              {tag.name.en}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <GroupedTagSelector
+                      allTags={allTags}
+                      selectedTags={importTags}
+                      onChange={setImportTags}
+                      label="Assign Custom Tags"
+                      placeholder="Search tags to assign..."
+                    />
                   )}
 
                   {/* Cover image upload */}
