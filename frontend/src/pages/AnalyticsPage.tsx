@@ -93,6 +93,7 @@ interface MetadataDistributions {
   demographic: DistributionItem[];
   publishing_status: DistributionItem[];
   original_language: DistributionItem[];
+  content_rating?: DistributionItem[];
 }
 
 interface TopCreators {
@@ -303,6 +304,14 @@ export const AnalyticsPage: React.FC = () => {
     Completed: "#3B82F6",
     Hiatus: "#F59E0B",
     Cancelled: "#EF4444",
+    Unknown: "#6B7280"
+  };
+
+  const CONTENT_RATING_COLORS: Record<string, string> = {
+    Safe: "#10B981",
+    Suggestive: "#F59E0B",
+    Erotica: "#F97316",
+    Pornographic: "#EF4444",
     Unknown: "#6B7280"
   };
 
@@ -962,28 +971,43 @@ export const AnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Original Language Bar Chart */}
+          {/* Content Rating Distribution Pie Chart */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-            <h3 className="text-lg font-bold">Language Origin</h3>
+            <h3 className="text-lg font-bold">Content Rating Distribution</h3>
             <div className="h-72 flex flex-col justify-center">
-              {metadataDists.original_language.filter(d => d.value > 0).length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={metadataDists.original_language.filter(d => d.value > 0)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} />
-                    <YAxis dataKey="name" type="category" width={80} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "var(--bg-card)",
-                        borderColor: "var(--border-primary)",
-                        color: "var(--text-primary)"
-                      }}
-                    />
-                    <Bar dataKey="value" fill="var(--brand-coral)" radius={[0, 4, 4, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
+              {metadataDists.content_rating && metadataDists.content_rating.filter(d => d.value > 0).length > 0 ? (
+                <>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={metadataDists.content_rating.filter(d => d.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {metadataDists.content_rating.filter(d => d.value > 0).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CONTENT_RATING_COLORS[entry.name] || "#6B7280"} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
+                    {metadataDists.content_rating.filter(d => d.value > 0).map((item, idx) => (
+                      <div key={idx} className="flex items-center space-x-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CONTENT_RATING_COLORS[item.name] || "#6B7280" }} />
+                        <span className="text-[var(--text-secondary)]">{item.name} ({item.value})</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               ) : (
-                <div className="text-center text-[var(--text-secondary)] text-sm my-auto">No language metadata.</div>
+                <div className="text-center text-[var(--text-secondary)] text-sm my-auto">No content rating metadata.</div>
               )}
             </div>
           </div>

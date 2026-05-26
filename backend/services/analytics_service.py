@@ -321,10 +321,19 @@ class AnalyticsService:
         # Pretty language names
         lang_names = {"ja": "Japanese", "ko": "Korean", "zh": "Chinese", "en": "English", "Unknown": "Unknown"}
         
+        # Content Rating
+        content_rating_pipeline = [
+            {"$match": filter_query},
+            {"$group": {"_id": "$content_rating", "count": {"$sum": 1}}}
+        ]
+        content_rating_res = await mangas_coll.aggregate(content_rating_pipeline).to_list(10)
+        content_rating_dist = {c["_id"] or "Unknown": c["count"] for c in content_rating_res}
+
         return {
             "demographic": [{"name": k.capitalize(), "value": v} for k, v in demo_dist.items()],
             "publishing_status": [{"name": k.capitalize(), "value": v} for k, v in status_dist.items()],
-            "original_language": [{"name": lang_names.get(k, k.upper()), "value": v} for k, v in lang_dist.items()]
+            "original_language": [{"name": lang_names.get(k, k.upper()), "value": v} for k, v in lang_dist.items()],
+            "content_rating": [{"name": k.capitalize(), "value": v} for k, v in content_rating_dist.items()]
         }
 
     async def get_top_creators(self, filter_query: Dict[str, Any]) -> Dict[str, Any]:
