@@ -315,7 +315,11 @@ export const AnalyticsPage: React.FC = () => {
     const endDecade = Math.ceil(max / 10) * 10;
     const decadeRanges: string[] = [];
     for (let y = startDecade; y < endDecade; y += 10) {
-      decadeRanges.push(`${y}-${y + 9}`);
+      if (y > max) continue;
+      const endYear = Math.min(y + 9, max);
+      if (y <= endYear) {
+        decadeRanges.push(`${y}-${endYear}`);
+      }
     }
     list.push({
       name: "Decades (10 Years)",
@@ -327,7 +331,11 @@ export const AnalyticsPage: React.FC = () => {
     const end5 = Math.ceil(max / 5) * 5;
     const fiveYearRanges: string[] = [];
     for (let y = start5; y < end5; y += 5) {
-      fiveYearRanges.push(`${y}-${y + 4}`);
+      if (y > max) continue;
+      const endYear = Math.min(y + 4, max);
+      if (y <= endYear) {
+        fiveYearRanges.push(`${y}-${endYear}`);
+      }
     }
     list.push({
       name: "5-Year Blocks",
