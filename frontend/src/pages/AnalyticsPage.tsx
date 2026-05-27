@@ -301,6 +301,62 @@ export const AnalyticsPage: React.FC = () => {
     return resultList;
   }, [yearDist, useCustomRanges, rangeValidation]);
 
+  const templates = useMemo(() => {
+    if (!yearDist || yearDist.min_year === null || yearDist.max_year === null) {
+      return [];
+    }
+    const min = yearDist.min_year;
+    const max = yearDist.max_year;
+    
+    const list: { name: string; value: string }[] = [];
+    
+    // Decade template
+    const startDecade = Math.floor(min / 10) * 10;
+    const endDecade = Math.ceil(max / 10) * 10;
+    const decadeRanges: string[] = [];
+    for (let y = startDecade; y < endDecade; y += 10) {
+      decadeRanges.push(`${y}-${y + 9}`);
+    }
+    list.push({
+      name: "Decades (10 Years)",
+      value: decadeRanges.join(", ")
+    });
+    
+    // 5-Year intervals template
+    const start5 = Math.floor(min / 5) * 5;
+    const end5 = Math.ceil(max / 5) * 5;
+    const fiveYearRanges: string[] = [];
+    for (let y = start5; y < end5; y += 5) {
+      fiveYearRanges.push(`${y}-${y + 4}`);
+    }
+    list.push({
+      name: "5-Year Blocks",
+      value: fiveYearRanges.join(", ")
+    });
+    
+    // Post-2000 focus
+    if (max >= 2000) {
+      const post2000Ranges: string[] = [];
+      if (min < 2000) {
+        post2000Ranges.push(`${min}-1999`);
+      }
+      post2000Ranges.push("2000-2009", "2010-2019", `2020-${max}`);
+      list.push({
+        name: "Classic vs Modern (2000 Split)",
+        value: post2000Ranges.join(", ")
+      });
+    }
+
+    // Simple 2-Half Split
+    const midPoint = Math.floor((min + max) / 2);
+    list.push({
+      name: "Equal Split (2 Bins)",
+      value: `${min}-${midPoint}, ${midPoint + 1}-${max}`
+    });
+    
+    return list;
+  }, [yearDist]);
+
   // Debounce search string
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -1232,6 +1288,24 @@ export const AnalyticsPage: React.FC = () => {
                   className="flex-1 md:max-w-md px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
                 />
               </div>
+
+              {templates.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[var(--border-primary)]/40">
+                  <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Quick Fill:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {templates.map((tpl) => (
+                      <button
+                        key={tpl.name}
+                        type="button"
+                        onClick={() => setCustomRangeInput(tpl.value)}
+                        className="px-2 py-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-lg text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)] transition focus:outline-none cursor-pointer"
+                      >
+                        {tpl.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {rangeValidation.error ? (
                 <div className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
