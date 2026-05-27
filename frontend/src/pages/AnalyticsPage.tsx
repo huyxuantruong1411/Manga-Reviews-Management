@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   BarChart3, 
   TrendingUp, 
@@ -106,6 +106,19 @@ interface RatingInsights {
   status_ratings: RatingInsightItem[];
 }
 
+interface YearDistItem {
+  year: string;
+  demographic: string;
+  status: string;
+  count: number;
+}
+
+interface YearDistribution {
+  data: YearDistItem[];
+  min_year: number | null;
+  max_year: number | null;
+}
+
 export const AnalyticsPage: React.FC = () => {
   // Library All Tags
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -147,6 +160,146 @@ export const AnalyticsPage: React.FC = () => {
   const [metadataDists, setMetadataDists] = useState<MetadataDistributions | null>(null);
   const [topCreators, setTopCreators] = useState<TopCreators | null>(null);
   const [ratingInsights, setRatingInsights] = useState<RatingInsights | null>(null);
+
+  // Year Distribution States
+  const [yearDist, setYearDist] = useState<YearDistribution | null>(null);
+  const [yearChartMode, setYearChartMode] = useState<"total" | "demographic" | "status">("total");
+  const [activeDemoFilters, setActiveDemoFilters] = useState<Set<string>>(
+    new Set(["Shounen", "Shoujo", "Seinen", "Josei", "Unknown"])
+  );
+  const [activeStatusFilters, setActiveStatusFilters] = useState<Set<string>>(
+    new Set(["Ongoing", "Completed", "Hiatus", "Cancelled", "Unknown"])
+  );
+  const [useCustomRanges, setUseCustomRanges] = useState(false);
+  const [customRangeInput, setCustomRangeInput] = useState("");
+
+  const rangeValidation = useMemo(() => {
+    if (!useCustomRanges || !customRangeInput.trim() || !yearDist) {
+      return { ranges: [], error: "" };
+    }
+    
+    const minYear = yearDist.min_year;
+    const maxYear = yearDist.max_year;
+    
+    const ranges: { label: string; start: number; end: number }[] = [];
+    const parts = customRangeInput.split(",");
+    
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      
+      const match = trimmed.match(/^(\d{4})-(\d{4})$/);
+      if (!match) {
+        return { ranges: [], error: `Invalid range format: "${trimmed}". Use YYYY-YYYY (e.g. 1990-1995).` };
+      }
+      
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      
+      if (start > end) {
+        return { ranges: [], error: `Start year cannot be greater than end year in "${trimmed}".` };
+      }
+      
+      if (minYear !== null && start < minYear) {
+        return { ranges: [], error: `Start year ${start} is below the minimum publication year (${minYear}).` };
+      }
+      
+      if (maxYear !== null && end > maxYear) {
+        return { ranges: [], error: `End year ${end} is above the maximum publication year (${maxYear}).` };
+      }
+      
+      ranges.push({ label: trimmed, start, end });
+    }
+    
+    // Check overlaps
+    const sortedRanges = [...ranges].sort((a, b) => a.start - b.start);
+    for (let i = 0; i < sortedRanges.length - 1; i++) {
+      if (sortedRanges[i].end >= sortedRanges[i + 1].start) {
+        return { ranges: [], error: `Ranges overlap: "${sortedRanges[i].label}" and "${sortedRanges[i + 1].label}".` };
+      }
+    }
+    
+    return { ranges: sortedRanges, error: "" };
+  }, [useCustomRanges, customRangeInput, yearDist]);
+
+  const yearChartData = useMemo(() => {
+    if (!yearDist || !yearDist.data) return [];
+    
+    const rawData = yearDist.data;
+    const { ranges, error } = rangeValidation;
+    
+    if (useCustomRanges && (error || ranges.length === 0)) {
+      return [];
+    }
+    
+    const grouped: Record<string, Record<string, number>> = {};
+    
+    const initGroup = (key: string) => {
+      if (!grouped[key]) {
+        grouped[key] = {
+          count: 0,
+          Shounen: 0,
+          Shoujo: 0,
+          Seinen: 0,
+          Josei: 0,
+          Ongoing: 0,
+          Completed: 0,
+          Hiatus: 0,
+          Cancelled: 0,
+          Unknown: 0
+        };
+      }
+    };
+    
+    for (const item of rawData) {
+      const yearVal = parseInt(item.year, 10);
+      if (isNaN(yearVal)) continue;
+      
+      let bucketKey = "";
+      if (useCustomRanges) {
+        const matchedRange = ranges.find(r => yearVal >= r.start && yearVal <= r.end);
+        if (!matchedRange) continue;
+        bucketKey = matchedRange.label;
+      } else {
+        bucketKey = item.year;
+      }
+      
+      initGroup(bucketKey);
+      
+      grouped[bucketKey].count += item.count;
+      
+      const demoKey = item.demographic;
+      if (grouped[bucketKey][demoKey] !== undefined) {
+        grouped[bucketKey][demoKey] += item.count;
+      } else {
+        grouped[bucketKey][demoKey] = (grouped[bucketKey][demoKey] || 0) + item.count;
+      }
+      
+      const statusKey = item.status;
+      if (grouped[bucketKey][statusKey] !== undefined) {
+        grouped[bucketKey][statusKey] += item.count;
+      } else {
+        grouped[bucketKey][statusKey] = (grouped[bucketKey][statusKey] || 0) + item.count;
+      }
+    }
+    
+    const resultList = Object.keys(grouped).map(key => ({
+      name: key,
+      ...grouped[key]
+    }));
+    
+    if (useCustomRanges) {
+      resultList.sort((a, b) => {
+        const rangeA = ranges.find(r => r.label === a.name);
+        const rangeB = ranges.find(r => r.label === b.name);
+        return (rangeA?.start || 0) - (rangeB?.start || 0);
+      });
+    } else {
+      resultList.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    
+    return resultList;
+  }, [yearDist, useCustomRanges, rangeValidation]);
 
   // Debounce search string
   useEffect(() => {
@@ -207,6 +360,7 @@ export const AnalyticsPage: React.FC = () => {
       setMetadataDists(res.data.metadata_distributions);
       setTopCreators(res.data.top_creators);
       setRatingInsights(res.data.rating_insights);
+      setYearDist(res.data.year_distribution);
     } catch (err) {
       console.error("Error loading library analytics:", err);
     }
@@ -1010,6 +1164,232 @@ export const AnalyticsPage: React.FC = () => {
                 <div className="text-center text-[var(--text-secondary)] text-sm my-auto">No content rating metadata.</div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Publication Year Distribution Chart */}
+      {yearDist && yearDist.data && yearDist.data.length > 0 && (
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold">Publication Year Distribution</h3>
+              <p className="text-xs text-[var(--text-secondary)] font-medium">
+                Japanese-language manga only. Matches the current library filters.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Mode Toggle */}
+              <div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
+                {(["total", "demographic", "status"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setYearChartMode(mode)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition capitalize focus:outline-none cursor-pointer ${
+                      yearChartMode === mode
+                        ? "bg-[var(--brand-orange)] text-white shadow-sm"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {mode === "total" ? "Total" : mode === "demographic" ? "Demographic" : "Status"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Range Checkbox */}
+              <label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
+                <input
+                  type="checkbox"
+                  checked={useCustomRanges}
+                  onChange={(e) => setUseCustomRanges(e.target.checked)}
+                  className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
+                />
+                <span>Custom Ranges</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Custom Ranges Input and Helper Text */}
+          {useCustomRanges && (
+            <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-3 transition-all duration-300">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-[var(--text-primary)]">Configure Year Epochs</span>
+                  {yearDist.min_year !== null && yearDist.max_year !== null && (
+                    <p className="text-[10px] text-[var(--text-secondary)] font-medium">
+                      Manga publication range in pool: <span className="font-bold text-[var(--brand-orange)]">{yearDist.min_year}</span> to <span className="font-bold text-[var(--brand-orange)]">{yearDist.max_year}</span>
+                    </p>
+                  )}
+                </div>
+                
+                <input
+                  type="text"
+                  value={customRangeInput}
+                  onChange={(e) => setCustomRangeInput(e.target.value)}
+                  placeholder="e.g. 1990-1999, 2000-2009, 2010-2025"
+                  className="flex-1 md:max-w-md px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {rangeValidation.error ? (
+                <div className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
+                  <span>⚠</span>
+                  <span>{rangeValidation.error}</span>
+                </div>
+              ) : (
+                <div className="text-[10px] text-[var(--text-secondary)] font-medium">
+                  Enter comma-separated ranges format: <code className="bg-[var(--bg-card)] px-1 py-0.5 rounded border border-[var(--border-primary)] text-xs">YYYY-YYYY</code>. Non-overlapping ranges between min/max years.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legend chips for filtering in stacked mode */}
+          {yearChartMode !== "total" && (
+            <div className="flex flex-wrap items-center gap-2.5 pb-2 border-b border-[var(--border-primary)]">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">Toggle Breakdown Elements:</span>
+              
+              {yearChartMode === "demographic" &&
+                Object.keys(DEMO_COLORS).map((demo) => {
+                  const isActive = activeDemoFilters.has(demo);
+                  const color = DEMO_COLORS[demo];
+                  return (
+                    <button
+                      key={demo}
+                      type="button"
+                      onClick={() => {
+                        const newFilters = new Set(activeDemoFilters);
+                        if (isActive) {
+                          newFilters.delete(demo);
+                        } else {
+                          newFilters.add(demo);
+                        }
+                        setActiveDemoFilters(newFilters);
+                      }}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+                        isActive
+                          ? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+                          : "opacity-40 line-through text-[var(--text-secondary)]"
+                      }`}
+                      style={{ borderColor: isActive ? color : "var(--border-primary)" }}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span>{demo}</span>
+                    </button>
+                  );
+                })}
+
+              {yearChartMode === "status" &&
+                Object.keys(PUB_STATUS_COLORS).map((status) => {
+                  const isActive = activeStatusFilters.has(status);
+                  const color = PUB_STATUS_COLORS[status];
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => {
+                        const newFilters = new Set(activeStatusFilters);
+                        if (isActive) {
+                          newFilters.delete(status);
+                        } else {
+                          newFilters.add(status);
+                        }
+                        setActiveStatusFilters(newFilters);
+                      }}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+                        isActive
+                          ? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+                          : "opacity-40 line-through text-[var(--text-secondary)]"
+                      }`}
+                      style={{ borderColor: isActive ? color : "var(--border-primary)" }}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span>{status}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+
+          {/* Chart display */}
+          <div className="h-96 w-full flex items-center justify-center">
+            {useCustomRanges && rangeValidation.error ? (
+              <div className="text-center text-[var(--text-secondary)] text-sm">
+                Please resolve the custom range error above to show the chart.
+              </div>
+            ) : useCustomRanges && !customRangeInput.trim() ? (
+              <div className="text-center text-[var(--text-secondary)] text-sm">
+                Enter some year ranges (e.g. <span className="font-semibold">2000-2010, 2011-2020</span>) to begin bucketing.
+              </div>
+            ) : yearChartData.length === 0 ? (
+              <div className="text-center text-[var(--text-secondary)] text-sm">
+                No publication year data fits the active filters and year ranges.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={yearChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" opacity={0.3} vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="var(--text-secondary)"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={{ stroke: "var(--border-primary)" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    stroke="var(--text-secondary)"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={{ stroke: "var(--border-primary)" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--bg-card)",
+                      borderColor: "var(--border-primary)",
+                      color: "var(--text-primary)",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                    }}
+                  />
+                  
+                  {yearChartMode === "total" && (
+                    <Bar dataKey="count" name="Manga Count" fill="var(--brand-orange)" radius={[4, 4, 0, 0]} />
+                  )}
+                  
+                  {yearChartMode === "demographic" &&
+                    Object.keys(DEMO_COLORS).map((demo) => {
+                      if (!activeDemoFilters.has(demo)) return null;
+                      return (
+                        <Bar
+                          key={demo}
+                          dataKey={demo}
+                          name={demo}
+                          stackId="year_stack"
+                          fill={DEMO_COLORS[demo] || "#6B7280"}
+                        />
+                      );
+                    })}
+
+                  {yearChartMode === "status" &&
+                    Object.keys(PUB_STATUS_COLORS).map((status) => {
+                      if (!activeStatusFilters.has(status)) return null;
+                      return (
+                        <Bar
+                          key={status}
+                          dataKey={status}
+                          name={status}
+                          stackId="year_stack"
+                          fill={PUB_STATUS_COLORS[status] || "#6B7280"}
+                        />
+                      );
+                    })}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       )}

@@ -386,6 +386,63 @@ class AnalyticsService:
             "status_ratings": [{"name": s["_id"].capitalize(), "avg_rating": round(s["avg_rating"], 2)} for s in status_res]
         }
 
+    async def get_year_distribution(self, filter_query: Dict[str, Any]) -> Dict[str, Any]:
+        mangas_coll = self._get_mangas_collection()
+        
+        year_filter = {
+            **filter_query,
+            "original_language": "ja",
+            "year": {"$regex": "^[0-9]{4}$"}
+        }
+        
+        pipeline = [
+            {"$match": year_filter},
+            {
+                "$group": {
+                    "_id": {
+                        "year": "$year",
+                        "demographic": "$publication_demographic",
+                        "status": "$status"
+                    },
+                    "count": {"$sum": 1}
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "year": "$_id.year",
+                    "demographic": "$_id.demographic",
+                    "status": "$_id.status",
+                    "count": "$count"
+                }
+            },
+            {"$sort": {"year": 1}}
+        ]
+        
+        results = await mangas_coll.aggregate(pipeline).to_list(1000)
+        
+        formatted_results = []
+        for item in results:
+            demo_val = item.get("demographic")
+            status_val = item.get("status")
+            
+            formatted_results.append({
+                "year": item["year"],
+                "demographic": (demo_val.capitalize() if demo_val else "Unknown"),
+                "status": (status_val.capitalize() if status_val else "Unknown"),
+                "count": item["count"]
+            })
+            
+        years = [int(item["year"]) for item in formatted_results if item["year"].isdigit()]
+        min_year = min(years) if years else None
+        max_year = max(years) if years else None
+        
+        return {
+            "data": formatted_results,
+            "min_year": min_year,
+            "max_year": max_year
+        }
+
     async def get_all_analytics(self, filter_query: Dict[str, Any], group_by: str = "month",
                                 added_start: Optional[datetime] = None, added_end: Optional[datetime] = None,
                                 review_start: Optional[datetime] = None, review_end: Optional[datetime] = None) -> Dict[str, Any]:
@@ -403,6 +460,7 @@ class AnalyticsService:
         metadata_distributions = await self.get_metadata_distributions(filter_query)
         top_creators = await self.get_top_creators(filter_query)
         rating_insights = await self.get_rating_insights(filter_query)
+        year_distribution = await self.get_year_distribution(filter_query)
         
         return {
             "overview": overview,
@@ -412,7 +470,9 @@ class AnalyticsService:
             "review_timeline": review_timeline,
             "metadata_distributions": metadata_distributions,
             "top_creators": top_creators,
-            "rating_insights": rating_insights
+            "rating_insights": rating_insights,
+            "year_distribution": year_distribution
         }
 
 analytics_service = AnalyticsService()
+

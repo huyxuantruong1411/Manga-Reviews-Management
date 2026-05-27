@@ -514,7 +514,8 @@ class MangaDexService:
                 "translatedLanguage[]": [lang],
                 "order[chapter]": "asc",
                 "includeFutureUpdates": 0,
-                "contentRating[]": self.CONTENT_RATINGS
+                "contentRating[]": self.CONTENT_RATINGS,
+                "includes[]": ["scanlation_group"]
             }
             
             data = await self._request(f"/manga/{mangadex_id}/feed", params)
@@ -527,23 +528,37 @@ class MangaDexService:
                 if attr.get("externalUrl") is not None:
                     continue
 
+                group_ids = []
+                group_names = []
+                for rel in chap.get("relationships", []):
+                    if rel.get("type") == "scanlation_group":
+                        group_ids.append(rel.get("id"))
+                        name = rel.get("attributes", {}).get("name")
+                        if name:
+                            group_names.append(name)
+                
+                group_id = ",".join(group_ids) if group_ids else "no-group"
+                group_name = " & ".join(group_names) if group_names else "No Group"
+
                 all_chapters.append({
                     "id": chap["id"],
                     "chapter": attr.get("chapter") or "Oneshot",
                     "title": attr.get("title") or "",
-                    "volume": attr.get("volume")
+                    "volume": attr.get("volume"),
+                    "group_id": group_id,
+                    "group_name": group_name
                 })
             
             if offset + limit >= data.get("total", 0):
                 break
             offset += limit
             
-        # De-duplicate by chapter number
+        # De-duplicate by (chapter, group_id)
         unique_chapters = {}
         for c in all_chapters:
-            chap_num = c["chapter"]
-            if chap_num not in unique_chapters:
-                unique_chapters[chap_num] = c
+            key = (c["chapter"], c["group_id"])
+            if key not in unique_chapters:
+                unique_chapters[key] = c
                 
         result = list(unique_chapters.values())
         

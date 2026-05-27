@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -561,8 +561,26 @@ export const MangaDetailPage: React.FC = () => {
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLang, setSelectedLang] = useState("en");
   const [chapters, setChapters] = useState<any[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [customPath, setCustomPath] = useState("");
+
+  const uniqueGroups = useMemo(() => {
+    const groupsMap = new Map();
+    chapters.forEach((c: any) => {
+      const gid = c.group_id || "no-group";
+      const gname = c.group_name || "No Group";
+      if (!groupsMap.has(gid)) {
+        groupsMap.set(gid, gname);
+      }
+    });
+    return Array.from(groupsMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [chapters]);
+
+  const displayedChapters = useMemo(() => {
+    if (!selectedGroup) return chapters;
+    return chapters.filter((c: any) => (c.group_id || "no-group") === selectedGroup);
+  }, [chapters, selectedGroup]);
   const handlePathChange = (val: string) => {
     // Remove characters that are absolutely forbidden in paths: * ? " < > |
     let cleaned = val.replace(/[*?"<>|]/g, '');
@@ -975,8 +993,25 @@ export const MangaDetailPage: React.FC = () => {
       const res = await client.get(`/api/mangadex/manga/${manga.mangadex_id}/chapters`, {
         params: { lang },
       });
-      setChapters(res.data);
+      const fetchedChapters = res.data;
+      setChapters(fetchedChapters);
       setSelectedChapters([]); // Reset selections
+
+      // Compute unique groups and select the first one by default
+      const groupsMap = new Map();
+      fetchedChapters.forEach((c: any) => {
+        const gid = c.group_id || "no-group";
+        const gname = c.group_name || "No Group";
+        if (!groupsMap.has(gid)) {
+          groupsMap.set(gid, gname);
+        }
+      });
+      const uniqueGroupsList = Array.from(groupsMap.entries()).map(([id, name]) => ({ id, name }));
+      if (uniqueGroupsList.length > 0) {
+        setSelectedGroup(uniqueGroupsList[0].id);
+      } else {
+        setSelectedGroup("");
+      }
     } catch (err) {
       console.error("Failed to load chapters:", err);
     } finally {
@@ -991,10 +1026,21 @@ export const MangaDetailPage: React.FC = () => {
   };
 
   const toggleAllChapters = () => {
-    if (selectedChapters.length === chapters.length) {
-      setSelectedChapters([]);
+    const allDisplayedIds = displayedChapters.map((c) => c.id);
+    const allSelected = allDisplayedIds.length > 0 && allDisplayedIds.every((id) => selectedChapters.includes(id));
+    
+    if (allSelected) {
+      setSelectedChapters((prev) => prev.filter((id) => !allDisplayedIds.includes(id)));
     } else {
-      setSelectedChapters(chapters.map((c) => c.id));
+      setSelectedChapters((prev) => {
+        const newSelection = [...prev];
+        allDisplayedIds.forEach((id) => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
     }
   };
 
@@ -2028,6 +2074,33 @@ export const MangaDetailPage: React.FC = () => {
                 </div>
               )}
 
+              {/* Group Selector */}
+              {uniqueGroups.length > 1 && (
+                <div className="flex items-center space-x-4 animate-in fade-in duration-200">
+                  <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Select Group:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueGroups.map((group) => (
+                      <button
+                        key={group.id}
+                        onClick={() => {
+                          setSelectedGroup(group.id);
+                          setSelectedChapters([]);
+                        }}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg border transition ${
+                          selectedGroup === group.id
+                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+                            : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+                        }`}
+                      >
+                        {group.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Custom Download Path */}
               <div className="p-4 bg-[var(--brand-orange)]/5 border border-[var(--brand-orange)]/25 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -2101,9 +2174,9 @@ export const MangaDetailPage: React.FC = () => {
               {/* Chapters List */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider pb-1">
-                  <span>Available Chapters ({chapters.length})</span>
+                  <span>Available Chapters ({displayedChapters.length})</span>
                   <button onClick={toggleAllChapters} className="text-[var(--brand-orange)] hover:underline">
-                    {selectedChapters.length === chapters.length ? "Deselect All" : "Select All"}
+                    {displayedChapters.length > 0 && displayedChapters.every(c => selectedChapters.includes(c.id)) ? "Deselect All" : "Select All"}
                   </button>
                 </div>
 
@@ -2111,9 +2184,9 @@ export const MangaDetailPage: React.FC = () => {
                   <div className="flex justify-center items-center py-12">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
                   </div>
-                ) : chapters.length > 0 ? (
+                ) : displayedChapters.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border border-[var(--border-primary)] p-3 bg-[var(--bg-primary)] rounded-xl">
-                    {chapters.map((chap) => {
+                    {displayedChapters.map((chap) => {
                       const isSelected = selectedChapters.includes(chap.id);
                       return (
                         <button
@@ -2132,7 +2205,7 @@ export const MangaDetailPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center py-12 text-xs text-[var(--text-secondary)]">
-                    No chapters available for this language.
+                    No chapters available for this language/group.
                   </div>
                 )}
               </div>
