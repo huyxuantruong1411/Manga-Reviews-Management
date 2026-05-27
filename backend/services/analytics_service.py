@@ -402,7 +402,8 @@ class AnalyticsService:
                     "_id": {
                         "year": "$year",
                         "demographic": "$publication_demographic",
-                        "status": "$status"
+                        "status": "$status",
+                        "read_status": "$read_status"
                     },
                     "count": {"$sum": 1}
                 }
@@ -413,6 +414,7 @@ class AnalyticsService:
                     "year": "$_id.year",
                     "demographic": "$_id.demographic",
                     "status": "$_id.status",
+                    "read_status": "$_id.read_status",
                     "count": "$count"
                 }
             },
@@ -425,11 +427,13 @@ class AnalyticsService:
         for item in results:
             demo_val = item.get("demographic")
             status_val = item.get("status")
+            read_status_val = item.get("read_status")
             
             formatted_results.append({
                 "year": item["year"],
                 "demographic": (demo_val.capitalize() if demo_val else "Unknown"),
                 "status": (status_val.capitalize() if status_val else "Unknown"),
+                "read_status": (read_status_val if read_status_val else "unread"),
                 "count": item["count"]
             })
             

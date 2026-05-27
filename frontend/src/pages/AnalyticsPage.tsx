@@ -110,6 +110,7 @@ interface YearDistItem {
   year: string;
   demographic: string;
   status: string;
+  read_status: string;
   count: number;
 }
 
@@ -163,12 +164,15 @@ export const AnalyticsPage: React.FC = () => {
 
   // Year Distribution States
   const [yearDist, setYearDist] = useState<YearDistribution | null>(null);
-  const [yearChartMode, setYearChartMode] = useState<"total" | "demographic" | "status">("total");
+  const [yearChartMode, setYearChartMode] = useState<"total" | "demographic" | "status" | "read_status">("total");
   const [activeDemoFilters, setActiveDemoFilters] = useState<Set<string>>(
     new Set(["Shounen", "Shoujo", "Seinen", "Josei", "Unknown"])
   );
   const [activeStatusFilters, setActiveStatusFilters] = useState<Set<string>>(
     new Set(["Ongoing", "Completed", "Hiatus", "Cancelled", "Unknown"])
+  );
+  const [activeReadStatusFilters, setActiveReadStatusFilters] = useState<Set<string>>(
+    new Set(["unread", "reading", "completed", "dropped", "on_hold", "plan_to_read", "re_reading"])
   );
   const [useCustomRanges, setUseCustomRanges] = useState(false);
   const [customRangeInput, setCustomRangeInput] = useState("");
@@ -246,7 +250,14 @@ export const AnalyticsPage: React.FC = () => {
           Completed: 0,
           Hiatus: 0,
           Cancelled: 0,
-          Unknown: 0
+          Unknown: 0,
+          unread: 0,
+          reading: 0,
+          completed_rs: 0,
+          dropped: 0,
+          on_hold: 0,
+          plan_to_read: 0,
+          re_reading: 0
         };
       }
     };
@@ -280,6 +291,14 @@ export const AnalyticsPage: React.FC = () => {
         grouped[bucketKey][statusKey] += item.count;
       } else {
         grouped[bucketKey][statusKey] = (grouped[bucketKey][statusKey] || 0) + item.count;
+      }
+      
+      // Read status — use "completed_rs" key to avoid collision with publishing status "Completed"
+      const rsKey = item.read_status === "completed" ? "completed_rs" : item.read_status;
+      if (grouped[bucketKey][rsKey] !== undefined) {
+        grouped[bucketKey][rsKey] += item.count;
+      } else {
+        grouped[bucketKey][rsKey] = (grouped[bucketKey][rsKey] || 0) + item.count;
       }
     }
     
@@ -531,6 +550,26 @@ export const AnalyticsPage: React.FC = () => {
     Erotica: "#F97316",
     Pornographic: "#EF4444",
     Unknown: "#6B7280"
+  };
+
+  const READ_STATUS_COLORS: Record<string, string> = {
+    unread: "#9CA3AF",
+    reading: "#3B82F6",
+    completed: "#10B981",
+    dropped: "#EF4444",
+    on_hold: "#F59E0B",
+    plan_to_read: "#A855F7",
+    re_reading: "#EC4899"
+  };
+
+  const READ_STATUS_LABELS: Record<string, string> = {
+    unread: "Unread",
+    reading: "Reading",
+    completed: "Completed",
+    dropped: "Dropped",
+    on_hold: "On Hold",
+    plan_to_read: "Plan to Read",
+    re_reading: "Re-reading"
   };
 
   const pieData = overview
@@ -1246,7 +1285,7 @@ export const AnalyticsPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-4">
               {/* Mode Toggle */}
               <div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
-                {(["total", "demographic", "status"] as const).map((mode) => (
+                {(["total", "demographic", "status", "read_status"] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
@@ -1257,7 +1296,7 @@ export const AnalyticsPage: React.FC = () => {
                         : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                     }`}
                   >
-                    {mode === "total" ? "Total" : mode === "demographic" ? "Demographic" : "Status"}
+                    {mode === "total" ? "Total" : mode === "demographic" ? "Demographic" : mode === "status" ? "Pub. Status" : "Read Status"}
                   </button>
                 ))}
               </div>
@@ -1392,6 +1431,36 @@ export const AnalyticsPage: React.FC = () => {
                     </button>
                   );
                 })}
+
+              {yearChartMode === "read_status" &&
+                Object.keys(READ_STATUS_COLORS).map((status) => {
+                  const isActive = activeReadStatusFilters.has(status);
+                  const color = READ_STATUS_COLORS[status];
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => {
+                        const newFilters = new Set(activeReadStatusFilters);
+                        if (isActive) {
+                          newFilters.delete(status);
+                        } else {
+                          newFilters.add(status);
+                        }
+                        setActiveReadStatusFilters(newFilters);
+                      }}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+                        isActive
+                          ? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+                          : "opacity-40 line-through text-[var(--text-secondary)]"
+                      }`}
+                      style={{ borderColor: isActive ? color : "var(--border-primary)" }}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span>{READ_STATUS_LABELS[status] || status}</span>
+                    </button>
+                  );
+                })}
             </div>
           )}
 
@@ -1466,6 +1535,21 @@ export const AnalyticsPage: React.FC = () => {
                           name={status}
                           stackId="year_stack"
                           fill={PUB_STATUS_COLORS[status] || "#6B7280"}
+                        />
+                      );
+                    })}
+
+                  {yearChartMode === "read_status" &&
+                    Object.keys(READ_STATUS_COLORS).map((status) => {
+                      if (!activeReadStatusFilters.has(status)) return null;
+                      const dataKey = status === "completed" ? "completed_rs" : status;
+                      return (
+                        <Bar
+                          key={status}
+                          dataKey={dataKey}
+                          name={READ_STATUS_LABELS[status] || status}
+                          stackId="year_stack"
+                          fill={READ_STATUS_COLORS[status] || "#6B7280"}
                         />
                       );
                     })}
