@@ -176,6 +176,8 @@ export const AnalyticsPage: React.FC = () => {
   );
   const [useCustomRanges, setUseCustomRanges] = useState(false);
   const [customRangeInput, setCustomRangeInput] = useState("");
+  const [zoomStartYear, setZoomStartYear] = useState<number | "">("");
+  const [zoomEndYear, setZoomEndYear] = useState<number | "">("");
 
   const rangeValidation = useMemo(() => {
     if (!useCustomRanges || !customRangeInput.trim() || !yearDist) {
@@ -229,7 +231,20 @@ export const AnalyticsPage: React.FC = () => {
   const yearChartData = useMemo(() => {
     if (!yearDist || !yearDist.data) return [];
     
-    const rawData = yearDist.data;
+    let rawData = yearDist.data;
+    if (zoomStartYear !== "") {
+      rawData = rawData.filter(item => {
+        const y = parseInt(item.year, 10);
+        return isNaN(y) || y >= zoomStartYear;
+      });
+    }
+    if (zoomEndYear !== "") {
+      rawData = rawData.filter(item => {
+        const y = parseInt(item.year, 10);
+        return isNaN(y) || y <= zoomEndYear;
+      });
+    }
+    
     const { ranges, error } = rangeValidation;
     
     if (useCustomRanges && (error || ranges.length === 0)) {
@@ -318,7 +333,7 @@ export const AnalyticsPage: React.FC = () => {
     }
     
     return resultList;
-  }, [yearDist, useCustomRanges, rangeValidation]);
+  }, [yearDist, useCustomRanges, rangeValidation, zoomStartYear, zoomEndYear]);
 
   const templates = useMemo(() => {
     if (!yearDist || yearDist.min_year === null || yearDist.max_year === null) {
@@ -1312,6 +1327,76 @@ export const AnalyticsPage: React.FC = () => {
                 <span>Custom Ranges</span>
               </label>
             </div>
+          </div>
+
+          {/* Zoom controls to narrow down the publication year range */}
+          <div className="flex flex-wrap items-center gap-4 bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 text-xs">
+            <span className="font-extrabold uppercase tracking-wider text-[var(--text-secondary)] text-[10px]">
+              Zoom Timeline:
+            </span>
+            
+            {(() => {
+              const min = yearDist.min_year ?? 1970;
+              const max = yearDist.max_year ?? new Date().getFullYear();
+              const years = [];
+              for (let y = min; y <= max; y++) {
+                years.push(y);
+              }
+              return (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[var(--text-secondary)] font-bold">Start:</span>
+                    <select
+                      value={zoomStartYear}
+                      onChange={(e) => {
+                        const val = e.target.value ? parseInt(e.target.value, 10) : "";
+                        setZoomStartYear(val);
+                      }}
+                      className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+                    >
+                      <option value="">Min ({min})</option>
+                      {years.map((y) => (
+                        <option key={y} value={y} disabled={zoomEndYear !== "" && y > zoomEndYear}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[var(--text-secondary)] font-bold">End:</span>
+                    <select
+                      value={zoomEndYear}
+                      onChange={(e) => {
+                        const val = e.target.value ? parseInt(e.target.value, 10) : "";
+                        setZoomEndYear(val);
+                      }}
+                      className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+                    >
+                      <option value="">Max ({max})</option>
+                      {years.map((y) => (
+                        <option key={y} value={y} disabled={zoomStartYear !== "" && y < zoomStartYear}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              );
+            })()}
+
+            {(zoomStartYear !== "" || zoomEndYear !== "") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomStartYear("");
+                  setZoomEndYear("");
+                }}
+                className="px-3 py-1 bg-[var(--bg-card)] hover:bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--brand-orange)] text-[var(--brand-orange)] text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
+              >
+                Reset Zoom
+              </button>
+            )}
           </div>
 
           {/* Custom Ranges Input and Helper Text */}
