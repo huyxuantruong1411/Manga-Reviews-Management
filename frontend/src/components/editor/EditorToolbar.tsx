@@ -12,12 +12,17 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Link as LinkIcon, Image as ImageIcon, AtSign,
   Undo, Redo,
-  Sparkles, Wand2, Lightbulb, FileText, Highlighter
+  Sparkles, Wand2, Lightbulb, FileText, Highlighter,
+  Youtube as YoutubeIcon, Video, Music, Paperclip, Table, ChevronDown, Trash2
 } from "lucide-react";
 
 interface EditorToolbarProps {
   editor: any;
   onImageUpload: () => void;
+  onVideoUpload: () => void;
+  onAudioUpload: () => void;
+  onFileAttachmentUpload: () => void;
+  onInsertYoutube: () => void;
   onAI: (mode: "rewrite" | "intro" | "ideas") => void;
   aiLoading: boolean;
   onInsertMangaRef: () => void;
@@ -53,6 +58,10 @@ const Divider = () => (
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   editor,
   onImageUpload,
+  onVideoUpload,
+  onAudioUpload,
+  onFileAttachmentUpload,
+  onInsertYoutube,
   onAI,
   aiLoading,
   onInsertMangaRef,
@@ -60,6 +69,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [showAiMenu, setShowAiMenu] = useState(false);
+  const [showTableMenu, setShowTableMenu] = useState(false);
 
   if (!editor) return null;
 
@@ -72,6 +82,12 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     setLinkUrl("");
     setShowLinkInput(false);
   };
+
+  const handleInsertTable = () => {
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  };
+
+  const isTableActive = editor.isActive("table");
 
   return (
     <div className="relative z-10">
@@ -166,10 +182,116 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           <LinkIcon size={15} />
         </ToolbarBtn>
 
-        {/* Image upload */}
-        <ToolbarBtn onClick={onImageUpload} title="Insert Image">
+        {/* Media Inserts */}
+        <ToolbarBtn onClick={onImageUpload} title="Chèn hình ảnh">
           <ImageIcon size={15} />
         </ToolbarBtn>
+        <ToolbarBtn onClick={onInsertYoutube} title="Chèn Video YouTube">
+          <YoutubeIcon size={15} />
+        </ToolbarBtn>
+        <ToolbarBtn onClick={onVideoUpload} title="Tải lên Video">
+          <Video size={15} />
+        </ToolbarBtn>
+        <ToolbarBtn onClick={onAudioUpload} title="Tải lên Audio">
+          <Music size={15} />
+        </ToolbarBtn>
+        <ToolbarBtn onClick={onFileAttachmentUpload} title="Đính kèm file tài liệu">
+          <Paperclip size={15} />
+        </ToolbarBtn>
+
+        {/* Table Support */}
+        <div className="relative">
+          {isTableActive ? (
+            <button
+              type="button"
+              onClick={() => setShowTableMenu(!showTableMenu)}
+              onMouseDown={(e) => e.preventDefault()}
+              className="flex items-center space-x-1 p-1.5 rounded-lg text-[var(--brand-orange)] bg-orange-50 dark:bg-orange-900/20 text-xs font-semibold hover:bg-orange-100/50"
+              title="Table Actions"
+            >
+              <Table size={15} />
+              <ChevronDown size={12} />
+            </button>
+          ) : (
+            <ToolbarBtn onClick={handleInsertTable} title="Insert Table">
+              <Table size={15} />
+            </ToolbarBtn>
+          )}
+
+          {isTableActive && showTableMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowTableMenu(false)} />
+              <div className="absolute top-full left-0 mt-2 z-50 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-xl overflow-hidden w-48 text-xs py-1">
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().addRowBefore().run(); }}
+                >
+                  Thêm dòng phía trên
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().addRowAfter().run(); }}
+                >
+                  Thêm dòng phía dưới
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 text-red-500 font-semibold flex items-center justify-between"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().deleteRow().run(); }}
+                >
+                  <span>Xóa dòng hiện tại</span>
+                  <Trash2 size={12} />
+                </button>
+                <div className="h-px bg-[var(--border-primary)] my-1" />
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().addColumnBefore().run(); }}
+                >
+                  Thêm cột bên trái
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().addColumnAfter().run(); }}
+                >
+                  Thêm cột bên phải
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 text-red-500 font-semibold flex items-center justify-between"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().deleteColumn().run(); }}
+                >
+                  <span>Xóa cột hiện tại</span>
+                  <Trash2 size={12} />
+                </button>
+                <div className="h-px bg-[var(--border-primary)] my-1" />
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().mergeCells().run(); }}
+                >
+                  Gộp các ô (Merge)
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().splitCell().run(); }}
+                >
+                  Tách ô (Split)
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().toggleHeaderRow().run(); }}
+                >
+                  Bật/tắt dòng tiêu đề
+                </button>
+                <div className="h-px bg-[var(--border-primary)] my-1" />
+                <button
+                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 text-red-600 dark:text-red-400 font-bold flex items-center justify-between"
+                  onClick={() => { setShowTableMenu(false); editor.chain().focus().deleteTable().run(); }}
+                >
+                  <span>Xóa toàn bộ bảng</span>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Manga Reference */}
         <ToolbarBtn onClick={onInsertMangaRef} title="Insert Manga Reference (@)">
@@ -281,3 +403,4 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     </div>
   );
 };
+

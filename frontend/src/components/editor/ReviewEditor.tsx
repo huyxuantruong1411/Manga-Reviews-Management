@@ -1,14 +1,14 @@
 /**
  * ReviewEditor — Full-featured Tiptap review editor.
- * Includes: text formatting, text-align, image embed, slash commands,
- * AI writing assistance, manga cross-references, adjustable width.
+ * Includes: text formatting, text-align, resizable images, video embeds,
+ * audio, file attachments, tables, slash commands, AI writing assistance,
+ * manga cross-references, adjustable width.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
-import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -16,7 +16,12 @@ import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import { Search, Loader2, X, BookOpen, HelpCircle } from "lucide-react";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
+import Youtube from "@tiptap/extension-youtube";
+import { Search, Loader2, X, BookOpen, HelpCircle, Upload, Youtube as YoutubeIcon } from "lucide-react";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import { BlurredCover } from "../ui/BlurredCover";
 
@@ -26,6 +31,10 @@ import { AIConfirmModal } from "./AIConfirmModal.tsx";
 import { AIResultPanel } from "./AIResultPanel.tsx";
 import { MangaReferenceExtension } from "./MangaReferenceExtension.ts";
 import { MangaReferenceTooltip } from "./MangaReferenceTooltip.tsx";
+import { ResizableImageExtension } from "./ResizableImageExtension.ts";
+import { VideoExtension } from "./VideoExtension.ts";
+import { AudioExtension } from "./AudioExtension.ts";
+import { FileAttachmentExtension } from "./FileAttachmentExtension.ts";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 
@@ -209,6 +218,13 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [activeHelpTab, setActiveHelpTab] = useState<"slash" | "ai" | "ref" | "formatting" | "examples">("slash");
 
+  // YouTube modal state
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+
+  // Upload progress state
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -220,7 +236,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Image.configure({ inline: false, allowBase64: true }),
+      ResizableImageExtension,
       Placeholder.configure({ placeholder: 'Viết review của bạn... Gõ "/" để xem các lệnh nhanh.' }),
       Underline,
       TextStyle,
@@ -229,6 +245,23 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       TaskList,
       TaskItem.configure({ nested: true }),
       MangaReferenceExtension,
+      // Table extensions
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      // YouTube embeds
+      Youtube.configure({
+        inline: false,
+        nocookie: true,
+        HTMLAttributes: {
+          class: "rounded-xl overflow-hidden my-4",
+        },
+      }),
+      // Custom media extensions
+      VideoExtension,
+      AudioExtension,
+      FileAttachmentExtension,
     ],
     content: initialContent || {},
     editorProps: {
@@ -238,6 +271,66 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         spellcheck: "false",
         autocorrect: "off",
         autocapitalize: "off",
+      },
+      // Handle drag & drop of external images and files
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false; // Internal move, let Tiptap handle it
+
+        const files = event.dataTransfer?.files;
+        if (files && files.length > 0) {
+          event.preventDefault();
+          for (let i = 0; i < files.length; i++) {
+            handleFileDropOrPaste(files[i]);
+          }
+          return true;
+        }
+
+        // Check for dragged image HTML (external image drag)
+        const html = event.dataTransfer?.getData("text/html");
+        if (html) {
+          const match = html.match(/<img[^>]+src="([^"]+)"/);
+          if (match && match[1]) {
+            event.preventDefault();
+            handleExternalImageUrl(match[1]);
+            return true;
+          }
+        }
+
+        // Check for dragged URL text
+        const url = event.dataTransfer?.getData("text/plain");
+        if (url && /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg|bmp)/i.test(url)) {
+          event.preventDefault();
+          handleExternalImageUrl(url);
+          return true;
+        }
+
+        return false;
+      },
+      // Handle paste of images and external image URLs
+      handlePaste: (view, event) => {
+        const files = event.clipboardData?.files;
+        if (files && files.length > 0) {
+          for (let i = 0; i < files.length; i++) {
+            if (files[i].type.startsWith("image/")) {
+              event.preventDefault();
+              handleFileDropOrPaste(files[i]);
+              return true;
+            }
+          }
+        }
+
+        // Check for pasted HTML with image
+        const html = event.clipboardData?.getData("text/html");
+        if (html) {
+          const match = html.match(/<img[^>]+src="([^"]+)"/);
+          if (match && match[1] && match[1].startsWith("http")) {
+            event.preventDefault();
+            handleExternalImageUrl(match[1]);
+            return true;
+          }
+        }
+
+        return false;
       },
     },
   });
@@ -396,6 +489,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   const handleImageUpload = useCallback(
     async (file: File) => {
       if (!editor) return;
+      setUploadingMedia(true);
       const formData = new FormData();
       formData.append("file", file);
       try {
@@ -404,20 +498,176 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );
-        editor.chain().focus().setImage({ src: res.data.url }).run();
+        editor.chain().focus().insertContent({
+          type: "resizableImage",
+          attrs: { src: res.data.url, alt: file.name },
+        }).run();
       } catch (err) {
         console.error("Image upload failed", err);
         showToast("Failed to upload image. Please try again.", "error");
+      } finally {
+        setUploadingMedia(false);
       }
     },
     [editor, mangaId]
   );
+
+  // Handle external image URL (proxy download to MinIO)
+  const handleExternalImageUrl = useCallback(
+    async (imageUrl: string) => {
+      if (!editor) return;
+      setUploadingMedia(true);
+      showToast("Đang tải ảnh từ URL bên ngoài...", "info");
+      try {
+        const res = await client.post(
+          `/api/manga/${mangaId}/reviews/upload-image-url`,
+          { url: imageUrl }
+        );
+        editor.chain().focus().insertContent({
+          type: "resizableImage",
+          attrs: { src: res.data.url },
+        }).run();
+        showToast("Đã tải ảnh thành công!", "success");
+      } catch (err: any) {
+        console.error("External image proxy failed", err);
+        // Fallback: insert direct URL
+        editor.chain().focus().insertContent({
+          type: "resizableImage",
+          attrs: { src: imageUrl },
+        }).run();
+        showToast("Không thể proxy ảnh, đã chèn URL trực tiếp.", "warning");
+      } finally {
+        setUploadingMedia(false);
+      }
+    },
+    [editor, mangaId]
+  );
+
+  // Handle video upload
+  const handleVideoUpload = useCallback(
+    async (file: File) => {
+      if (!editor) return;
+      setUploadingMedia(true);
+      showToast("Đang tải video lên...", "info");
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await client.post(
+          `/api/manga/${mangaId}/reviews/upload-video`,
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" }, timeout: 300000 }
+        );
+        editor.chain().focus().insertContent({
+          type: "video",
+          attrs: { src: res.data.url, filename: res.data.filename || file.name },
+        }).run();
+        showToast("Video đã được tải lên thành công!", "success");
+      } catch (err: any) {
+        console.error("Video upload failed", err);
+        const msg = err.response?.data?.detail || "Tải video thất bại. Vui lòng thử lại.";
+        showToast(msg, "error");
+      } finally {
+        setUploadingMedia(false);
+      }
+    },
+    [editor, mangaId]
+  );
+
+  // Handle audio upload
+  const handleAudioUpload = useCallback(
+    async (file: File) => {
+      if (!editor) return;
+      setUploadingMedia(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await client.post(
+          `/api/manga/${mangaId}/reviews/upload-media`,
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+        editor.chain().focus().insertContent({
+          type: "audio",
+          attrs: { src: res.data.url, filename: res.data.filename || file.name },
+        }).run();
+        showToast("Audio đã được tải lên!", "success");
+      } catch (err: any) {
+        console.error("Audio upload failed", err);
+        showToast("Tải audio thất bại.", "error");
+      } finally {
+        setUploadingMedia(false);
+      }
+    },
+    [editor, mangaId]
+  );
+
+  // Handle file attachment upload
+  const handleFileAttachmentUpload = useCallback(
+    async (file: File) => {
+      if (!editor) return;
+      setUploadingMedia(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await client.post(
+          `/api/manga/${mangaId}/reviews/upload-media`,
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+        editor.chain().focus().insertContent({
+          type: "fileAttachment",
+          attrs: { url: res.data.url, filename: res.data.filename || file.name, size: res.data.size || 0 },
+        }).run();
+        showToast("File đã được đính kèm!", "success");
+      } catch (err: any) {
+        console.error("File upload failed", err);
+        showToast("Đính kèm file thất bại.", "error");
+      } finally {
+        setUploadingMedia(false);
+      }
+    },
+    [editor, mangaId]
+  );
+
+  // Unified handler for dropped/pasted files — routes to correct upload by MIME type
+  const handleFileDropOrPaste = useCallback(
+    (file: File) => {
+      if (file.type.startsWith("image/")) {
+        handleImageUpload(file);
+      } else if (file.type.startsWith("video/")) {
+        handleVideoUpload(file);
+      } else if (file.type.startsWith("audio/")) {
+        handleAudioUpload(file);
+      } else {
+        handleFileAttachmentUpload(file);
+      }
+    },
+    [handleImageUpload, handleVideoUpload, handleAudioUpload, handleFileAttachmentUpload]
+  );
+
+  // Insert YouTube embed
+  const handleInsertYoutube = useCallback(() => {
+    if (!editor || !youtubeUrl.trim()) return;
+    editor.commands.setYoutubeVideo({
+      src: youtubeUrl.trim(),
+      width: 640,
+      height: 360,
+    });
+    setYoutubeUrl("");
+    setShowYoutubeModal(false);
+  }, [editor, youtubeUrl]);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleImageUpload(file);
     e.target.value = "";
   };
+
+  // Refs for video/audio/file inputs
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef2 = useRef<HTMLInputElement>(null);
+
 
   // AI flow
   const triggerAI = useCallback(
@@ -821,10 +1071,22 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
     setIsSaving(true);
     try {
       await onSaveRef.current(editor.getJSON());
+      // After saving, finalize to clean orphaned media
+      if (reviewId) {
+        try {
+          const finalizeRes = await client.post(`/api/manga/${mangaId}/reviews/${reviewId}/finalize`);
+          editor.commands.clearHistory();
+          if (finalizeRes.data.deleted_orphans > 0) {
+            showToast(`Đã dọn dẹp ${finalizeRes.data.deleted_orphans} file không sử dụng.`, "info");
+          }
+        } catch (err) {
+          console.warn("Finalize failed:", err);
+        }
+      }
     } finally {
       setIsSaving(false);
     }
-  }, [editor]);
+  }, [editor, reviewId, mangaId]);
 
   // Keyboard shortcut Ctrl+S / Cmd+S to save
   useEffect(() => {
@@ -842,13 +1104,46 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
   return (
     <div className={`review-editor-container mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}>
-      {/* Hidden file input for image uploads */}
+      {/* Hidden file inputs for various media types */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
         className="hidden"
         onChange={handleFileInputChange}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/x-matroska"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleVideoUpload(f);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a,audio/flac,audio/aac,audio/webm"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleAudioUpload(f);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={fileInputRef2}
+        type="file"
+        accept=".pdf,.zip,.rar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.json,.xml"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFileAttachmentUpload(f);
+          e.target.value = "";
+        }}
       />
 
       {/* Editor Header / Action Bar */}
@@ -1047,6 +1342,10 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           <EditorToolbar
             editor={editor}
             onImageUpload={() => fileInputRef.current?.click()}
+            onVideoUpload={() => videoInputRef.current?.click()}
+            onAudioUpload={() => audioInputRef.current?.click()}
+            onFileAttachmentUpload={() => fileInputRef2.current?.click()}
+            onInsertYoutube={() => setShowYoutubeModal(true)}
             onAI={triggerAI}
             aiLoading={aiLoading}
             onInsertMangaRef={handleInsertMangaReference}
@@ -1058,12 +1357,70 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           <SlashCommandMenu
             editor={editor}
             onImageUpload={() => fileInputRef.current?.click()}
+            onVideoUpload={() => videoInputRef.current?.click()}
+            onAudioUpload={() => audioInputRef.current?.click()}
+            onFileAttachmentUpload={() => fileInputRef2.current?.click()}
+            onInsertYoutube={() => setShowYoutubeModal(true)}
             onAI={triggerAI}
             onInsertMangaRef={handleInsertMangaReference}
           />
           <EditorContent editor={editor} />
         </div>
       </div>
+
+      {/* YouTube URL Modal */}
+      {showYoutubeModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-primary)]">
+              <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center space-x-2">
+                <YoutubeIcon className="text-red-500" size={18} />
+                <span>Chèn Video YouTube</span>
+              </h3>
+              <button
+                onClick={() => { setShowYoutubeModal(false); setYoutubeUrl(""); }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition text-[var(--text-secondary)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Input */}
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Nhập link video YouTube (Ví dụ: https://www.youtube.com/watch?v=... hoặc https://youtu.be/...) để nhúng trình phát video trực tiếp vào bài review.
+              </p>
+              <input
+                type="text"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleInsertYoutube()}
+                className="w-full text-sm bg-transparent border border-[var(--border-primary)] rounded-xl px-3.5 py-2.5 outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] transition"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end space-x-2.5 p-4 bg-[var(--bg-primary)]/40 border-t border-[var(--border-primary)]">
+              <button
+                onClick={() => { setShowYoutubeModal(false); setYoutubeUrl(""); }}
+                className="px-3.5 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleInsertYoutube}
+                className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow-sm transition"
+              >
+                Chèn Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Manga Search Modal for Reference Insertion */}
       {showSearchModal && (
@@ -1219,6 +1576,14 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
                     <div className="flex items-start space-x-3">
                       <span className="font-bold text-[var(--text-primary)] w-28 shrink-0">Hình ảnh:</span>
                       <span>Chọn và tải ảnh trực tiếp từ máy của bạn lên server lưu trữ MinIO để chèn vào bài viết.</span>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="font-bold text-[var(--text-primary)] w-28 shrink-0">Bảng (Table):</span>
+                      <span>Chèn bảng dữ liệu Notion-style. Khi ở trong bảng, menu quản lý bảng xuất hiện hỗ trợ thêm/xóa dòng/cột, gộp/tách ô và quản lý dòng tiêu đề.</span>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="font-bold text-[var(--text-primary)] w-28 shrink-0">Đa phương tiện:</span>
+                      <span>Nhúng video YouTube, tải lên video trực tiếp (hỗ trợ streaming), tải lên tệp âm thanh (audio), hoặc đính kèm các tài liệu (PDF, ZIP, Word, v.v.).</span>
                     </div>
                     <div className="flex items-start space-x-3">
                       <span className="font-bold text-[var(--text-primary)] w-28 shrink-0">Trích dẫn / Code:</span>

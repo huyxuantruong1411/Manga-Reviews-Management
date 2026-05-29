@@ -125,3 +125,62 @@
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Tiptap table styling */
+.editor-content-wrapper .ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1.5rem 0;
+  overflow: hidden;
+}
+
+.editor-content-wrapper .ProseMirror table td,
+.editor-content-wrapper .ProseMirror table th {
+  min-width: 1em;
+  border: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  vertical-align: top;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.editor-content-wrapper .ProseMirror table td > *,
+.editor-content-wrapper .ProseMirror table th > * {
+  margin-bottom: 0;
+}
+
+.editor-content-wrapper .ProseMirror table th {
+  font-weight: bold;
+  text-align: left;
+  background-color: var(--bg-primary);
+}
+
+.editor-content-wrapper .ProseMirror table .selectedCell:after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(218, 117, 0, 0.08);
+  pointer-events: none;
+}
+
+.editor-content-wrapper .ProseMirror table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: var(--brand-orange);
+  pointer-events: none;
+}
+
+.editor-content-wrapper .ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+
+.editor-content-wrapper .ProseMirror .resize-cursor {
+  cursor: ew-resize;
+  cursor: col-resize;
+}
+
+

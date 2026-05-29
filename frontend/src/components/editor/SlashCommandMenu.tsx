@@ -9,7 +9,8 @@ import {
   List, ListOrdered, ListChecks,
   Quote, Minus, Code2, Image as ImageIcon,
   AlignLeft, AlignCenter, AlignRight,
-  FileText, Lightbulb, AtSign
+  FileText, Lightbulb, AtSign,
+  Youtube as YoutubeIcon, Video as VideoIcon, Music as MusicIcon, Paperclip as PaperclipIcon, Table
 } from "lucide-react";
 
 interface SlashCommand {
@@ -25,6 +26,10 @@ interface SlashCommandMenuProps {
   onImageUpload: () => void;
   onAI: (mode: "intro" | "ideas") => void;
   onInsertMangaRef: () => void;
+  onInsertYoutube: () => void;
+  onVideoUpload: () => void;
+  onAudioUpload: () => void;
+  onFileAttachmentUpload: () => void;
 }
 
 export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
@@ -32,6 +37,10 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   onImageUpload,
   onAI,
   onInsertMangaRef,
+  onInsertYoutube,
+  onVideoUpload,
+  onAudioUpload,
+  onFileAttachmentUpload,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -72,6 +81,11 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
       action: (e) => e.chain().focus().toggleTaskList().run(),
     },
     {
+      id: "table", title: "Table", description: "Insert a 3x3 table",
+      icon: <Table size={16} className="text-teal-500" />,
+      action: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+    },
+    {
       id: "quote", title: "Blockquote", description: "Highlighted quote block",
       icon: <Quote size={16} />,
       action: (e) => e.chain().focus().toggleBlockquote().run(),
@@ -92,6 +106,26 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
       action: () => onImageUpload(),
     },
     {
+      id: "youtube", title: "YouTube Embed", description: "Embed a YouTube video player",
+      icon: <YoutubeIcon size={16} className="text-red-500" />,
+      action: () => onInsertYoutube(),
+    },
+    {
+      id: "video", title: "Upload Video", description: "Upload video to editor",
+      icon: <VideoIcon size={16} className="text-blue-500" />,
+      action: () => onVideoUpload(),
+    },
+    {
+      id: "audio", title: "Upload Audio", description: "Upload audio file to editor",
+      icon: <MusicIcon size={16} className="text-emerald-500" />,
+      action: () => onAudioUpload(),
+    },
+    {
+      id: "file", title: "Upload Document", description: "Upload and attach document files",
+      icon: <PaperclipIcon size={16} className="text-amber-500" />,
+      action: () => onFileAttachmentUpload(),
+    },
+    {
       id: "align-left", title: "Align Left", description: "Left-align text",
       icon: <AlignLeft size={16} />,
       action: (e) => e.chain().focus().setTextAlign("left").run(),
@@ -108,12 +142,12 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
     },
     {
       id: "ai-intro", title: "Generate Intro", description: "AI introduction paragraph",
-      icon: <FileText size={16} className="text-blue-500" />,
+      icon: <FileText size={16} className="text-purple-500" />,
       action: () => onAI("intro"),
     },
     {
       id: "ai-ideas", title: "Generate Ideas", description: "AI review topic suggestions",
-      icon: <Lightbulb size={16} className="text-amber-500" />,
+      icon: <Lightbulb size={16} className="text-yellow-500" />,
       action: () => onAI("ideas"),
     },
     {
@@ -122,6 +156,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
       action: () => onInsertMangaRef(),
     },
   ];
+
 
   const filteredCommands = allCommands.filter(
     (cmd) =>
