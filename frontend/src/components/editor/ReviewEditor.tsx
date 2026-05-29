@@ -21,6 +21,7 @@ import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import Youtube from "@tiptap/extension-youtube";
+import BubbleMenuExtension from "@tiptap/extension-bubble-menu";
 import { Search, Loader2, X, BookOpen, HelpCircle, PlayCircle as YoutubeIcon, Trash2 } from "lucide-react";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import { BlurredCover } from "../ui/BlurredCover";
@@ -270,6 +271,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         mangaId: mangaId,
       }),
       Placeholder.configure({ placeholder: 'Viết review của bạn... Gõ "/" để xem các lệnh nhanh.' }),
+      BubbleMenuExtension,
       Underline,
       TextStyle,
       Highlight.configure({ multicolor: true }),
