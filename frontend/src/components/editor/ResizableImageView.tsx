@@ -33,7 +33,7 @@ export const ResizableImageView: React.FC<ResizableImageViewProps> = ({
   const { src, alt, width, alignment, caption } = node.attrs;
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isResizing, setIsResizing] = useState(false);
+  const [, setIsResizing] = useState(false);
   const [showCaption, setShowCaption] = useState(!!caption);
   const [captionText, setCaptionText] = useState(caption || "");
   const [currentWidth, setCurrentWidth] = useState<number | null>(null);
@@ -68,7 +68,6 @@ export const ResizableImageView: React.FC<ResizableImageViewProps> = ({
       setIsResizing(true);
 
       const startX = e.clientX;
-      const startY = e.clientY;
       const container = containerRef.current?.parentElement;
       if (!container || !imgRef.current) return;
 
