@@ -13,6 +13,12 @@ export const ResizableImageExtension = Node.create({
   draggable: true,
   atom: true,
 
+  addOptions() {
+    return {
+      mangaId: "",
+    };
+  },
+
   addAttributes() {
     return {
       src: { default: null },

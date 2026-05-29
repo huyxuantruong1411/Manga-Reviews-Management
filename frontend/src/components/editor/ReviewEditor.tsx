@@ -252,7 +252,9 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      ResizableImageExtension,
+      ResizableImageExtension.configure({
+        mangaId: mangaId,
+      }),
       Placeholder.configure({ placeholder: 'Viết review của bạn... Gõ "/" để xem các lệnh nhanh.' }),
       Underline,
       TextStyle,
@@ -1087,22 +1089,10 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
     setIsSaving(true);
     try {
       await onSaveRef.current(editor.getJSON());
-      // After saving, finalize to clean orphaned media
-      if (reviewId) {
-        try {
-          const finalizeRes = await client.post(`/api/manga/${mangaId}/reviews/${reviewId}/finalize`);
-          (editor as any).commands.clearHistory();
-          if (finalizeRes.data.deleted_orphans > 0) {
-            showToast(`Đã dọn dẹp ${finalizeRes.data.deleted_orphans} file không sử dụng.`, "info");
-          }
-        } catch (err) {
-          console.warn("Finalize failed:", err);
-        }
-      }
     } finally {
       setIsSaving(false);
     }
-  }, [editor, reviewId, mangaId]);
+  }, [editor]);
 
   // Keyboard shortcut Ctrl+S / Cmd+S to save
   useEffect(() => {
@@ -1117,6 +1107,23 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [handleSave]);
+
+  // Finalize (cleanup orphaned media) on unmount to preserve Ctrl+Z during editing session
+  const reviewIdRef = useRef(reviewId);
+  useEffect(() => {
+    reviewIdRef.current = reviewId;
+  }, [reviewId]);
+
+  useEffect(() => {
+    return () => {
+      const finalReviewId = reviewIdRef.current;
+      if (finalReviewId) {
+        client.post(`/api/manga/${mangaId}/reviews/${finalReviewId}/finalize`).catch((err) => {
+          console.warn("Finalize on unmount failed:", err);
+        });
+      }
+    };
+  }, [mangaId]);
 
   return (
     <div className={`review-editor-container mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}>
