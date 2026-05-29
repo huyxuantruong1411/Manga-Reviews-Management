@@ -32,9 +32,9 @@ import { AIResultPanel } from "./AIResultPanel.tsx";
 import { MangaReferenceExtension } from "./MangaReferenceExtension.ts";
 import { MangaReferenceTooltip } from "./MangaReferenceTooltip.tsx";
 import { ResizableImageExtension } from "./ResizableImageExtension.ts";
-import { VideoExtension } from "./VideoExtension.ts";
-import { AudioExtension } from "./AudioExtension.ts";
-import { FileAttachmentExtension } from "./FileAttachmentExtension.ts";
+import { VideoExtension } from "./VideoExtension.tsx";
+import { AudioExtension } from "./AudioExtension.tsx";
+import { FileAttachmentExtension } from "./FileAttachmentExtension.tsx";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 
