@@ -183,4 +183,23 @@
   cursor: col-resize;
 }
 
+/* YouTube video responsive styling */
+.editor-content-wrapper div[data-youtube-video] {
+  margin: 1.5rem auto;
+  width: 100%;
+  max-width: 720px;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.1), 0 2px 8px -1px rgba(0, 0, 0, 0.06);
+}
+
+.editor-content-wrapper div[data-youtube-video] iframe {
+  width: 100% !important;
+  aspect-ratio: 16 / 9;
+  height: auto !important;
+  display: block;
+}
+
+
 

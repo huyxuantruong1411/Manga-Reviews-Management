@@ -49,6 +49,47 @@ const WIDTH_MAP: Record<EditorWidth, string> = {
   full: "max-w-full",
 };
 
+const CustomTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      verticalAlign: {
+        default: "top",
+        parseHTML: element => element.style.verticalAlign || "top",
+        renderHTML: attributes => {
+          if (!attributes.verticalAlign || attributes.verticalAlign === "top") {
+            return {};
+          }
+          return {
+            style: `vertical-align: ${attributes.verticalAlign}`,
+          };
+        },
+      },
+    };
+  },
+});
+
+const CustomTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      verticalAlign: {
+        default: "top",
+        parseHTML: element => element.style.verticalAlign || "top",
+        renderHTML: attributes => {
+          if (!attributes.verticalAlign || attributes.verticalAlign === "top") {
+            return {};
+          }
+          return {
+            style: `vertical-align: ${attributes.verticalAlign}`,
+          };
+        },
+      },
+    };
+  },
+});
+
+
 const REWRITE_STYLES = [
   { id: "default", label: "✨ Viết lại hay hơn, sửa lỗi văn phong & chính tả (Mặc định)" },
   { id: "grammar", label: "📝 Chỉ sửa lỗi chính tả & ngữ pháp" },
@@ -130,17 +171,55 @@ const formatRewriteText = (text: string): string => {
 
 const getYoutubeId = (url: string): string | null => {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  if (match && match[2].length === 11) {
+  const trimmed = url.trim();
+  
+  // Try using URL parser for robust parsing
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    
+    if (host.includes("youtube.com") || host.includes("youtube-nocookie.com")) {
+      // 1. check search params for 'v'
+      const v = parsed.searchParams.get("v");
+      if (v && v.length === 11) return v;
+      
+      // 2. check pathname
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
+      // E.g., /shorts/ID, /embed/ID, /v/ID, /live/ID
+      if (pathParts.length >= 2) {
+        const type = pathParts[0].toLowerCase();
+        const id = pathParts[1];
+        if (["shorts", "embed", "v", "live"].includes(type) && id && id.length === 11) {
+          return id;
+        }
+      }
+    } else if (host.includes("youtu.be")) {
+      // youtu.be/ID
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
+      const id = pathParts[0];
+      if (id && id.length === 11) {
+        return id;
+      }
+    }
+  } catch (e) {
+    // Fallback to regex if URL parsing fails
+  }
+
+  // Regex fallback
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/|live\/)([^#\&\?]*).*/;
+  const match = trimmed.match(regExp);
+  if (match && match[2] && match[2].length === 11) {
     return match[2];
   }
-  const idMatch = url.trim().match(/^[a-zA-Z0-9_-]{11}$/);
+  
+  const idMatch = trimmed.match(/^[a-zA-Z0-9_-]{11}$/);
   if (idMatch) {
-    return url.trim();
+    return trimmed;
   }
+  
   return null;
 };
+
 
 interface ReviewEditorProps {
   mangaId: string;
@@ -283,14 +362,17 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       // Table extensions
       Table.configure({ resizable: true }),
       TableRow,
-      TableHeader,
-      TableCell,
+      CustomTableHeader,
+      CustomTableCell,
       // YouTube embeds
       Youtube.configure({
         inline: false,
         nocookie: true,
+        addPasteHandler: false,
         HTMLAttributes: {
           class: "rounded-xl overflow-hidden my-4",
+          referrerpolicy: "strict-origin-when-cross-origin",
+          referrerPolicy: "strict-origin-when-cross-origin",
         },
       }),
       // Custom media extensions
@@ -343,6 +425,24 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       },
       // Handle paste of images and external image URLs
       handlePaste: (_view, event) => {
+        // Check for pasted YouTube URLs first
+        const text = event.clipboardData?.getData("text/plain");
+        if (text) {
+          const trimmedText = text.trim();
+          if (/^https?:\/\/([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(trimmedText)) {
+            const videoId = getYoutubeId(trimmedText);
+            if (videoId) {
+              event.preventDefault();
+              editor?.commands.setYoutubeVideo({
+                src: `https://www.youtube.com/watch?v=${videoId}`,
+                width: 640,
+                height: 360,
+              });
+              return true;
+            }
+          }
+        }
+
         const files = event.clipboardData?.files;
         if (files && files.length > 0) {
           for (let i = 0; i < files.length; i++) {
@@ -1474,6 +1574,43 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
                   title="Tách ô (Split)"
                 >
                   Split
+                </button>
+
+                <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
+
+                <span className="text-[9px] text-[var(--text-secondary)] uppercase font-extrabold px-1">Dọc:</span>
+                <button
+                  onClick={() => editor.chain().focus().setCellAttribute("verticalAlign", "top").run()}
+                  className={`px-1.5 py-0.5 rounded transition text-[10px] ${
+                    editor.isActive("tableCell", { verticalAlign: "top" }) || editor.isActive("tableHeader", { verticalAlign: "top" })
+                      ? "text-[var(--brand-orange)] font-bold bg-orange-50 dark:bg-orange-900/10"
+                      : "hover:bg-gray-100 dark:hover:bg-zinc-800"
+                  }`}
+                  title="Căn lề trên (Align Top)"
+                >
+                  Top
+                </button>
+                <button
+                  onClick={() => editor.chain().focus().setCellAttribute("verticalAlign", "middle").run()}
+                  className={`px-1.5 py-0.5 rounded transition text-[10px] ${
+                    editor.isActive("tableCell", { verticalAlign: "middle" }) || editor.isActive("tableHeader", { verticalAlign: "middle" })
+                      ? "text-[var(--brand-orange)] font-bold bg-orange-50 dark:bg-orange-900/10"
+                      : "hover:bg-gray-100 dark:hover:bg-zinc-800"
+                  }`}
+                  title="Căn giữa dọc (Align Middle)"
+                >
+                  Mid
+                </button>
+                <button
+                  onClick={() => editor.chain().focus().setCellAttribute("verticalAlign", "bottom").run()}
+                  className={`px-1.5 py-0.5 rounded transition text-[10px] ${
+                    editor.isActive("tableCell", { verticalAlign: "bottom" }) || editor.isActive("tableHeader", { verticalAlign: "bottom" })
+                      ? "text-[var(--brand-orange)] font-bold bg-orange-50 dark:bg-orange-900/10"
+                      : "hover:bg-gray-100 dark:hover:bg-zinc-800"
+                  }`}
+                  title="Căn lề dưới (Align Bottom)"
+                >
+                  Bot
                 </button>
 
                 <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, ChevronDown, ChevronUp, Calendar, Grid, List as ListIcon, LayoutGrid } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -37,9 +37,15 @@ interface Manga {
 
 export const MangaListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showAlert, showToast } = useAlert();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { shouldBlur } = useMangaBlur();
+
+  const getArrayParam = (key: string): string[] => {
+    const val = searchParams.get(key);
+    return val ? val.split(",").filter(Boolean) : [];
+  };
 
   // Library State
   const [mangas, setMangas] = useState<Manga[]>([]);
@@ -47,30 +53,36 @@ export const MangaListPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Filter States
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") || "");
   const [viewMode, setViewMode] = useState<"grid" | "list" | "card">(() => {
     return (localStorage.getItem("library_view_mode") as any) || "grid";
   });
   const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
 
-  const [readStatus, setReadStatus] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [excludeTags, setExcludeTags] = useState<string[]>([]);
-  const [tagMode, setTagMode] = useState<"all" | "any">("all");
-  const [contentRatings, setContentRatings] = useState<string[]>([]);
-  const [demographics, setDemographics] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
-  const [originalLanguages, setOriginalLanguages] = useState<string[]>([]);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
-  const [selectedArtists, setSelectedArtists] = useState<string[]>([]);
-  const [year, setYear] = useState("");
-  const [ratingMin, setRatingMin] = useState<number | "">("");
-  const [ratingMax, setRatingMax] = useState<number | "">("");
-  const [sortBy, setSortBy] = useState("added_at");
-  const [sortOrder, setSortOrder] = useState("desc");
-  const [page, setPage] = useState(1);
-  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
+  const [readStatus, setReadStatus] = useState(() => searchParams.get("readStatus") || "");
+  const [selectedTags, setSelectedTags] = useState<string[]>(() => getArrayParam("selectedTags"));
+  const [excludeTags, setExcludeTags] = useState<string[]>(() => getArrayParam("excludeTags"));
+  const [tagMode, setTagMode] = useState<"all" | "any">(() => (searchParams.get("tagMode") as any) || "all");
+  const [contentRatings, setContentRatings] = useState<string[]>(() => getArrayParam("contentRatings"));
+  const [demographics, setDemographics] = useState<string[]>(() => getArrayParam("demographics"));
+  const [statuses, setStatuses] = useState<string[]>(() => getArrayParam("statuses"));
+  const [originalLanguages, setOriginalLanguages] = useState<string[]>(() => getArrayParam("originalLanguages"));
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(() => getArrayParam("selectedAuthors"));
+  const [selectedArtists, setSelectedArtists] = useState<string[]>(() => getArrayParam("selectedArtists"));
+  const [year, setYear] = useState(() => searchParams.get("year") || "");
+  const [ratingMin, setRatingMin] = useState<number | "">(() => {
+    const val = searchParams.get("ratingMin");
+    return val ? Number(val) : "";
+  });
+  const [ratingMax, setRatingMax] = useState<number | "">(() => {
+    const val = searchParams.get("ratingMax");
+    return val ? Number(val) : "";
+  });
+  const [sortBy, setSortBy] = useState(() => searchParams.get("sortBy") || "added_at");
+  const [sortOrder, setSortOrder] = useState(() => searchParams.get("sortOrder") || "desc");
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
+  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(() => searchParams.get("isAdvancedSearchOpen") === "true");
   const [limit, setLimit] = useState<number>(() => {
     return Number(localStorage.getItem("library_page_limit")) || 12;
   });
@@ -113,13 +125,65 @@ export const MangaListPage: React.FC = () => {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
-      setPage(1);
+      if (search !== debouncedSearch) {
+        setPage(1);
+      }
     }, 300);
 
     return () => {
       clearTimeout(handler);
     };
   }, [search]);
+
+  // Sync filter state to URL Search Params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (readStatus) params.set("readStatus", readStatus);
+    if (selectedTags.length) params.set("selectedTags", selectedTags.join(","));
+    if (excludeTags.length) params.set("excludeTags", excludeTags.join(","));
+    if (tagMode !== "all") params.set("tagMode", tagMode);
+    if (contentRatings.length) params.set("contentRatings", contentRatings.join(","));
+    if (demographics.length) params.set("demographics", demographics.join(","));
+    if (statuses.length) params.set("statuses", statuses.join(","));
+    if (originalLanguages.length) params.set("originalLanguages", originalLanguages.join(","));
+    if (selectedAuthors.length) params.set("selectedAuthors", selectedAuthors.join(","));
+    if (selectedArtists.length) params.set("selectedArtists", selectedArtists.join(","));
+    if (year) params.set("year", year);
+    if (ratingMin !== "") params.set("ratingMin", String(ratingMin));
+    if (ratingMax !== "") params.set("ratingMax", String(ratingMax));
+    if (sortBy !== "added_at") params.set("sortBy", sortBy);
+    if (sortOrder !== "desc") params.set("sortOrder", sortOrder);
+    if (page !== 1) params.set("page", String(page));
+    if (isAdvancedSearchOpen) params.set("isAdvancedSearchOpen", "true");
+
+    const currentQuery = searchParams.toString();
+    const newQuery = params.toString();
+    if (currentQuery !== newQuery) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    search,
+    readStatus,
+    selectedTags,
+    excludeTags,
+    tagMode,
+    contentRatings,
+    demographics,
+    statuses,
+    originalLanguages,
+    selectedAuthors,
+    selectedArtists,
+    year,
+    ratingMin,
+    ratingMax,
+    sortBy,
+    sortOrder,
+    page,
+    isAdvancedSearchOpen,
+    searchParams,
+    setSearchParams
+  ]);
 
   // Creator links helper
   const renderCreatorLinks = (creatorString: string) => {
@@ -132,15 +196,20 @@ export const MangaListPage: React.FC = () => {
         {creators.map((name, index) => (
           <React.Fragment key={name}>
             {index > 0 && <span className="text-[var(--text-secondary)]">, </span>}
-            <span
+            <a
+              href={`/author/${encodeURIComponent(name)}`}
               onClick={(e) => {
+                if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+                  return;
+                }
                 e.stopPropagation();
+                e.preventDefault();
                 navigate(`/author/${encodeURIComponent(name)}`);
               }}
               className="hover:text-[var(--brand-orange)] hover:underline cursor-pointer transition duration-150"
             >
               {name}
-            </span>
+            </a>
           </React.Fragment>
         ))}
       </>
@@ -1087,13 +1156,19 @@ export const MangaListPage: React.FC = () => {
           {viewMode === "grid" && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {mangas.map((manga) => (
-                <div
+                <a
                   key={manga._id}
+                  href={`/manga/${manga._id}`}
                   onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                    if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
                       return;
                     }
+                    const target = e.target as HTMLElement;
+                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                      e.preventDefault();
+                      return;
+                    }
+                    e.preventDefault();
                     navigate(`/manga/${manga._id}`);
                   }}
                   className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col group"
@@ -1104,6 +1179,7 @@ export const MangaListPage: React.FC = () => {
                     onClick={(e) => {
                       if (manga.cover_url) {
                         e.stopPropagation();
+                        e.preventDefault();
                         setZoomedCoverUrl(manga.cover_url);
                       }
                     }}
@@ -1207,7 +1283,7 @@ export const MangaListPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           )}
@@ -1238,6 +1314,15 @@ export const MangaListPage: React.FC = () => {
                         }
                         navigate(`/manga/${manga._id}`);
                       }}
+                      onAuxClick={(e) => {
+                        if (e.button === 1) {
+                          const target = e.target as HTMLElement;
+                          if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                            return;
+                          }
+                          window.open(`/manga/${manga._id}`, "_blank");
+                        }
+                      }}
                       className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 cursor-pointer transition duration-150"
                     >
                       <td className="py-3 px-6 text-center">
@@ -1246,6 +1331,7 @@ export const MangaListPage: React.FC = () => {
                           onClick={(e) => {
                             if (manga.cover_url) {
                               e.stopPropagation();
+                              e.preventDefault();
                               setZoomedCoverUrl(manga.cover_url);
                             }
                           }}
@@ -1264,7 +1350,19 @@ export const MangaListPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 font-bold text-[var(--text-primary)]">
                         <div className="line-clamp-2 max-w-xs md:max-w-sm" title={manga.title}>
-                          {manga.title}
+                          <a
+                            href={`/manga/${manga._id}`}
+                            onClick={(e) => {
+                              if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+                                return;
+                              }
+                              e.preventDefault();
+                              navigate(`/manga/${manga._id}`);
+                            }}
+                            className="hover:text-[var(--brand-orange)] hover:underline transition duration-150"
+                          >
+                            {manga.title}
+                          </a>
                         </div>
                       </td>
                       <td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
@@ -1346,15 +1444,20 @@ export const MangaListPage: React.FC = () => {
                         </select>
                       </td>
                       <td className="py-3 px-6 text-right">
-                        <button
+                        <a
+                          href={`/manga/${manga._id}`}
                           onClick={(e) => {
+                            if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+                              return;
+                            }
                             e.stopPropagation();
+                            e.preventDefault();
                             navigate(`/manga/${manga._id}`);
                           }}
-                          className="px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
+                          className="inline-block px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
                         >
                           View Details
-                        </button>
+                        </a>
                       </td>
                     </tr>
                   ))}
@@ -1366,13 +1469,19 @@ export const MangaListPage: React.FC = () => {
           {viewMode === "card" && (
             <div className="space-y-4">
               {mangas.map((manga) => (
-                <div
+                <a
                   key={manga._id}
+                  href={`/manga/${manga._id}`}
                   onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                    if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
                       return;
                     }
+                    const target = e.target as HTMLElement;
+                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                      e.preventDefault();
+                      return;
+                    }
+                    e.preventDefault();
                     navigate(`/manga/${manga._id}`);
                   }}
                   className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col md:flex-row group"
@@ -1383,6 +1492,7 @@ export const MangaListPage: React.FC = () => {
                     onClick={(e) => {
                       if (manga.cover_url) {
                         e.stopPropagation();
+                        e.preventDefault();
                         setZoomedCoverUrl(manga.cover_url);
                       }
                     }}
@@ -1505,18 +1615,23 @@ export const MangaListPage: React.FC = () => {
                         })}
                       </div>
 
-                      <button
+                      <a
+                        href={`/manga/${manga._id}`}
                         onClick={(e) => {
+                          if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+                            return;
+                          }
                           e.stopPropagation();
+                          e.preventDefault();
                           navigate(`/manga/${manga._id}`);
                         }}
                         className="flex-shrink-0 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow transition duration-200"
                       >
                         View Details
-                      </button>
+                      </a>
                     </div>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           )}
