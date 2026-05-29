@@ -225,6 +225,22 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   // Upload progress state
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
+  // Sticky action bar measurement
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    if (headerRef.current) {
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          setHeaderHeight(entry.target.clientHeight);
+        }
+      });
+      resizeObserver.observe(headerRef.current);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -1147,7 +1163,10 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       />
 
       {/* Editor Header / Action Bar */}
-      <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
+      <div 
+        ref={headerRef}
+        className="sticky top-[64px] z-30 flex items-center justify-between border-b border-[var(--border-primary)] pb-4 pt-2 bg-[var(--bg-primary)]"
+      >
         <button
           onClick={onBack}
           className="flex items-center space-x-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition animate-pulse-subtle"
@@ -1338,7 +1357,10 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         </div>
 
         {/* Toolbar */}
-        <div className="sticky top-[64px] z-30 py-2 bg-[var(--bg-card)]">
+        <div 
+          className="sticky z-30 py-2 bg-[var(--bg-card)]"
+          style={{ top: `${64 + headerHeight}px` }}
+        >
           <EditorToolbar
             editor={editor}
             onImageUpload={() => fileInputRef.current?.click()}
