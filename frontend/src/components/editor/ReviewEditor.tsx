@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -21,7 +21,7 @@ import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import Youtube from "@tiptap/extension-youtube";
-import { Search, Loader2, X, BookOpen, HelpCircle, PlayCircle as YoutubeIcon } from "lucide-react";
+import { Search, Loader2, X, BookOpen, HelpCircle, PlayCircle as YoutubeIcon, Trash2 } from "lucide-react";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import { BlurredCover } from "../ui/BlurredCover";
 
@@ -124,6 +124,20 @@ const formatRewriteText = (text: string): string => {
   formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
   formatted = formatted.replace(/\*(.*?)\*/g, "<em>$1</em>");
   return formatted;
+};
+
+const getYoutubeId = (url: string): string | null => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return match[2];
+  }
+  const idMatch = url.trim().match(/^[a-zA-Z0-9_-]{11}$/);
+  if (idMatch) {
+    return url.trim();
+  }
+  return null;
 };
 
 interface ReviewEditorProps {
@@ -666,8 +680,17 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
   // Insert YouTube embed
   const handleInsertYoutube = useCallback(() => {
     if (!editor || !youtubeUrl.trim()) return;
+    
+    const videoId = getYoutubeId(youtubeUrl.trim());
+    if (!videoId) {
+      showToast("URL YouTube không hợp lệ. Vui lòng nhập link video YouTube chính xác.", "warning");
+      return;
+    }
+
+    const cleanUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
     editor.commands.setYoutubeVideo({
-      src: youtubeUrl.trim(),
+      src: cleanUrl,
       width: 640,
       height: 360,
     });
@@ -1394,6 +1417,76 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
             onInsertMangaRef={handleInsertMangaReference}
           />
           <EditorContent editor={editor} />
+
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              tippyOptions={{ duration: 100 }}
+              shouldShow={({ editor }) => editor.isActive("table")}
+            >
+              <div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-xl px-2 py-1.5 text-xs font-semibold text-[var(--text-secondary)] floating-toolbar animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => editor.chain().focus().addRowBefore().run()}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition"
+                  title="Thêm dòng phía trên"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button
+                  onClick={() => editor.chain().focus().addRowAfter().run()}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition"
+                  title="Thêm dòng phía dưới"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+                </button>
+                
+                <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
+                
+                <button
+                  onClick={() => editor.chain().focus().addColumnBefore().run()}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition"
+                  title="Thêm cột bên trái"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+                </button>
+                <button
+                  onClick={() => editor.chain().focus().addColumnAfter().run()}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition"
+                  title="Thêm cột bên phải"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                
+                <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
+
+                <button
+                  onClick={() => editor.chain().focus().mergeCells().run()}
+                  className="px-1.5 py-0.5 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition text-[10px] font-bold text-[var(--brand-orange)]"
+                  title="Gộp các ô (Merge)"
+                >
+                  Merge
+                </button>
+                <button
+                  onClick={() => editor.chain().focus().splitCell().run()}
+                  className="px-1.5 py-0.5 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition text-[10px]"
+                  title="Tách ô (Split)"
+                >
+                  Split
+                </button>
+
+                <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
+
+                <button
+                  onClick={() => editor.chain().focus().deleteTable().run()}
+                  className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 rounded transition flex items-center space-x-1"
+                  title="Xóa toàn bộ bảng"
+                >
+                  <Trash2 size={14} />
+                  <span className="text-[10px] font-bold">Xóa Bảng</span>
+                </button>
+              </div>
+            </BubbleMenu>
+          )}
         </div>
       </div>
 

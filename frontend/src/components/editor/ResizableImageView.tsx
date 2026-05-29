@@ -372,7 +372,7 @@ export const ResizableImageView: React.FC<ResizableImageViewProps> = ({
 
         {/* Image with resize handles */}
         <div
-          onClick={selectNode}
+          onMouseDown={selectNode}
           className={`relative inline-block w-full cursor-pointer ${selected ? "ring-2 ring-[var(--brand-orange)] ring-offset-2 rounded-lg" : ""}`}
         >
           <img
