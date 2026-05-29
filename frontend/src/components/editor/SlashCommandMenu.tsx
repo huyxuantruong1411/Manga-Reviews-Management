@@ -10,7 +10,7 @@ import {
   Quote, Minus, Code2, Image as ImageIcon,
   AlignLeft, AlignCenter, AlignRight,
   FileText, Lightbulb, AtSign,
-  Youtube as YoutubeIcon, Video as VideoIcon, Music as MusicIcon, Paperclip as PaperclipIcon, Table
+  PlayCircle as YoutubeIcon, Video as VideoIcon, Music as MusicIcon, Paperclip as PaperclipIcon, Table
 } from "lucide-react";
 
 interface SlashCommand {

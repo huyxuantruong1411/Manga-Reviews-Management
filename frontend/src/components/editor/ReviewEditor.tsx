@@ -16,12 +16,12 @@ import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Table from "@tiptap/extension-table";
+import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import Youtube from "@tiptap/extension-youtube";
-import { Search, Loader2, X, BookOpen, HelpCircle, Upload, Youtube as YoutubeIcon } from "lucide-react";
+import { Search, Loader2, X, BookOpen, HelpCircle, PlayCircle as YoutubeIcon } from "lucide-react";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import { BlurredCover } from "../ui/BlurredCover";
 
@@ -273,7 +273,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         autocapitalize: "off",
       },
       // Handle drag & drop of external images and files
-      handleDrop: (view, event, _slice, moved) => {
+      handleDrop: (_view, event, _slice, moved) => {
         if (moved) return false; // Internal move, let Tiptap handle it
 
         const files = event.dataTransfer?.files;
@@ -307,7 +307,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         return false;
       },
       // Handle paste of images and external image URLs
-      handlePaste: (view, event) => {
+      handlePaste: (_view, event) => {
         const files = event.clipboardData?.files;
         if (files && files.length > 0) {
           for (let i = 0; i < files.length; i++) {
@@ -1075,7 +1075,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
       if (reviewId) {
         try {
           const finalizeRes = await client.post(`/api/manga/${mangaId}/reviews/${reviewId}/finalize`);
-          editor.commands.clearHistory();
+          (editor as any).commands.clearHistory();
           if (finalizeRes.data.deleted_orphans > 0) {
             showToast(`Đã dọn dẹp ${finalizeRes.data.deleted_orphans} file không sử dụng.`, "info");
           }
@@ -1195,11 +1195,11 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || uploadingMedia}
             className="px-4 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm transition disabled:opacity-60"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            <span>{isSaving ? "Saving..." : "Save Review"}</span>
+            <span>{isSaving ? "Saving..." : uploadingMedia ? "Uploading..." : "Save Review"}</span>
           </button>
         </div>
       </div>

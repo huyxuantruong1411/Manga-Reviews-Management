@@ -13,7 +13,7 @@ import {
   Link as LinkIcon, Image as ImageIcon, AtSign,
   Undo, Redo,
   Sparkles, Wand2, Lightbulb, FileText, Highlighter,
-  Youtube as YoutubeIcon, Video, Music, Paperclip, Table, ChevronDown, Trash2
+  PlayCircle as YoutubeIcon, Video, Music, Paperclip, Table, ChevronDown, Trash2
 } from "lucide-react";
 
 interface EditorToolbarProps {
