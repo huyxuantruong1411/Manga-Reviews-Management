@@ -1424,7 +1424,6 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           {editor && (
             <BubbleMenu
               editor={editor}
-              tippyOptions={{ duration: 100 }}
               shouldShow={({ editor }) => editor.isActive("table")}
             >
               <div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-xl px-2 py-1.5 text-xs font-semibold text-[var(--text-secondary)] floating-toolbar animate-in fade-in zoom-in-95 duration-100">
