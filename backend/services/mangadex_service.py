@@ -442,6 +442,8 @@ class MangaDexService:
             "content_rating": attr.get("contentRating"),
             "publication_demographic": attr.get("publicationDemographic"),
             "original_language": attr.get("originalLanguage"),
+            "last_volume": attr.get("lastVolume"),
+            "last_chapter": attr.get("lastChapter"),
             "links": self.parse_mangadex_links(attr.get("links", {}), m_id)
         }
 

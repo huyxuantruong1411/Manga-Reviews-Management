@@ -34,6 +34,10 @@ class MangaBase(BaseModel):
     publication_demographic: Optional[str] = None
     original_language: Optional[str] = None
     download_path: Optional[str] = None
+    published_start_date: Optional[str] = None
+    published_end_date: Optional[str] = None
+    volumes: Optional[int] = None
+    chapters: Optional[int] = None
 
     @field_validator("personal_rating")
     @classmethod
@@ -73,6 +77,10 @@ class MangaUpdate(BaseModel):
     publication_demographic: Optional[str] = None
     original_language: Optional[str] = None
     download_path: Optional[str] = None
+    published_start_date: Optional[str] = None
+    published_end_date: Optional[str] = None
+    volumes: Optional[int] = None
+    chapters: Optional[int] = None
     
     @field_validator("personal_rating")
     @classmethod

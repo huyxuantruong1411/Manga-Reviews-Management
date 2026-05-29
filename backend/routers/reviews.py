@@ -179,23 +179,24 @@ async def upload_review_image(manga_id: str = Path(...), file: UploadFile = File
 
     minio = minio_service.client
 
-    # Ensure bucket exists
+    # Ensure bucket exists and has public policy
     try:
         if not minio.bucket_exists(REVIEW_IMAGES_BUCKET):
             minio.make_bucket(REVIEW_IMAGES_BUCKET)
-            import json
-            policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"AWS": ["*"]},
-                        "Action": ["s3:GetObject"],
-                        "Resource": [f"arn:aws:s3:::{REVIEW_IMAGES_BUCKET}/*"]
-                    }
-                ]
-            }
-            minio.set_bucket_policy(REVIEW_IMAGES_BUCKET, json.dumps(policy))
+        
+        import json
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{REVIEW_IMAGES_BUCKET}/*"]
+                }
+            ]
+        }
+        minio.set_bucket_policy(REVIEW_IMAGES_BUCKET, json.dumps(policy))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"MinIO bucket error: {str(e)}")
 

@@ -28,6 +28,7 @@ import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 import { BlurredCover } from "../components/ui/BlurredCover";
+import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
 
 interface Tag {
   _id: string;
@@ -63,6 +64,10 @@ interface Manga {
   content_rating?: string | null;
   publication_demographic?: string | null;
   original_language?: string | null;
+  published_start_date?: string | null;
+  published_end_date?: string | null;
+  volumes?: number | null;
+  chapters?: number | null;
 }
 
 const getReadStatusInfo = (status: string) => {
@@ -556,6 +561,42 @@ export const MangaDetailPage: React.FC = () => {
   const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
+  // Expanded Metadata Edit States
+  const [editTitle, setEditTitle] = useState("");
+  const [editAuthor, setEditAuthor] = useState("");
+  const [editArtist, setEditArtist] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editYear, setEditYear] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editContentRating, setEditContentRating] = useState("");
+  const [editPublicationDemographic, setEditPublicationDemographic] = useState("");
+  const [editOriginalLanguage, setEditOriginalLanguage] = useState("");
+  const [editPublishedStartDate, setEditPublishedStartDate] = useState("");
+  const [editPublishedEndDate, setEditPublishedEndDate] = useState("");
+  const [editVolumes, setEditVolumes] = useState<number | "">( "");
+  const [editChapters, setEditChapters] = useState<number | "">( "");
+
+  const handleOpenEdit = () => {
+    if (!manga) return;
+    setEditTitle(manga.title || "");
+    setEditAuthor(manga.author || "");
+    setEditArtist(manga.artist || "");
+    setEditDescription(manga.description || "");
+    setEditYear(manga.year || "");
+    setEditStatus(manga.status || "");
+    setEditContentRating(manga.content_rating || "");
+    setEditPublicationDemographic(manga.publication_demographic || "");
+    setEditOriginalLanguage(manga.original_language || "");
+    setEditPublishedStartDate(manga.published_start_date || "");
+    setEditPublishedEndDate(manga.published_end_date || "");
+    setEditVolumes(manga.volumes ?? "");
+    setEditChapters(manga.chapters ?? "");
+    setEditTags(manga.tag_ids || []);
+    setEditCoverFile(null);
+    setEditCoverPreview(null);
+    setIsEditOpen(true);
+  };
+
   // Download Modal States
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [languages, setLanguages] = useState<string[]>([]);
@@ -850,6 +891,19 @@ export const MangaDetailPage: React.FC = () => {
     try {
       setUpdating(true);
       const payload: any = {
+        title: editTitle,
+        author: editAuthor,
+        artist: editArtist,
+        description: editDescription,
+        year: editYear || null,
+        status: editStatus || null,
+        content_rating: editContentRating || null,
+        publication_demographic: editPublicationDemographic || null,
+        original_language: editOriginalLanguage || null,
+        published_start_date: editPublishedStartDate || null,
+        published_end_date: editPublishedEndDate || null,
+        volumes: editVolumes === "" ? null : Number(editVolumes),
+        chapters: editChapters === "" ? null : Number(editChapters),
         read_status: manga?.read_status || "unread",
         tag_ids: editTags,
         personal_rating: manga?.personal_rating ?? null,
@@ -1354,7 +1408,7 @@ export const MangaDetailPage: React.FC = () => {
             </h1>
 
             {/* Author details grid */}
-            <div className="grid grid-cols-2 gap-4 pt-2 text-sm text-[var(--text-secondary)]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 text-sm text-[var(--text-secondary)]">
               <div className="flex items-center space-x-2">
                 <User size={16} className="text-[var(--brand-orange)]" />
                 <span>
@@ -1379,13 +1433,37 @@ export const MangaDetailPage: React.FC = () => {
                   <strong>Publish Status:</strong> {manga.status}
                 </span>
               </div>
+              <div className="flex items-center space-x-2">
+                <Calendar size={16} className="text-zinc-400" />
+                <span>
+                  <strong>Start Date:</strong> {manga.published_start_date || "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Calendar size={16} className="text-zinc-400" />
+                <span>
+                  <strong>End Date:</strong> {manga.published_end_date || "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <BookOpen size={16} className="text-zinc-400" />
+                <span>
+                  <strong>Volumes:</strong> {manga.volumes ?? "N/A"}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <BookOpen size={16} className="text-zinc-400" />
+                <span>
+                  <strong>Chapters:</strong> {manga.chapters ?? "N/A"}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Action Buttons panel */}
           <div className="flex flex-wrap gap-3 pt-4 border-t border-[var(--border-primary)]">
             <button
-              onClick={() => setIsEditOpen(true)}
+              onClick={handleOpenEdit}
               className="flex items-center space-x-2 px-4 py-2 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition"
             >
               <Edit2 size={14} />
@@ -1960,7 +2038,7 @@ export const MangaDetailPage: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
             onSubmit={handleSaveEdit}
-            className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200"
+            className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200"
           >
             <div className="flex justify-between items-center border-b border-[var(--border-primary)] pb-3">
               <h2 className="text-lg font-bold">Edit Review Metadata</h2>
@@ -1973,7 +2051,189 @@ export const MangaDetailPage: React.FC = () => {
               </button>
             </div>
 
+            {/* Form Fields Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Title */}
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Manga Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
 
+              {/* Author */}
+              <CreatorLiveSearchInput
+                label="Author"
+                role="author"
+                value={editAuthor}
+                onChange={setEditAuthor}
+                placeholder="e.g. Oda Eiichiro"
+              />
+
+              {/* Artist */}
+              <CreatorLiveSearchInput
+                label="Artist"
+                role="artist"
+                value={editArtist}
+                onChange={setEditArtist}
+                placeholder="e.g. Yusuke Murata"
+              />
+
+              {/* Description */}
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Description / Synopsis
+                </label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Publishing Status
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                >
+                  <option value="">Unknown</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="completed">Completed</option>
+                  <option value="hiatus">Hiatus</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Year */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Publishing Year
+                </label>
+                <input
+                  type="text"
+                  value={editYear}
+                  onChange={(e) => setEditYear(e.target.value)}
+                  placeholder="e.g. 2020"
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* Content Rating */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Content Rating
+                </label>
+                <select
+                  value={editContentRating}
+                  onChange={(e) => setEditContentRating(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                >
+                  <option value="">None</option>
+                  <option value="safe">Safe</option>
+                  <option value="suggestive">Suggestive</option>
+                  <option value="erotica">Erotica</option>
+                  <option value="pornographic">Pornographic</option>
+                </select>
+              </div>
+
+              {/* Publication Demographic */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Publication Demographic
+                </label>
+                <select
+                  value={editPublicationDemographic}
+                  onChange={(e) => setEditPublicationDemographic(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                >
+                  <option value="">None</option>
+                  <option value="shounen">Shounen</option>
+                  <option value="shoujo">Shoujo</option>
+                  <option value="seinen">Seinen</option>
+                  <option value="josei">Josei</option>
+                </select>
+              </div>
+
+              {/* Original Language */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Original Language
+                </label>
+                <input
+                  type="text"
+                  value={editOriginalLanguage}
+                  onChange={(e) => setEditOriginalLanguage(e.target.value)}
+                  placeholder="e.g. ja, ko, zh"
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* Volumes */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Volumes Count
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editVolumes}
+                  onChange={(e) => setEditVolumes(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* Chapters */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Chapters Count
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editChapters}
+                  onChange={(e) => setEditChapters(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Published Start Date
+                </label>
+                <input
+                  type="date"
+                  value={editPublishedStartDate}
+                  onChange={(e) => setEditPublishedStartDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">
+                  Published End Date
+                </label>
+                <input
+                  type="date"
+                  value={editPublishedEndDate}
+                  onChange={(e) => setEditPublishedEndDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+            </div>
 
             {/* Custom Tag Assignment */}
             {allTags.length > 0 && (

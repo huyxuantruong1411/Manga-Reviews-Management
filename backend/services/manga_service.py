@@ -17,6 +17,14 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         doc["_id"] = str(doc["_id"])
     return doc
 
+def safe_int(val: Any) -> Optional[int]:
+    if not val:
+        return None
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return None
+
 def get_tag_default_color(name_en: str) -> str:
     name_lower = name_en.lower()
     if name_lower in ["gore", "sexual violence", "mature"]:
@@ -315,6 +323,10 @@ class MangaService:
             "content_rating": details.get("content_rating"),
             "publication_demographic": details.get("publication_demographic"),
             "original_language": details.get("original_language"),
+            "published_start_date": None,
+            "published_end_date": None,
+            "volumes": safe_int(details.get("last_volume")),
+            "chapters": safe_int(details.get("last_chapter")),
             "added_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -357,6 +369,10 @@ class MangaService:
             "content_rating": manual_data.content_rating,
             "publication_demographic": manual_data.publication_demographic,
             "original_language": manual_data.original_language,
+            "published_start_date": manual_data.published_start_date,
+            "published_end_date": manual_data.published_end_date,
+            "volumes": manual_data.volumes,
+            "chapters": manual_data.chapters,
             "added_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -533,6 +549,8 @@ class MangaService:
             "content_rating": details.get("content_rating"),
             "publication_demographic": details.get("publication_demographic"),
             "original_language": details.get("original_language"),
+            "volumes": safe_int(details.get("last_volume")) if safe_int(details.get("last_volume")) is not None else manga.get("volumes"),
+            "chapters": safe_int(details.get("last_chapter")) if safe_int(details.get("last_chapter")) is not None else manga.get("chapters"),
             "updated_at": datetime.utcnow()
         }
 
