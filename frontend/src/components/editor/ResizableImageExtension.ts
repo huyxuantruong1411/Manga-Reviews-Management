@@ -8,7 +8,7 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { ResizableImageView } from "./ResizableImageView";
 
 export const ResizableImageExtension = Node.create({
-  name: "resizableImage",
+  name: "image",
   group: "block",
   draggable: true,
   atom: true,

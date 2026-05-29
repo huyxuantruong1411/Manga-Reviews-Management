@@ -499,7 +499,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           { headers: { "Content-Type": "multipart/form-data" } }
         );
         editor.chain().focus().insertContent({
-          type: "resizableImage",
+          type: "image",
           attrs: { src: res.data.url, alt: file.name },
         }).run();
       } catch (err) {
@@ -524,7 +524,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
           { url: imageUrl }
         );
         editor.chain().focus().insertContent({
-          type: "resizableImage",
+          type: "image",
           attrs: { src: res.data.url },
         }).run();
         showToast("Đã tải ảnh thành công!", "success");
@@ -532,7 +532,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
         console.error("External image proxy failed", err);
         // Fallback: insert direct URL
         editor.chain().focus().insertContent({
-          type: "resizableImage",
+          type: "image",
           attrs: { src: imageUrl },
         }).run();
         showToast("Không thể proxy ảnh, đã chèn URL trực tiếp.", "warning");
