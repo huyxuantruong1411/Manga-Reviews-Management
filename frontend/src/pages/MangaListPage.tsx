@@ -1237,7 +1237,8 @@ export const MangaListPage: React.FC = () => {
                       return;
                     }
                     const target = e.target as HTMLElement;
-                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                    const closestAnchor = target.closest("a");
+                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || (closestAnchor && closestAnchor !== e.currentTarget)) {
                       e.preventDefault();
                       return;
                     }
@@ -1550,7 +1551,8 @@ export const MangaListPage: React.FC = () => {
                       return;
                     }
                     const target = e.target as HTMLElement;
-                    if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
+                    const closestAnchor = target.closest("a");
+                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || (closestAnchor && closestAnchor !== e.currentTarget)) {
                       e.preventDefault();
                       return;
                     }
