@@ -146,7 +146,7 @@ const renderCustomPieLabel = ({
   const textAnchor = cos >= 0 ? "start" : "end";
 
   return (
-    <g>
+    <g className="pie-percent-label">
       {/* Connector line */}
       <path
         d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
@@ -656,7 +656,18 @@ export const AnalyticsPage: React.FC = () => {
     : [];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-24">
+    <div className={`max-w-6xl mx-auto space-y-8 pb-24 ${showPercentages ? "" : "hide-pie-labels"}`}>
+      <style>{`
+        .pie-percent-label {
+          transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .hide-pie-labels .pie-percent-label {
+          opacity: 0;
+          pointer-events: none;
+        }
+      `}</style>
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
@@ -1261,7 +1272,7 @@ export const AnalyticsPage: React.FC = () => {
                         outerRadius={72}
                         paddingAngle={5}
                         dataKey="value"
-                        label={showPercentages ? renderCustomPieLabel : false}
+                        label={renderCustomPieLabel}
                         labelLine={false}
                       >
                         {pieData.map((entry, index) => (
@@ -1308,7 +1319,7 @@ export const AnalyticsPage: React.FC = () => {
                           outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
-                          label={showPercentages ? renderCustomPieLabel : false}
+                          label={renderCustomPieLabel}
                           labelLine={false}
                         >
                           {metadataDists.demographic.filter(d => d.value > 0).map((entry, index) => (
@@ -1351,7 +1362,7 @@ export const AnalyticsPage: React.FC = () => {
                           outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
-                          label={showPercentages ? renderCustomPieLabel : false}
+                          label={renderCustomPieLabel}
                           labelLine={false}
                         >
                           {metadataDists.publishing_status.filter(d => d.value > 0).map((entry, index) => (
@@ -1394,7 +1405,7 @@ export const AnalyticsPage: React.FC = () => {
                           outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
-                          label={showPercentages ? renderCustomPieLabel : false}
+                          label={renderCustomPieLabel}
                           labelLine={false}
                         >
                           {metadataDists.content_rating.filter(d => d.value > 0).map((entry, index) => (
