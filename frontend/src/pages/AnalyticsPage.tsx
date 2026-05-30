@@ -120,6 +120,58 @@ interface YearDistribution {
   max_year: number | null;
 }
 
+const RADIAN = Math.PI / 180;
+
+const renderCustomPieLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+  value,
+  name
+}: any) => {
+  const pct = typeof percent === "number" ? percent : 0;
+  if (pct < 0.015) return null;
+
+  const sin = Math.sin(-RADIAN * midAngle);
+  const cos = Math.cos(-RADIAN * midAngle);
+  const sx = cx + outerRadius * cos;
+  const sy = cy + outerRadius * sin;
+  const mx = cx + (outerRadius + 8) * cos;
+  const my = cy + (outerRadius + 8) * sin;
+  const ex = mx + (cos >= 0 ? 1 : -1) * 12;
+  const ey = my;
+  const textAnchor = cos >= 0 ? "start" : "end";
+
+  return (
+    <g>
+      {/* Connector line */}
+      <path
+        d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
+        stroke="var(--text-secondary)"
+        strokeWidth={1}
+        fill="none"
+        opacity={0.5}
+      />
+      {/* Dot at start of line */}
+      <circle cx={sx} cy={sy} r={2} fill="var(--text-secondary)" opacity={0.5} />
+      {/* Percentage text */}
+      <text
+        x={ex + (cos >= 0 ? 1 : -1) * 4}
+        y={ey}
+        dy={4}
+        textAnchor={textAnchor}
+        fill="var(--text-primary)"
+        className="text-[10px] font-bold"
+      >
+        {`${(pct * 100).toFixed(1)}%`}
+      </text>
+    </g>
+  );
+};
+
 export const AnalyticsPage: React.FC = () => {
   // Library All Tags
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -175,6 +227,7 @@ export const AnalyticsPage: React.FC = () => {
   const [activeReadStatusFilters, setActiveReadStatusFilters] = useState<Set<string>>(
     new Set(["unread", "reading", "completed", "dropped", "on_hold", "plan_to_read", "re_reading"])
   );
+  const [showPercentages, setShowPercentages] = useState(true);
   const [useCustomRanges, setUseCustomRanges] = useState(false);
   const [customRangeInput, setCustomRangeInput] = useState("");
   const [zoomStartYear, setZoomStartYear] = useState<number | "">("");
@@ -616,13 +669,25 @@ export const AnalyticsPage: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={fetchAnalytics}
-          className="px-4 py-2 bg-[var(--bg-card)] hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-[var(--border-primary)] rounded-xl font-bold text-xs flex items-center space-x-2 transition shadow-sm"
-        >
-          <RefreshCw size={14} />
-          <span>Refresh Analytics</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center space-x-2 cursor-pointer bg-[var(--bg-card)] px-4 py-2 border border-[var(--border-primary)] rounded-xl font-bold text-xs shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition select-none text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+            <input
+              type="checkbox"
+              checked={showPercentages}
+              onChange={(e) => setShowPercentages(e.target.checked)}
+              className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
+            />
+            <span>Show Pie Percentages</span>
+          </label>
+
+          <button
+            onClick={fetchAnalytics}
+            className="px-4 py-2 bg-[var(--bg-card)] hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-[var(--border-primary)] rounded-xl font-bold text-xs flex items-center space-x-2 transition shadow-sm"
+          >
+            <RefreshCw size={14} />
+            <span>Refresh Analytics</span>
+          </button>
+        </div>
       </div>
 
       {/* Advanced Filters */}
@@ -1192,10 +1257,12 @@ export const AnalyticsPage: React.FC = () => {
                         data={pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
+                        innerRadius={52}
+                        outerRadius={72}
                         paddingAngle={5}
                         dataKey="value"
+                        label={showPercentages ? renderCustomPieLabel : false}
+                        labelLine={false}
                       >
                         {pieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1237,10 +1304,12 @@ export const AnalyticsPage: React.FC = () => {
                           data={metadataDists.demographic.filter(d => d.value > 0)}
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
+                          innerRadius={52}
+                          outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
+                          label={showPercentages ? renderCustomPieLabel : false}
+                          labelLine={false}
                         >
                           {metadataDists.demographic.filter(d => d.value > 0).map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={DEMO_COLORS[entry.name] || "#6B7280"} />
@@ -1278,10 +1347,12 @@ export const AnalyticsPage: React.FC = () => {
                           data={metadataDists.publishing_status.filter(d => d.value > 0)}
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
+                          innerRadius={52}
+                          outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
+                          label={showPercentages ? renderCustomPieLabel : false}
+                          labelLine={false}
                         >
                           {metadataDists.publishing_status.filter(d => d.value > 0).map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PUB_STATUS_COLORS[entry.name] || "#6B7280"} />
@@ -1319,10 +1390,12 @@ export const AnalyticsPage: React.FC = () => {
                           data={metadataDists.content_rating.filter(d => d.value > 0)}
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
+                          innerRadius={52}
+                          outerRadius={72}
                           paddingAngle={5}
                           dataKey="value"
+                          label={showPercentages ? renderCustomPieLabel : false}
+                          labelLine={false}
                         >
                           {metadataDists.content_rating.filter(d => d.value > 0).map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={CONTENT_RATING_COLORS[entry.name] || "#6B7280"} />
