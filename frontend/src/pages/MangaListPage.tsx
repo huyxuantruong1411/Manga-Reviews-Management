@@ -60,7 +60,28 @@ export const MangaListPage: React.FC = () => {
   });
   const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
 
-  const [readStatus, setReadStatus] = useState(() => searchParams.get("readStatus") || "");
+  const [selectedReadStatuses, setSelectedReadStatuses] = useState<string[]>(() => {
+    const multi = getArrayParam("readStatuses");
+    if (multi.length > 0) return multi;
+    const single = searchParams.get("readStatus");
+    return single ? [single] : [];
+  });
+  const [excludeReadStatuses, setExcludeReadStatuses] = useState<string[]>(() => getArrayParam("excludeReadStatuses"));
+
+  const handleReadStatusClick = (status: string) => {
+    const isIncluded = selectedReadStatuses.includes(status);
+    const isExcluded = excludeReadStatuses.includes(status);
+
+    if (!isIncluded && !isExcluded) {
+      setSelectedReadStatuses((prev) => [...prev, status]);
+    } else if (isIncluded) {
+      setSelectedReadStatuses((prev) => prev.filter((s) => s !== status));
+      setExcludeReadStatuses((prev) => [...prev, status]);
+    } else {
+      setExcludeReadStatuses((prev) => prev.filter((s) => s !== status));
+    }
+    setPage(1);
+  };
   const [selectedTags, setSelectedTags] = useState<string[]>(() => getArrayParam("selectedTags"));
   const [excludeTags, setExcludeTags] = useState<string[]>(() => getArrayParam("excludeTags"));
   const [tagMode, setTagMode] = useState<"all" | "any">(() => (searchParams.get("tagMode") as any) || "all");
@@ -139,7 +160,8 @@ export const MangaListPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
-    if (readStatus) params.set("readStatus", readStatus);
+    if (selectedReadStatuses.length) params.set("readStatuses", selectedReadStatuses.join(","));
+    if (excludeReadStatuses.length) params.set("excludeReadStatuses", excludeReadStatuses.join(","));
     if (selectedTags.length) params.set("selectedTags", selectedTags.join(","));
     if (excludeTags.length) params.set("excludeTags", excludeTags.join(","));
     if (tagMode !== "all") params.set("tagMode", tagMode);
@@ -164,7 +186,8 @@ export const MangaListPage: React.FC = () => {
     }
   }, [
     search,
-    readStatus,
+    selectedReadStatuses,
+    excludeReadStatuses,
     selectedTags,
     excludeTags,
     tagMode,
@@ -228,7 +251,8 @@ export const MangaListPage: React.FC = () => {
       };
 
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-      if (readStatus) params.read_status = readStatus;
+      if (selectedReadStatuses.length > 0) params.read_statuses = selectedReadStatuses;
+      if (excludeReadStatuses.length > 0) params.exclude_read_statuses = excludeReadStatuses;
       if (ratingMin !== "") params.rating_min = Number(ratingMin);
       if (ratingMax !== "") params.rating_max = Number(ratingMax);
       if (selectedAuthors.length > 0) params.authors = selectedAuthors;
@@ -280,7 +304,8 @@ export const MangaListPage: React.FC = () => {
     page,
     limit,
     debouncedSearch,
-    readStatus,
+    selectedReadStatuses,
+    excludeReadStatuses,
     ratingMin,
     ratingMax,
     sortBy,
@@ -655,20 +680,17 @@ export const MangaListPage: React.FC = () => {
           </div>
 
           <div className="flex gap-2">
-            <select
-              value={readStatus}
-              onChange={(e) => { setReadStatus(e.target.value); setPage(1); }}
-              className="px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdvancedSearchOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-secondary)] font-semibold hover:border-zinc-400 transition text-sm"
             >
-              <option value="">All Read Statuses</option>
-              <option value="unread">Unread</option>
-              <option value="reading">Reading</option>
-              <option value="completed">Completed</option>
-              <option value="dropped">Dropped</option>
-              <option value="on_hold">On Hold</option>
-              <option value="plan_to_read">Plan to Read</option>
-              <option value="re_reading">Re-Reading</option>
-            </select>
+              Statuses: {selectedReadStatuses.length > 0 || excludeReadStatuses.length > 0
+                ? `${selectedReadStatuses.length} incl / ${excludeReadStatuses.length} excl`
+                : "All"}
+            </button>
 
             <button
               type="button"
@@ -933,6 +955,51 @@ export const MangaListPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Read Status Filter Matrix */}
+            <div className="pt-4 border-t border-[var(--border-primary)] space-y-3">
+              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center space-x-1">
+                <Filter size={14} />
+                <span>Filter by Read Status (3-State Matrix):</span>
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "unread", label: "Unread" },
+                  { value: "reading", label: "Reading" },
+                  { value: "completed", label: "Completed" },
+                  { value: "dropped", label: "Dropped" },
+                  { value: "on_hold", label: "On Hold" },
+                  { value: "plan_to_read", label: "Plan to Read" },
+                  { value: "re_reading", label: "Re-Reading" }
+                ].map((status) => {
+                  const isIncluded = selectedReadStatuses.includes(status.value);
+                  const isExcluded = excludeReadStatuses.includes(status.value);
+
+                  let btnClass = "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400";
+                  let icon = null;
+
+                  if (isIncluded) {
+                    btnClass = "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold";
+                    icon = <span className="mr-1 text-xs">✓</span>;
+                  } else if (isExcluded) {
+                    btnClass = "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 line-through font-bold";
+                    icon = <span className="mr-1 text-xs">✗</span>;
+                  }
+
+                  return (
+                    <button
+                      key={status.value}
+                      type="button"
+                      onClick={() => handleReadStatusClick(status.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center transition select-none ${btnClass}`}
+                    >
+                      {icon}
+                      <span>{status.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Tag Filter Matrix */}
             {allTags.length > 0 && (
               <div className="pt-4 border-t border-[var(--border-primary)] space-y-4">
@@ -1040,13 +1107,18 @@ export const MangaListPage: React.FC = () => {
           <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
             <span>Active filters:</span>
             {debouncedSearch && <span className="bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)] px-2 py-0.5 rounded-md">Search: "{debouncedSearch}"</span>}
-            {readStatus && <span className="bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)] px-2 py-0.5 rounded-md">Status: {readStatus}</span>}
+            {selectedReadStatuses.map(status => (
+              <span key={status} className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">Status: {status}</span>
+            ))}
+            {excludeReadStatuses.map(status => (
+              <span key={status} className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md line-through">Exclude: {status}</span>
+            ))}
             {selectedTags.length > 0 && <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">Include {selectedTags.length} tags</span>}
             {excludeTags.length > 0 && <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md">Exclude {excludeTags.length} tags</span>}
             {(selectedAuthors.length > 0 || selectedArtists.length > 0 || year || contentRatings.length > 0 || demographics.length > 0 || statuses.length > 0 || originalLanguages.length > 0 || ratingMin || ratingMax) && (
               <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md">Advanced active</span>
             )}
-            {!search && !readStatus && selectedTags.length === 0 && excludeTags.length === 0 && selectedAuthors.length === 0 && selectedArtists.length === 0 && !year && contentRatings.length === 0 && demographics.length === 0 && statuses.length === 0 && originalLanguages.length === 0 && !ratingMin && !ratingMax && (
+            {!search && selectedReadStatuses.length === 0 && excludeReadStatuses.length === 0 && selectedTags.length === 0 && excludeTags.length === 0 && selectedAuthors.length === 0 && selectedArtists.length === 0 && !year && contentRatings.length === 0 && demographics.length === 0 && statuses.length === 0 && originalLanguages.length === 0 && !ratingMin && !ratingMax && (
               <span className="text-zinc-400 font-medium">None</span>
             )}
           </div>
@@ -1054,7 +1126,8 @@ export const MangaListPage: React.FC = () => {
           <button
             onClick={() => {
               setSearch("");
-              setReadStatus("");
+              setSelectedReadStatuses([]);
+              setExcludeReadStatuses([]);
               setSelectedTags([]);
               setExcludeTags([]);
               setTagMode("all");

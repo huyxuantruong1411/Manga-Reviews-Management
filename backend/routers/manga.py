@@ -6,10 +6,27 @@ from backend.services.manga_service import manga_service, DuplicateMangaExceptio
 
 router = APIRouter(prefix="/api/manga", tags=["Manga"])
 
+def parse_list_param(param: Optional[Any]) -> Optional[List[str]]:
+    if not param:
+        return None
+    if isinstance(param, str):
+        return [s.strip() for s in param.split(",") if s.strip()]
+    if isinstance(param, list):
+        res = []
+        for item in param:
+            if isinstance(item, str):
+                res.extend([s.strip() for s in item.split(",") if s.strip()])
+            else:
+                res.append(item)
+        return res
+    return None
+
 @router.get("/", response_model=MangaPaginationResponse)
 async def list_mangas(
     search: Optional[str] = Query(None, description="Search by title, author, artist"),
     read_status: Optional[str] = Query(None, description="Filter by read status"),
+    read_statuses: Optional[List[str]] = Query(None, description="Filter by multiple read statuses to include"),
+    exclude_read_statuses: Optional[List[str]] = Query(None, description="Filter by multiple read statuses to exclude"),
     tags: Optional[List[str]] = Query(None, description="Filter by tag IDs to include"),
     exclude_tags: Optional[List[str]] = Query(None, description="Filter by tag IDs to exclude"),
     tag_mode: str = Query("all", description="Tag matching mode: all or any"),
@@ -32,9 +49,14 @@ async def list_mangas(
     limit: int = Query(20, ge=1, le=10000)
 ):
     """List and search mangas with filters and sorting."""
+    parsed_read_statuses = parse_list_param(read_statuses)
+    parsed_exclude_read_statuses = parse_list_param(exclude_read_statuses)
+    
     return await manga_service.get_mangas(
         search=search,
         read_status=read_status,
+        read_statuses=parsed_read_statuses,
+        exclude_read_statuses=parsed_exclude_read_statuses,
         tags=tags,
         exclude_tags=exclude_tags,
         tag_mode=tag_mode,

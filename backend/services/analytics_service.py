@@ -19,6 +19,8 @@ class AnalyticsService:
     def build_match_stage(self, 
                           search: Optional[str] = None, 
                           read_status: Optional[str] = None,
+                          read_statuses: Optional[List[str]] = None,
+                          exclude_read_statuses: Optional[List[str]] = None,
                           tags: Optional[List[str]] = None, 
                           exclude_tags: Optional[List[str]] = None,
                           tag_mode: str = "all", 
@@ -42,8 +44,19 @@ class AnalyticsService:
                 {"artist": {"$regex": search, "$options": "i"}}
             ]})
             
+        # Read status include
+        status_include = []
         if read_status:
-            clauses.append({"read_status": read_status})
+            status_include.append(read_status)
+        if read_statuses:
+            status_include.extend(read_statuses)
+        status_include = list(set([s for s in status_include if s]))
+        
+        if status_include:
+            clauses.append({"read_status": {"$in": status_include}})
+            
+        if exclude_read_statuses:
+            clauses.append({"read_status": {"$nin": exclude_read_statuses}})
             
         tag_clause = {}
         if tags:
