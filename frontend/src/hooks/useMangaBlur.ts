@@ -8,6 +8,7 @@ export interface BlurSettings {
   blurPornographic: boolean;
   blurTags: string[]; // tag database IDs
   blurGroups: string[]; // tag group names (lowercase)
+  hideRating: boolean;
 }
 
 export interface MinimalManga {
@@ -49,6 +50,7 @@ const DEFAULT_SETTINGS: BlurSettings = {
   blurPornographic: true,
   blurTags: [],
   blurGroups: [],
+  hideRating: false,
 };
 
 export const useMangaBlur = () => {

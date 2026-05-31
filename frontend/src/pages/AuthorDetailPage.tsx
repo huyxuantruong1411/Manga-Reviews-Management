@@ -45,7 +45,8 @@ export const AuthorDetailPage: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { showAlert } = useAlert();
-  const { shouldBlur } = useMangaBlur();
+  const { settings, shouldBlur } = useMangaBlur();
+  const isRatingHidden = settings.enabled && settings.hideRating;
 
   // State
   const [author, setAuthor] = useState<any>(null);
@@ -283,7 +284,7 @@ export const AuthorDetailPage: React.FC = () => {
           {localManga.read_status.replace("_", " ")}
         </span>
         {localManga.personal_rating !== null && (
-          <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg text-[10px] font-bold flex items-center space-x-0.5">
+          <span className={`px-2 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
             <Star size={9} className="fill-yellow-500 text-yellow-500" />
             <span>{localManga.personal_rating}</span>
           </span>
@@ -563,7 +564,7 @@ export const AuthorDetailPage: React.FC = () => {
                       ) : (
                         <div className="flex items-center space-x-1.5 text-[10px] text-[var(--text-secondary)]">
                           {manga.ratingAverage !== null && (
-                            <span className="flex items-center space-x-0.5 text-yellow-600 dark:text-yellow-400 font-bold">
+                            <span className={`flex items-center space-x-0.5 text-yellow-600 dark:text-yellow-400 font-bold ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                               <Star size={10} className="fill-yellow-500 text-yellow-500" />
                               <span>{manga.ratingAverage.toFixed(2)}</span>
                             </span>
@@ -627,7 +628,7 @@ export const AuthorDetailPage: React.FC = () => {
                           <td className="p-3 text-xs text-zinc-500">
                             <div className="space-y-0.5">
                               {manga.ratingAverage !== null && (
-                                <div className="flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400">
+                                <div className={`flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                                   <Star size={11} className="fill-yellow-500 text-yellow-500" />
                                   <span>{manga.ratingAverage.toFixed(2)} / 10</span>
                                 </div>
@@ -713,7 +714,7 @@ export const AuthorDetailPage: React.FC = () => {
 
                           {/* MD Rating */}
                           {manga.ratingAverage !== null && (
-                            <span className="px-2.5 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 rounded-xl text-[10px] font-bold flex items-center space-x-0.5">
+                            <span className={`px-2.5 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 rounded-xl text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                               <Star size={10} className="fill-yellow-500 text-yellow-500" />
                               <span>{manga.ratingAverage.toFixed(2)}</span>
                             </span>

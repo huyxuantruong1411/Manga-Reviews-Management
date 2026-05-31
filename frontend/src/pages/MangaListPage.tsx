@@ -40,7 +40,8 @@ export const MangaListPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showAlert, showToast } = useAlert();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { shouldBlur } = useMangaBlur();
+  const { settings, shouldBlur } = useMangaBlur();
+  const isRatingHidden = settings.enabled && settings.hideRating;
 
   const getArrayParam = (key: string): string[] => {
     const val = searchParams.get(key);
@@ -1296,7 +1297,7 @@ export const MangaListPage: React.FC = () => {
                       onMouseDown={(e) => e.stopPropagation()}
                       onMouseUp={(e) => e.stopPropagation()}
                     >
-                      <div className="relative inline-flex items-center">
+                      <div className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                         <Star size={10} className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none" />
                         <select
                           value={manga.personal_rating ?? ""}
@@ -1472,7 +1473,7 @@ export const MangaListPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <div
-                          className="relative inline-flex items-center"
+                          className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
                           onClick={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                           onMouseUp={(e) => e.stopPropagation()}
@@ -1618,7 +1619,7 @@ export const MangaListPage: React.FC = () => {
                           </span>
                         )}
                         <div
-                          className="relative inline-flex items-center"
+                          className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
                           onClick={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                           onMouseUp={(e) => e.stopPropagation()}

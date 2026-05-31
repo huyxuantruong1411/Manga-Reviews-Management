@@ -278,6 +278,31 @@ export const Layout: React.FC = () => {
 
                   {tempBlurSettings?.enabled && (
                     <div className="space-y-4 pl-2 border-l-2 border-[var(--border-primary)] animate-in slide-in-from-left-2 duration-200">
+                      {/* Hide Ratings */}
+                      <div className="flex items-center justify-between pb-2 border-b border-[var(--border-primary)]/50">
+                        <div>
+                          <span className="block text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                            Hide Personal Ratings
+                          </span>
+                          <span className="text-[10px] text-[var(--text-secondary)]">
+                            Blur or hide your scores during live stream.
+                          </span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={tempBlurSettings.hideRating || false}
+                            onChange={(e) =>
+                              setTempBlurSettings((prev) =>
+                                prev ? { ...prev, hideRating: e.target.checked } : null
+                              )
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-zinc-200 dark:bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--brand-orange)]"></div>
+                        </label>
+                      </div>
+
                       {/* Content Ratings */}
                       <div className="space-y-2">
                         <span className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">

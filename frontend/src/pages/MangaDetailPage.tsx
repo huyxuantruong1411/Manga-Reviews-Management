@@ -518,7 +518,8 @@ export const MangaDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showAlert, showToast } = useAlert();
-  const { shouldBlur } = useMangaBlur();
+  const { settings, shouldBlur } = useMangaBlur();
+  const isRatingHidden = settings.enabled && settings.hideRating;
 
   // Core States
   const [manga, setManga] = useState<Manga | null>(null);
@@ -1375,7 +1376,7 @@ export const MangaDetailPage: React.FC = () => {
               </div>
 
               {/* Personal Rating Interactive Select */}
-              <div className="relative inline-flex items-center">
+              <div className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                 <Star size={12} className="absolute left-3 text-yellow-500 fill-yellow-500 pointer-events-none" />
                 <select
                   value={manga.personal_rating ?? ""}

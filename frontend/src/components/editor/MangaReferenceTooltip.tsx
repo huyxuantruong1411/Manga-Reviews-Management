@@ -34,7 +34,7 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
   const [data, setData] = useState<MangaData | null>(mangaCache[mangaId] || null);
   const [loading, setLoading] = useState(!data);
   const [error, setError] = useState<string | null>(null);
-  const { shouldBlur } = useMangaBlur();
+  const { settings, shouldBlur } = useMangaBlur();
 
   useEffect(() => {
     if (data) return;
@@ -131,7 +131,7 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
             )}
 
             {data.personal_rating !== undefined && data.personal_rating !== null && (
-              <div className="flex items-center space-x-1 text-[10px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded w-max">
+              <div className={`flex items-center space-x-1 text-[10px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded w-max ${settings.enabled && settings.hideRating ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                 <Star size={10} fill="currentColor" />
                 <span>{data.personal_rating} / 10</span>
               </div>
