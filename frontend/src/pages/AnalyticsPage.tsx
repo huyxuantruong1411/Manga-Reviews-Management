@@ -126,11 +126,8 @@ const renderCustomPieLabel = ({
   cx,
   cy,
   midAngle,
-  innerRadius,
   outerRadius,
-  percent,
-  value,
-  name
+  percent
 }: any) => {
   const pct = typeof percent === "number" ? percent : 0;
   if (pct < 0.015) return null;
@@ -201,6 +198,8 @@ export const AnalyticsPage: React.FC = () => {
   const [addedEndDate, setAddedEndDate] = useState("");
   const [reviewStartDate, setReviewStartDate] = useState("");
   const [reviewEndDate, setReviewEndDate] = useState("");
+  const [completedStartDate, setCompletedStartDate] = useState("");
+  const [completedEndDate, setCompletedEndDate] = useState("");
 
   // UI States
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
@@ -211,6 +210,7 @@ export const AnalyticsPage: React.FC = () => {
   const [topTags, setTopTags] = useState<TopTag[]>([]);
   const [mangaTimeline, setMangaTimeline] = useState<TimelineItem[]>([]);
   const [reviewTimeline, setReviewTimeline] = useState<TimelineItem[]>([]);
+  const [completedTimeline, setCompletedTimeline] = useState<TimelineItem[]>([]);
   const [metadataDists, setMetadataDists] = useState<MetadataDistributions | null>(null);
   const [topCreators, setTopCreators] = useState<TopCreators | null>(null);
   const [ratingInsights, setRatingInsights] = useState<RatingInsights | null>(null);
@@ -502,6 +502,8 @@ export const AnalyticsPage: React.FC = () => {
       if (addedEndDate) params.added_end_date = addedEndDate;
       if (reviewStartDate) params.review_start_date = reviewStartDate;
       if (reviewEndDate) params.review_end_date = reviewEndDate;
+      if (completedStartDate) params.completed_start_date = completedStartDate;
+      if (completedEndDate) params.completed_end_date = completedEndDate;
 
       const res = await client.get("/api/analytics", { params });
 
@@ -510,6 +512,7 @@ export const AnalyticsPage: React.FC = () => {
       setTopTags(res.data.top_tags);
       setMangaTimeline(res.data.manga_timeline);
       setReviewTimeline(res.data.review_timeline);
+      setCompletedTimeline(res.data.completed_timeline || []);
       setMetadataDists(res.data.metadata_distributions);
       setTopCreators(res.data.top_creators);
       setRatingInsights(res.data.rating_insights);
@@ -542,7 +545,9 @@ export const AnalyticsPage: React.FC = () => {
     addedStartDate,
     addedEndDate,
     reviewStartDate,
-    reviewEndDate
+    reviewEndDate,
+    completedStartDate,
+    completedEndDate
   ]);
 
   const handleTagClick = (tagId: string) => {
@@ -1825,7 +1830,7 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* Timeline Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Library Growth Area Chart */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1874,6 +1879,58 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">No additions found in selected dates.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Reading Progress (Completed Manga) Area Chart */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 className="text-lg font-bold">Reading Progress (Completed Manga)</h3>
+              
+              {/* Completed date range */}
+              <div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
+                <input
+                  type="date"
+                  value={completedStartDate}
+                  onChange={(e) => setCompletedStartDate(e.target.value)}
+                  className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+                />
+                <span>-</span>
+                <input
+                  type="date"
+                  value={completedEndDate}
+                  onChange={(e) => setCompletedEndDate(e.target.value)}
+                  className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="h-72">
+              {completedTimeline.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={completedTimeline}>
+                    <defs>
+                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="period" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "var(--bg-card)",
+                        borderColor: "var(--border-primary)",
+                        color: "var(--text-primary)"
+                      }}
+                    />
+                    <Area type="monotone" dataKey="count" stroke="#10B981" fillOpacity={1} fill="url(#colorCompleted)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">No completions found in selected dates.</div>
               )}
             </div>
           </div>

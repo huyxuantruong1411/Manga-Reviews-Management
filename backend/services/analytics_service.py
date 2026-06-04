@@ -265,6 +265,52 @@ class AnalyticsService:
         res = await mangas_coll.aggregate(pipeline).to_list(200)
         return [{"period": item["_id"], "count": item["count"]} for item in res]
 
+    async def get_manga_completed_timeline(self, manga_ids: List[str], group_by: str = "month",
+                                            start_date: Optional[datetime] = None,
+                                            end_date: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        audit_coll = self._get_audit_collection()
+        
+        match_query = {
+            "entity_type": "manga",
+            "entity_id": {"$in": manga_ids},
+            "action": "update_status",
+            "field": "read_status",
+            "new_value": "completed"
+        }
+        
+        date_query = {}
+        if start_date:
+            date_query["$gte"] = start_date
+        if end_date:
+            date_query["$lte"] = end_date
+        if date_query:
+            match_query["timestamp"] = date_query
+
+        date_format = "%Y-%m"
+        if group_by == "hour":
+            date_format = "%Y-%m-%d %H:00"
+        elif group_by == "day":
+            date_format = "%Y-%m-%d"
+        elif group_by == "week":
+            date_format = "%G-W%V"
+        elif group_by == "year":
+            date_format = "%Y"
+
+        pipeline = [
+            {"$match": match_query},
+            {
+                "$project": {
+                    "period": {
+                        "$dateToString": {"format": date_format, "date": "$timestamp"}
+                    }
+                }
+            },
+            {"$group": {"_id": "$period", "count": {"$sum": 1}}},
+            {"$sort": {"_id": 1}}
+        ]
+        res = await audit_coll.aggregate(pipeline).to_list(200)
+        return [{"period": item["_id"], "count": item["count"]} for item in res]
+
     async def get_review_activity_timeline(self, manga_ids: List[str], group_by: str = "month",
                                             start_date: Optional[datetime] = None,
                                             end_date: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -462,7 +508,8 @@ class AnalyticsService:
 
     async def get_all_analytics(self, filter_query: Dict[str, Any], group_by: str = "month",
                                 added_start: Optional[datetime] = None, added_end: Optional[datetime] = None,
-                                review_start: Optional[datetime] = None, review_end: Optional[datetime] = None) -> Dict[str, Any]:
+                                review_start: Optional[datetime] = None, review_end: Optional[datetime] = None,
+                                completed_start: Optional[datetime] = None, completed_end: Optional[datetime] = None) -> Dict[str, Any]:
         mangas_coll = self._get_mangas_collection()
         
         overview = await self.get_overview_stats(filter_query)
@@ -473,6 +520,7 @@ class AnalyticsService:
         
         manga_ids = [str(mid) for mid in await mangas_coll.find(filter_query).distinct("_id")]
         review_timeline = await self.get_review_activity_timeline(manga_ids, group_by, review_start, review_end)
+        completed_timeline = await self.get_manga_completed_timeline(manga_ids, group_by, completed_start, completed_end)
         
         metadata_distributions = await self.get_metadata_distributions(filter_query)
         top_creators = await self.get_top_creators(filter_query)
@@ -485,6 +533,7 @@ class AnalyticsService:
             "top_tags": top_tags,
             "manga_timeline": manga_timeline,
             "review_timeline": review_timeline,
+            "completed_timeline": completed_timeline,
             "metadata_distributions": metadata_distributions,
             "top_creators": top_creators,
             "rating_insights": rating_insights,

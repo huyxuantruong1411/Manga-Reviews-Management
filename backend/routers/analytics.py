@@ -95,7 +95,9 @@ async def get_all_analytics(
     added_start_date: Optional[str] = Query(None),
     added_end_date: Optional[str] = Query(None),
     review_start_date: Optional[str] = Query(None),
-    review_end_date: Optional[str] = Query(None)
+    review_end_date: Optional[str] = Query(None),
+    completed_start_date: Optional[str] = Query(None),
+    completed_end_date: Optional[str] = Query(None)
 ):
     """Get all analytical stats (overview, score distributions, tag metrics, timelines, creators, and ratings)."""
     try:
@@ -123,6 +125,8 @@ async def get_all_analytics(
         added_end = parse_iso_date(added_end_date)
         review_start = parse_iso_date(review_start_date)
         review_end = parse_iso_date(review_end_date)
+        completed_start = parse_iso_date(completed_start_date)
+        completed_end = parse_iso_date(completed_end_date)
         
         return await analytics_service.get_all_analytics(
             filter_query=filter_query,
@@ -130,7 +134,9 @@ async def get_all_analytics(
             added_start=added_start,
             added_end=added_end,
             review_start=review_start,
-            review_end=review_end
+            review_end=review_end,
+            completed_start=completed_start,
+            completed_end=completed_end
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -304,5 +310,44 @@ async def get_review_timeline(
         start_dt = parse_iso_date(review_start_date)
         end_dt = parse_iso_date(review_end_date)
         return await analytics_service.get_review_activity_timeline(manga_ids, timeline_group_by, start_dt, end_dt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/completed-timeline")
+async def get_completed_timeline(
+    search: Optional[str] = Query(None),
+    read_status: Optional[str] = Query(None),
+    read_statuses: Optional[List[str]] = Query(None),
+    exclude_read_statuses: Optional[List[str]] = Query(None),
+    tags: Optional[List[str]] = Query(None),
+    exclude_tags: Optional[List[str]] = Query(None),
+    tag_mode: str = Query("all"),
+    content_ratings: Optional[List[str]] = Query(None),
+    demographics: Optional[List[str]] = Query(None),
+    statuses: Optional[List[str]] = Query(None),
+    original_languages: Optional[List[str]] = Query(None),
+    authors: Optional[List[str]] = Query(None),
+    artists: Optional[List[str]] = Query(None),
+    rating_min: Optional[float] = Query(None),
+    rating_max: Optional[float] = Query(None),
+    year_start: Optional[str] = Query(None),
+    year_end: Optional[str] = Query(None),
+    timeline_group_by: str = Query("month"),
+    completed_start_date: Optional[str] = Query(None),
+    completed_end_date: Optional[str] = Query(None)
+):
+    """Get timeline of manga completions."""
+    try:
+        filter_query = get_filter_params(
+            search=search, read_status=read_status, read_statuses=read_statuses, exclude_read_statuses=exclude_read_statuses,
+            tags=tags, exclude_tags=exclude_tags, tag_mode=tag_mode,
+            content_ratings=content_ratings, demographics=demographics, statuses=statuses, original_languages=original_languages,
+            authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
+        )
+        from backend.database.connection import get_db
+        manga_ids = [str(mid) for mid in await get_db().mangas.find(filter_query).distinct("_id")]
+        start_dt = parse_iso_date(completed_start_date)
+        end_dt = parse_iso_date(completed_end_date)
+        return await analytics_service.get_manga_completed_timeline(manga_ids, timeline_group_by, start_dt, end_dt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
