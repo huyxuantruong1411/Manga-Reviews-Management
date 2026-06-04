@@ -278,7 +278,7 @@ class AnalyticsService:
             "entity_id": {"$in": manga_ids},
             "action": "update_status",
             "field": "read_status",
-            "new_value": "completed"
+            "new_value": {"$in": ["completed", "ReadStatus.COMPLETED"]}
         }
         
         date_query = {}

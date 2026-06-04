@@ -54,15 +54,25 @@ class MangaService:
         return get_db().audit_logs
 
     async def log_action(self, manga_id: str, action: str, field: Optional[str] = None, 
-                         old_val: Optional[str] = None, new_val: Optional[str] = None, note: Optional[str] = None):
+                         old_val: Any = None, new_val: Any = None, note: Optional[str] = None):
         """Helper to create an audit log entry."""
+        def get_val_str(val):
+            if val is None:
+                return None
+            if hasattr(val, "value"):
+                return str(val.value)
+            val_str = str(val)
+            if val_str.startswith("ReadStatus."):
+                return val_str.split(".", 1)[1].lower()
+            return val_str
+
         log_doc = {
             "entity_type": "manga",
             "entity_id": manga_id,
             "action": action,
             "field": field,
-            "old_value": old_val,
-            "new_value": new_val,
+            "old_value": get_val_str(old_val),
+            "new_value": get_val_str(new_val),
             "timestamp": datetime.utcnow(),
             "note": note
         }
