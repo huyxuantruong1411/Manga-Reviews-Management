@@ -16,6 +16,9 @@ class AnalyticsService:
     def _get_tags_collection(self):
         return get_db().tags
 
+    def _get_audit_collection(self):
+        return get_db().audit_logs
+
     def build_match_stage(self, 
                           search: Optional[str] = None, 
                           read_status: Optional[str] = None,

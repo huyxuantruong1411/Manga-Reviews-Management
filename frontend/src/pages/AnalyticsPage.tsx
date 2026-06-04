@@ -1833,8 +1833,8 @@ export const AnalyticsPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Library Growth Area Chart */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-lg font-bold">Library Growth (Manga Added)</h3>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-between lg:flex-col lg:items-start xl:flex-row xl:items-center">
+              <h3 className="text-base font-bold">Library Growth (Manga Added)</h3>
               
               {/* Added date range */}
               <div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
@@ -1885,8 +1885,8 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Reading Progress (Completed Manga) Area Chart */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-lg font-bold">Reading Progress (Completed Manga)</h3>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-between lg:flex-col lg:items-start xl:flex-row xl:items-center">
+              <h3 className="text-base font-bold">Reading Progress (Completed Manga)</h3>
               
               {/* Completed date range */}
               <div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
@@ -1937,8 +1937,8 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Review Activity Line Chart */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-lg font-bold">Review Activity (Reviews Created)</h3>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-between lg:flex-col lg:items-start xl:flex-row xl:items-center">
+              <h3 className="text-base font-bold">Review Activity (Reviews Created)</h3>
               
               {/* Review date range */}
               <div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
