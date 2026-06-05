@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     download_dir: str = Field(default="d:/Projects/Manga/Manga-Reviews-Management/downloads")
     
     mangadex_proxy: Optional[str] = Field(default=None)
+    mangadex_client_id: Optional[str] = Field(default=None)
+    mangadex_client_secret: Optional[str] = Field(default=None)
+    mangadex_username: Optional[str] = Field(default=None)
+    mangadex_password: Optional[str] = Field(default=None)
     
     port: int = 8000
     host: str = "0.0.0.0"

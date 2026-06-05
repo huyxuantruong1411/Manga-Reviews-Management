@@ -84,24 +84,84 @@ class MangaDexService:
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 5))
                     logger.warning(f"MangaDex rate limited (429). Sleeping for {retry_after}s...")
-                    import asyncio
                     await asyncio.sleep(retry_after)
                     return await self._request(endpoint, params)
                 
                 resp.raise_for_status()
                 return resp.json()
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP Error calling MangaDex ({endpoint}): {e.response.status_code} - {e.response.text}")
+                status_code = e.response.status_code
+                logger.warning(f"HTTP Error calling MangaDex ({endpoint}): {status_code} - {e.response.text[:200]}")
+                # Fallback 1: Try authenticated request for 403 or 5xx errors
+                if status_code in (403,) or status_code >= 500:
+                    auth_data = await self._request_authenticated(endpoint, params)
+                    if auth_data is not None:
+                        return auth_data
                 return None
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.NetworkError) as e:
-                logger.warning(f"Network error calling MangaDex ({endpoint}): {e}. Attempting browser simulation fallback...")
+                logger.warning(f"Network error calling MangaDex ({endpoint}): {e}.")
+                # Fallback 1: Try authenticated request
+                auth_data = await self._request_authenticated(endpoint, params)
+                if auth_data is not None:
+                    return auth_data
+                # Fallback 2: Browser simulation
+                logger.warning(f"Auth fallback failed or unavailable for ({endpoint}). Attempting browser simulation fallback...")
                 fallback_data = await self._request_via_playwright(endpoint, params)
                 if fallback_data is not None:
                     return fallback_data
-                logger.error(f"Browser simulation fallback also failed for MangaDex ({endpoint}).")
+                logger.error(f"All fallbacks failed for MangaDex ({endpoint}).")
                 return None
             except Exception as e:
                 logger.error(f"Error calling MangaDex ({endpoint}): {e}")
+                return None
+
+    async def _request_authenticated(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Retry a MangaDex API request with an authenticated Bearer token.
+        This is a fallback layer — only called when the anonymous request has already failed.
+        Returns None if auth is not configured or the authenticated request also fails.
+        """
+        from backend.utils.mangadex_auth import mangadex_auth
+        
+        token = await mangadex_auth.get_access_token()
+        if not token:
+            logger.debug(f"Auth fallback skipped for ({endpoint}): no token available.")
+            return None
+        
+        logger.info(f"Attempting authenticated fallback for MangaDex ({endpoint})...")
+        
+        await mangadex_rate_limiter.acquire()
+        
+        url = f"{self.BASE_URL}{endpoint}"
+        from backend.config import settings
+        proxies = settings.mangadex_proxy if settings.mangadex_proxy else None
+        headers = self._get_headers()
+        headers["Authorization"] = f"Bearer {token}"
+        
+        async with httpx.AsyncClient(proxy=proxies, timeout=20.0) as client:
+            try:
+                resp = await client.get(url, params=params, headers=headers)
+                if resp.status_code == 401:
+                    # Token might be stale despite our expiry tracking — invalidate and retry once
+                    logger.warning("MangaDex auth fallback got 401. Invalidating token and retrying...")
+                    mangadex_auth.invalidate()
+                    new_token = await mangadex_auth.get_access_token()
+                    if not new_token:
+                        return None
+                    headers["Authorization"] = f"Bearer {new_token}"
+                    resp = await client.get(url, params=params, headers=headers)
+                
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 5))
+                    logger.warning(f"MangaDex rate limited (429) on auth request. Sleeping for {retry_after}s...")
+                    await asyncio.sleep(retry_after)
+                    return await self._request_authenticated(endpoint, params)
+                
+                resp.raise_for_status()
+                logger.info(f"MangaDex auth fallback SUCCEEDED for ({endpoint}).")
+                return resp.json()
+            except Exception as e:
+                logger.warning(f"MangaDex auth fallback FAILED for ({endpoint}): {e}")
                 return None
 
     def _request_via_playwright_sync(self, url: str, proxy_url: Optional[str]) -> Optional[Dict[str, Any]]:
