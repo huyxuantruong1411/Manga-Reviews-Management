@@ -3,22 +3,18 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Star,
-  RefreshCw,
   ExternalLink,
   Grid,
   List as ListIcon,
-  LayoutGrid,
-  CheckCircle,
-  PlusCircle,
-  MessageSquare
+  LayoutGrid
 } from "lucide-react";
 import client from "../api/client";
-import { useAlert } from "../hooks/useAlert";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 import { BlurredCover } from "../components/ui/BlurredCover";
 
-interface MangaDexWork {
+interface AuthorWork {
   id: string;
+  local_id: string;
   title: string;
   coverUrl: string | null;
   status: string;
@@ -27,14 +23,7 @@ interface MangaDexWork {
   tags: string[];
   description: string;
   ratingAverage: number | null;
-  followsCount: number | null;
   commentsCount: number | null;
-}
-
-interface LocalManga {
-  _id: string;
-  mangadex_id: string | null;
-  title: string;
   read_status: string;
   personal_rating: number | null;
   content_rating?: string | null;
@@ -44,14 +33,12 @@ interface LocalManga {
 export const AuthorDetailPage: React.FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const { showAlert } = useAlert();
   const { settings, shouldBlur } = useMangaBlur();
   const isRatingHidden = settings.enabled && settings.hideRating;
 
   // State
   const [author, setAuthor] = useState<any>(null);
-  const [works, setWorks] = useState<MangaDexWork[]>([]);
-  const [localMangaMap, setLocalMangaMap] = useState<Record<string, LocalManga>>({});
+  const [works, setWorks] = useState<AuthorWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +47,6 @@ export const AuthorDetailPage: React.FC = () => {
     return (localStorage.getItem("author_view_mode") as any) || "card";
   });
   const [sortMode, setSortMode] = useState<string>("none");
-  const [importingId, setImportingId] = useState<string | null>(null);
   const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
 
   // Clean biography & extract Native Name
@@ -116,40 +102,18 @@ export const AuthorDetailPage: React.FC = () => {
     });
   };
 
-  const fetchLocalMangas = async () => {
-    try {
-      const res = await client.get("/api/manga/", { params: { limit: 1000 } });
-      const items: LocalManga[] = res.data.items || [];
-      const map: Record<string, LocalManga> = {};
-      items.forEach((m) => {
-        if (m.mangadex_id) {
-          map[m.mangadex_id] = m;
-        }
-        if (m._id) {
-          map[m._id] = m;
-        }
-      });
-      setLocalMangaMap(map);
-    } catch (err) {
-      console.error("Failed to load local mangas", err);
-    }
-  };
-
   const fetchAuthorAndWorks = async () => {
     if (!name) return;
     try {
       setLoading(true);
       setError(null);
 
-      // 1. Fetch Local Library details first
-      await fetchLocalMangas();
-
-      // 2. Fetch Author from backend creators endpoint
+      // 1. Fetch Author from backend creators endpoint
       const authorRes = await client.get(`/api/creators/${encodeURIComponent(name)}`);
       const matchedAuthor = authorRes.data;
       setAuthor(matchedAuthor);
 
-      // 3. Fetch local works (both as author and as artist) and tags list
+      // 2. Fetch local works (both as author and as artist) and tags list
       const [authorWorksRes, artistWorksRes, tagsRes] = await Promise.all([
         client.get("/api/manga/", { params: { author: name, limit: 10000 } }),
         client.get("/api/manga/", { params: { artist: name, limit: 10000 } }),
@@ -173,8 +137,8 @@ export const AuthorDetailPage: React.FC = () => {
         return;
       }
 
-      // 4. Parse local manga into UI Works Model
-      const parsedWorks: MangaDexWork[] = uniqueWorks.map((w: any) => {
+      // 3. Parse local manga into UI Works Model
+      const parsedWorks: AuthorWork[] = uniqueWorks.map((w: any) => {
         const tags = (w.tag_ids || [])
           .map((tid: string) => {
             const tag = tagsList.find((t: any) => t._id === tid);
@@ -184,6 +148,7 @@ export const AuthorDetailPage: React.FC = () => {
 
         return {
           id: w.mangadex_id || w._id,
+          local_id: w._id,
           title: w.title,
           coverUrl: w.cover_url,
           status: w.status || "unknown",
@@ -192,8 +157,11 @@ export const AuthorDetailPage: React.FC = () => {
           tags: tags,
           description: w.description || "",
           ratingAverage: w.personal_rating || null,
-          followsCount: null,
-          commentsCount: null
+          commentsCount: null,
+          read_status: w.read_status || "unread",
+          personal_rating: w.personal_rating ?? null,
+          content_rating: w.content_rating ?? null,
+          tag_ids: w.tag_ids || []
         };
       });
 
@@ -204,38 +172,13 @@ export const AuthorDetailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };;
+  };
 
   useEffect(() => {
     fetchAuthorAndWorks();
   }, [name]);
 
-  // Handle local library import
-  const handleImportManga = async (mangaId: string) => {
-    try {
-      setImportingId(mangaId);
-      const res = await client.post("/api/manga/dex", {
-        mangadex_id: mangaId,
-        read_status: "unread",
-        tag_ids: []
-      });
-      showAlert({
-        title: "Import Success",
-        message: `Imported "${res.data.title}" successfully!`,
-        type: "success"
-      });
-      // Refresh local library map
-      await fetchLocalMangas();
-    } catch (err: any) {
-      showAlert({
-        title: "Import Failed",
-        message: err.response?.data?.detail || "Failed to import manga",
-        type: "error"
-      });
-    } finally {
-      setImportingId(null);
-    }
-  };
+
 
   // Sort works
   const getSortedWorks = () => {
@@ -268,8 +211,8 @@ export const AuthorDetailPage: React.FC = () => {
     website: author?.website || author?.attributes?.website
   };
 
-  const getLocalReadStatusBadge = (localManga: LocalManga) => {
-    const status = localManga.read_status.toLowerCase();
+  const getReadStatusBadge = (manga: AuthorWork) => {
+    const status = manga.read_status.toLowerCase();
     let bg = "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700";
     if (status === "reading") bg = "bg-blue-100 dark:bg-blue-950/40 text-blue-500 border-blue-200 dark:border-blue-900/50";
     else if (status === "completed") bg = "bg-green-100 dark:bg-green-950/40 text-green-500 border-green-200 dark:border-green-900/50";
@@ -281,12 +224,12 @@ export const AuthorDetailPage: React.FC = () => {
     return (
       <div className="flex items-center space-x-1">
         <span className={`px-2 py-0.5 border rounded-lg text-[10px] font-bold uppercase ${bg}`}>
-          {localManga.read_status.replace("_", " ")}
+          {manga.read_status.replace(/_/g, " ")}
         </span>
-        {localManga.personal_rating !== null && (
+        {manga.personal_rating !== null && (
           <span className={`px-2 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
             <Star size={9} className="fill-yellow-500 text-yellow-500" />
-            <span>{localManga.personal_rating}</span>
+            <span>{manga.personal_rating}</span>
           </span>
         )}
       </div>
@@ -487,12 +430,11 @@ export const AuthorDetailPage: React.FC = () => {
           viewMode === "grid" ? (
             /* GRID VIEW */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-              {sortedWorks.map((manga) => {
-                const localManga = localMangaMap[manga.id];
-                return (
+              {sortedWorks.map((manga) => (
                   <div
                     key={manga.id}
-                    className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col group relative"
+                    className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col group relative cursor-pointer"
+                    onClick={() => navigate(`/manga/${manga.local_id}`)}
                   >
                     {/* Cover Frame */}
                     <div className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
@@ -501,39 +443,17 @@ export const AuthorDetailPage: React.FC = () => {
                           src={manga.coverUrl}
                           alt={manga.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-pointer"
-                          shouldBlur={shouldBlur(localManga)}
+                          shouldBlur={shouldBlur({ content_rating: manga.content_rating, tag_ids: manga.tag_ids })}
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            setZoomedCoverUrl(manga.coverUrl);
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
                           <span>No Cover Image</span>
                         </div>
                       )}
-
-                      {/* Top Action Overlay / Import / Direct Link */}
-                      <div className="absolute top-2 right-2 flex flex-col gap-1.5">
-                        {localManga ? (
-                          <button
-                            onClick={() => navigate(`/manga/${localManga._id}`)}
-                            className="p-1.5 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition"
-                            title="Go to Local Review"
-                          >
-                            <CheckCircle size={14} />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleImportManga(manga.id)}
-                            disabled={importingId === manga.id}
-                            className="p-1.5 bg-[var(--brand-orange)] text-white rounded-lg shadow-md hover:bg-[var(--brand-coral)] transition disabled:opacity-50"
-                            title="Import to Library"
-                          >
-                            {importingId === manga.id ? (
-                              <RefreshCw size={14} className="animate-spin" />
-                            ) : (
-                              <PlusCircle size={14} />
-                            )}
-                          </button>
-                        )}
-                      </div>
 
                       {/* Status / Demographic Badges */}
                       <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-sm text-white rounded text-[9px] uppercase font-bold tracking-wider">
@@ -545,10 +465,7 @@ export const AuthorDetailPage: React.FC = () => {
                     <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
                       <div className="space-y-1">
                         <h4
-                          onClick={() => localManga && navigate(`/manga/${localManga._id}`)}
-                          className={`font-spartan font-bold text-xs leading-tight text-[var(--text-primary)] line-clamp-2 ${
-                            localManga ? "hover:text-[var(--brand-orange)] cursor-pointer" : ""
-                          }`}
+                          className="font-spartan font-bold text-xs leading-tight text-[var(--text-primary)] line-clamp-2 hover:text-[var(--brand-orange)] cursor-pointer"
                           title={manga.title}
                         >
                           {manga.title}
@@ -558,25 +475,11 @@ export const AuthorDetailPage: React.FC = () => {
                         </p>
                       </div>
 
-                      {/* Local Read Status or Rating */}
-                      {localManga ? (
-                        getLocalReadStatusBadge(localManga)
-                      ) : (
-                        <div className="flex items-center space-x-1.5 text-[10px] text-[var(--text-secondary)]">
-                          {manga.ratingAverage !== null && (
-                            <span className={`flex items-center space-x-0.5 text-yellow-600 dark:text-yellow-400 font-bold ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
-                              <Star size={10} className="fill-yellow-500 text-yellow-500" />
-                              <span>{manga.ratingAverage.toFixed(2)}</span>
-                            </span>
-                          )}
-                          <span>•</span>
-                          <span>{manga.followsCount ? manga.followsCount.toLocaleString() : 0} follows</span>
-                        </div>
-                      )}
+                      {/* Read Status Badge */}
+                      {getReadStatusBadge(manga)}
                     </div>
                   </div>
-                );
-              })}
+                ))}
             </div>
           ) : viewMode === "list" ? (
             /* LIST VIEW */
@@ -589,16 +492,14 @@ export const AuthorDetailPage: React.FC = () => {
                       <th className="p-4">Title</th>
                       <th className="p-4 w-28">Year / Status</th>
                       <th className="p-4 w-28">Demographic</th>
-                      <th className="p-4 w-32">MangaDex Stats</th>
-                      <th className="p-4 w-36">Library Status</th>
+                      <th className="p-4 w-32">Rating</th>
+                      <th className="p-4 w-36">Read Status</th>
                       <th className="p-4 w-28 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border-primary)]">
-                    {sortedWorks.map((manga) => {
-                      const localManga = localMangaMap[manga.id];
-                      return (
-                        <tr key={manga.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 text-sm transition">
+                    {sortedWorks.map((manga) => (
+                        <tr key={manga.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 text-sm transition cursor-pointer" onClick={() => navigate(`/manga/${manga.local_id}`)}>
                           <td className="p-3">
                             <div className="w-10 aspect-[3/4] rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                               {manga.coverUrl ? (
@@ -606,7 +507,11 @@ export const AuthorDetailPage: React.FC = () => {
                                   src={manga.coverUrl}
                                   alt={manga.title}
                                   className="w-full h-full object-cover cursor-pointer"
-                                  shouldBlur={shouldBlur(localManga)}
+                                  shouldBlur={shouldBlur({ content_rating: manga.content_rating, tag_ids: manga.tag_ids })}
+                                  onClick={(e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    setZoomedCoverUrl(manga.coverUrl);
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400">No cover</div>
@@ -614,10 +519,7 @@ export const AuthorDetailPage: React.FC = () => {
                             </div>
                           </td>
                           <td className="p-3 font-semibold">
-                            <span
-                              onClick={() => localManga && navigate(`/manga/${localManga._id}`)}
-                              className={localManga ? "hover:text-[var(--brand-orange)] cursor-pointer transition" : "text-[var(--text-primary)]"}
-                            >
+                            <span className="hover:text-[var(--brand-orange)] cursor-pointer transition">
                               {manga.title}
                             </span>
                           </td>
@@ -626,45 +528,26 @@ export const AuthorDetailPage: React.FC = () => {
                           </td>
                           <td className="p-3 capitalize text-zinc-500">{manga.demographic || "none"}</td>
                           <td className="p-3 text-xs text-zinc-500">
-                            <div className="space-y-0.5">
-                              {manga.ratingAverage !== null && (
-                                <div className={`flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
-                                  <Star size={11} className="fill-yellow-500 text-yellow-500" />
-                                  <span>{manga.ratingAverage.toFixed(2)} / 10</span>
-                                </div>
-                              )}
-                              <div>{manga.followsCount ? manga.followsCount.toLocaleString() : 0} follows</div>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            {localManga ? (
-                              getLocalReadStatusBadge(localManga)
-                            ) : (
-                              <span className="text-xs text-zinc-400 italic">Not in Library</span>
+                            {manga.ratingAverage !== null && (
+                              <div className={`flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
+                                <Star size={11} className="fill-yellow-500 text-yellow-500" />
+                                <span>{manga.ratingAverage.toFixed(2)} / 10</span>
+                              </div>
                             )}
                           </td>
-                          <td className="p-3 text-right">
-                            {localManga ? (
-                              <button
-                                onClick={() => navigate(`/manga/${localManga._id}`)}
-                                className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-bold transition"
-                              >
-                                View Review
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleImportManga(manga.id)}
-                                disabled={importingId === manga.id}
-                                className="px-3 py-1 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white rounded-lg text-xs font-bold transition disabled:opacity-50 flex items-center justify-center space-x-1"
-                              >
-                                {importingId === manga.id && <RefreshCw size={10} className="animate-spin mr-1" />}
-                                <span>Import</span>
-                              </button>
-                            )}
+                          <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                            {getReadStatusBadge(manga)}
+                          </td>
+                          <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => navigate(`/manga/${manga.local_id}`)}
+                              className="px-3 py-1 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 hover:opacity-90 rounded-lg text-xs font-bold transition"
+                            >
+                              View Detail
+                            </button>
                           </td>
                         </tr>
-                      );
-                    })}
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -672,21 +555,22 @@ export const AuthorDetailPage: React.FC = () => {
           ) : (
             /* DETAILED CARD VIEW */
             <div className="space-y-6">
-              {sortedWorks.map((manga) => {
-                const localManga = localMangaMap[manga.id];
-                return (
+              {sortedWorks.map((manga) => (
                   <div
                     key={manga.id}
                     className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-5 md:p-6 flex flex-col md:flex-row gap-6 relative shadow-sm hover:shadow-md transition"
                   >
                     {/* Cover (Larger) */}
-                    <div className="w-32 md:w-36 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-md flex-shrink-0 mx-auto md:mx-0">
+                    <div
+                      className="w-32 md:w-36 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-md flex-shrink-0 mx-auto md:mx-0 cursor-pointer"
+                      onClick={() => manga.coverUrl && setZoomedCoverUrl(manga.coverUrl)}
+                    >
                       {manga.coverUrl ? (
                         <BlurredCover
                           src={manga.coverUrl}
                           alt={manga.title}
                           className="w-full h-full object-cover hover:scale-105 transition duration-300 cursor-pointer"
-                          shouldBlur={shouldBlur(localManga)}
+                          shouldBlur={shouldBlur({ content_rating: manga.content_rating, tag_ids: manga.tag_ids })}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 text-xs">
@@ -707,12 +591,12 @@ export const AuthorDetailPage: React.FC = () => {
                             </span>
                           )}
 
-                          {/* Status */}
+                          {/* Publish Status */}
                           <span className="px-2.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 rounded-xl text-[10px] font-bold uppercase">
                             {manga.status}
                           </span>
 
-                          {/* MD Rating */}
+                          {/* Rating */}
                           {manga.ratingAverage !== null && (
                             <span className={`px-2.5 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 rounded-xl text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
                               <Star size={10} className="fill-yellow-500 text-yellow-500" />
@@ -720,39 +604,16 @@ export const AuthorDetailPage: React.FC = () => {
                             </span>
                           )}
 
-                          {/* Follows */}
-                          {manga.followsCount !== null && (
-                            <span className="text-[11px] text-[var(--text-secondary)] font-medium">
-                              {manga.followsCount.toLocaleString()} follows
-                            </span>
-                          )}
-                          
-                          {/* Comments */}
-                          {manga.commentsCount !== null && (
-                            <span className="text-[11px] text-[var(--text-secondary)] font-medium flex items-center space-x-0.5">
-                              <MessageSquare size={11} className="text-zinc-400" />
-                              <span>{manga.commentsCount}</span>
-                            </span>
-                          )}
-
-                          {/* Local status indicator */}
-                          {localManga && (
-                            <div className="ml-auto flex items-center space-x-1.5">
-                              <span className="text-[11px] text-green-500 font-bold flex items-center space-x-0.5">
-                                <CheckCircle size={12} />
-                                <span>In Library</span>
-                              </span>
-                              {getLocalReadStatusBadge(localManga)}
-                            </div>
-                          )}
+                          {/* Read Status */}
+                          <div className="ml-auto">
+                            {getReadStatusBadge(manga)}
+                          </div>
                         </div>
 
                         {/* Title */}
                         <h3
-                          onClick={() => localManga && navigate(`/manga/${localManga._id}`)}
-                          className={`text-xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)] ${
-                            localManga ? "hover:text-[var(--brand-orange)] cursor-pointer transition" : ""
-                          }`}
+                          onClick={() => navigate(`/manga/${manga.local_id}`)}
+                          className="text-xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--brand-orange)] cursor-pointer transition"
                         >
                           {manga.title}
                         </h3>
@@ -787,31 +648,19 @@ export const AuthorDetailPage: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Direct Button Actions */}
+                        {/* Direct Button Action */}
                         <div className="flex gap-2 sm:ml-auto">
-                          {localManga ? (
-                            <button
-                              onClick={() => navigate(`/manga/${localManga._id}`)}
-                              className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition hover:opacity-90"
-                            >
-                              View local review & stats
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleImportManga(manga.id)}
-                              disabled={importingId === manga.id}
-                              className="px-4 py-1.5 bg-[var(--brand-orange)] text-white rounded-xl text-xs font-bold transition hover:bg-[var(--brand-coral)] disabled:opacity-50 flex items-center space-x-1"
-                            >
-                              {importingId === manga.id && <RefreshCw size={12} className="animate-spin" />}
-                              <span>Import to Library</span>
-                            </button>
-                          )}
+                          <button
+                            onClick={() => navigate(`/manga/${manga.local_id}`)}
+                            className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition hover:opacity-90"
+                          >
+                            View detail & review
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
             </div>
           )
         ) : (

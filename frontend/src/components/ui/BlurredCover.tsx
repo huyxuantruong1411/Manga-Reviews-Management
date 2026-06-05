@@ -7,6 +7,7 @@ interface BlurredCoverProps {
   className?: string;
   shouldBlur: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 export const BlurredCover: React.FC<BlurredCoverProps> = ({
@@ -15,6 +16,7 @@ export const BlurredCover: React.FC<BlurredCoverProps> = ({
   className = "w-full h-full object-cover",
   shouldBlur,
   referrerPolicy = "no-referrer",
+  onClick,
 }) => {
   const [revealed, setRevealed] = useState(false);
 
@@ -29,7 +31,7 @@ export const BlurredCover: React.FC<BlurredCoverProps> = ({
   const isCurrentlyBlurred = shouldBlur && !revealed;
 
   return (
-    <div className="relative w-full h-full overflow-hidden group/blur">
+    <div className="relative w-full h-full overflow-hidden group/blur" onClick={onClick}>
       <img
         src={src}
         alt={alt}
