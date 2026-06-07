@@ -120,6 +120,15 @@ interface YearDistribution {
   max_year: number | null;
 }
 
+interface TimelineDateRange {
+  earliest_added_at: string | null;
+  latest_added_at: string | null;
+  earliest_review: string | null;
+  latest_review: string | null;
+  earliest_completed: string | null;
+  latest_completed: string | null;
+}
+
 const RADIAN = Math.PI / 180;
 
 const renderCustomPieLabel = ({
@@ -201,6 +210,12 @@ export const AnalyticsPage: React.FC = () => {
   const [completedStartDate, setCompletedStartDate] = useState("");
   const [completedEndDate, setCompletedEndDate] = useState("");
 
+  // Timeline Range Control states
+  const [timelineLookback, setTimelineLookback] = useState<number | "all">(30);
+  const [timelineGroupSize, setTimelineGroupSize] = useState<number>(1);
+  const [showAllTimelineData, setShowAllTimelineData] = useState(false);
+  const [timelineDateRange, setTimelineDateRange] = useState<TimelineDateRange | null>(null);
+
   // UI States
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
 
@@ -214,6 +229,9 @@ export const AnalyticsPage: React.FC = () => {
   const [metadataDists, setMetadataDists] = useState<MetadataDistributions | null>(null);
   const [topCreators, setTopCreators] = useState<TopCreators | null>(null);
   const [ratingInsights, setRatingInsights] = useState<RatingInsights | null>(null);
+
+  // Today's date string for date picker max
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   // Year Distribution States
   const [yearDist, setYearDist] = useState<YearDistribution | null>(null);
@@ -404,9 +422,10 @@ export const AnalyticsPage: React.FC = () => {
     const decadeRanges: string[] = [];
     for (let y = startDecade; y < endDecade; y += 10) {
       if (y > max) continue;
+      const clampedStart = Math.max(y, min);
       const endYear = Math.min(y + 9, max);
-      if (y <= endYear) {
-        decadeRanges.push(`${y}-${endYear}`);
+      if (clampedStart <= endYear) {
+        decadeRanges.push(`${clampedStart}-${endYear}`);
       }
     }
     list.push({
@@ -420,9 +439,10 @@ export const AnalyticsPage: React.FC = () => {
     const fiveYearRanges: string[] = [];
     for (let y = start5; y < end5; y += 5) {
       if (y > max) continue;
+      const clampedStart = Math.max(y, min);
       const endYear = Math.min(y + 4, max);
-      if (y <= endYear) {
-        fiveYearRanges.push(`${y}-${endYear}`);
+      if (clampedStart <= endYear) {
+        fiveYearRanges.push(`${clampedStart}-${endYear}`);
       }
     }
     list.push({
@@ -436,11 +456,16 @@ export const AnalyticsPage: React.FC = () => {
       if (min < 2000) {
         post2000Ranges.push(`${min}-1999`);
       }
-      post2000Ranges.push("2000-2009", "2010-2019", `2020-${max}`);
-      list.push({
-        name: "Classic vs Modern (2000 Split)",
-        value: post2000Ranges.join(", ")
-      });
+      const clamp2000 = Math.max(2000, min);
+      if (clamp2000 <= 2009 && max >= clamp2000) post2000Ranges.push(`${clamp2000}-${Math.min(2009, max)}`);
+      if (min <= 2010 && max >= 2010) post2000Ranges.push(`${Math.max(2010, min)}-${Math.min(2019, max)}`);
+      if (max >= 2020) post2000Ranges.push(`${Math.max(2020, min)}-${max}`);
+      if (post2000Ranges.length > 0) {
+        list.push({
+          name: "Classic vs Modern (2000 Split)",
+          value: post2000Ranges.join(", ")
+        });
+      }
     }
 
     // Simple 2-Half Split
@@ -452,6 +477,176 @@ export const AnalyticsPage: React.FC = () => {
     
     return list;
   }, [yearDist]);
+
+  // ── Timeline range helpers ──
+
+  /** Compute max available units from earliest date to now */
+  const computeMaxUnits = (earliest: string | null, unit: string): number => {
+    if (!earliest) return 0;
+    const now = new Date();
+    const start = new Date(earliest);
+    const diffMs = now.getTime() - start.getTime();
+    if (diffMs <= 0) return 0;
+    switch (unit) {
+      case "hour":   return Math.floor(diffMs / (1000 * 60 * 60));
+      case "day":    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      case "week":   return Math.floor(diffMs / (1000 * 60 * 60 * 24 * 7));
+      case "month": {
+        const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+        return Math.max(0, months);
+      }
+      case "year": {
+        return Math.max(0, now.getFullYear() - start.getFullYear());
+      }
+      default: return 0;
+    }
+  };
+
+  /** Get the overall earliest date across all 3 chart types */
+  const overallEarliest = useMemo(() => {
+    if (!timelineDateRange) return null;
+    const dates = [
+      timelineDateRange.earliest_added_at,
+      timelineDateRange.earliest_review,
+      timelineDateRange.earliest_completed
+    ].filter(Boolean) as string[];
+    if (dates.length === 0) return null;
+    return dates.sort()[0]; // ISO string sort = chronological
+  }, [timelineDateRange]);
+
+  /** Max available lookback in current time unit */
+  const maxLookbackUnits = useMemo(() => {
+    return computeMaxUnits(overallEarliest, timelineGroupBy);
+  }, [overallEarliest, timelineGroupBy]);
+
+  /** Auto-validated lookback presets for current time unit */
+  const lookbackPresets = useMemo(() => {
+    const presetMap: Record<string, number[]> = {
+      hour:  [6, 12, 24, 36, 48, 72],
+      day:   [7, 14, 30, 60, 90],
+      week:  [4, 8, 12, 24, 52],
+      month: [3, 6, 12, 24, 36],
+      year:  [1, 2, 3, 5, 10]
+    };
+    const candidates = presetMap[timelineGroupBy] || [];
+    return candidates.filter(n => n <= maxLookbackUnits);
+  }, [timelineGroupBy, maxLookbackUnits]);
+
+  /** Auto-set smart default when groupBy or data changes */
+  useEffect(() => {
+    if (maxLookbackUnits <= 30) {
+      setShowAllTimelineData(true);
+      setTimelineLookback("all");
+    } else {
+      setShowAllTimelineData(false);
+      setTimelineLookback(30);
+    }
+    setTimelineGroupSize(1);
+  }, [timelineGroupBy, maxLookbackUnits]);
+
+  /** Compute cutoff period string for filtering timeline data */
+  const getCutoffPeriod = (lookback: number, unit: string): string => {
+    const now = new Date();
+    switch (unit) {
+      case "hour": {
+        const d = new Date(now.getTime() - lookback * 60 * 60 * 1000);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:00`;
+      }
+      case "day": {
+        const d = new Date(now.getTime() - lookback * 24 * 60 * 60 * 1000);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      }
+      case "week": {
+        // ISO week format: subtract weeks from now, return YYYY-Www
+        const d = new Date(now.getTime() - lookback * 7 * 24 * 60 * 60 * 1000);
+        // Compute ISO week number
+        const jan4 = new Date(d.getFullYear(), 0, 4);
+        const dayOfYear = Math.round((d.getTime() - jan4.getTime()) / (24 * 60 * 60 * 1000)) + jan4.getDay();
+        const weekNum = Math.ceil(dayOfYear / 7);
+        return `${d.getFullYear()}-W${String(Math.max(1, weekNum)).padStart(2, "0")}`;
+      }
+      case "month": {
+        const d = new Date(now.getFullYear(), now.getMonth() - lookback, 1);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      }
+      case "year": {
+        return `${now.getFullYear() - lookback}`;
+      }
+      default: return "";
+    }
+  };
+
+  /** Slice timeline data by lookback window */
+  const sliceTimeline = (data: TimelineItem[], lookback: number | "all", unit: string): TimelineItem[] => {
+    if (lookback === "all" || !data.length) return data;
+    const cutoff = getCutoffPeriod(lookback, unit);
+    return data.filter(item => item.period >= cutoff);
+  };
+
+  /** Group/bucket consecutive timeline items */
+  const groupTimeline = (data: TimelineItem[], groupSize: number): TimelineItem[] => {
+    if (groupSize <= 1 || !data.length) return data;
+    const result: TimelineItem[] = [];
+    for (let i = 0; i < data.length; i += groupSize) {
+      const chunk = data.slice(i, i + groupSize);
+      const totalCount = chunk.reduce((sum, item) => sum + item.count, 0);
+      const label = chunk.length === 1
+        ? chunk[0].period
+        : `${chunk[0].period} — ${chunk[chunk.length - 1].period}`;
+      result.push({ period: label, count: totalCount });
+    }
+    return result;
+  };
+
+  /** Effective lookback value */
+  const effectiveLookback = showAllTimelineData ? "all" : timelineLookback;
+
+  /** Processed timeline data for each chart */
+  const processedMangaTimeline = useMemo(
+    () => groupTimeline(sliceTimeline(mangaTimeline, effectiveLookback, timelineGroupBy), timelineGroupSize),
+    [mangaTimeline, effectiveLookback, timelineGroupBy, timelineGroupSize]
+  );
+  const processedReviewTimeline = useMemo(
+    () => groupTimeline(sliceTimeline(reviewTimeline, effectiveLookback, timelineGroupBy), timelineGroupSize),
+    [reviewTimeline, effectiveLookback, timelineGroupBy, timelineGroupSize]
+  );
+  const processedCompletedTimeline = useMemo(
+    () => groupTimeline(sliceTimeline(completedTimeline, effectiveLookback, timelineGroupBy), timelineGroupSize),
+    [completedTimeline, effectiveLookback, timelineGroupBy, timelineGroupSize]
+  );
+
+  /** Date picker min values per chart */
+  const datePickerMins = useMemo(() => {
+    if (!timelineDateRange) return { added: "", review: "", completed: "" };
+    const toDateStr = (iso: string | null) => iso ? iso.split("T")[0] : "";
+    return {
+      added: toDateStr(timelineDateRange.earliest_added_at),
+      review: toDateStr(timelineDateRange.earliest_review),
+      completed: toDateStr(timelineDateRange.earliest_completed)
+    };
+  }, [timelineDateRange]);
+
+  /** Lookback validation */
+  const lookbackValidation = useMemo(() => {
+    if (showAllTimelineData || timelineLookback === "all") return { valid: true, error: "" };
+    if (typeof timelineLookback === "number") {
+      if (timelineLookback <= 0) return { valid: false, error: "Lookback must be at least 1." };
+      if (timelineLookback > maxLookbackUnits && maxLookbackUnits > 0) {
+        return { valid: false, error: `Max available: ${maxLookbackUnits} ${timelineGroupBy}(s).` };
+      }
+    }
+    return { valid: true, error: "" };
+  }, [showAllTimelineData, timelineLookback, maxLookbackUnits, timelineGroupBy]);
+
+  /** Group size validation */
+  const groupSizeValidation = useMemo(() => {
+    if (timelineGroupSize <= 0) return { valid: false, error: "Group size must be at least 1." };
+    const effectiveCount = effectiveLookback === "all" ? maxLookbackUnits : (typeof effectiveLookback === "number" ? effectiveLookback : 0);
+    if (effectiveCount > 0 && timelineGroupSize > effectiveCount) {
+      return { valid: false, error: `Group size cannot exceed lookback (${effectiveCount}).` };
+    }
+    return { valid: true, error: "" };
+  }, [timelineGroupSize, effectiveLookback, maxLookbackUnits]);
 
   // Debounce search string
   useEffect(() => {
@@ -517,6 +712,7 @@ export const AnalyticsPage: React.FC = () => {
       setTopCreators(res.data.top_creators);
       setRatingInsights(res.data.rating_insights);
       setYearDist(res.data.year_distribution);
+      setTimelineDateRange(res.data.timeline_date_range || null);
     } catch (err) {
       console.error("Error loading library analytics:", err);
     }
@@ -1800,33 +1996,175 @@ export const AnalyticsPage: React.FC = () => {
       {/* Timeline Controls & Charts */}
       <div className="space-y-6">
         {/* Timeline Filters Toolbelt */}
-        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center space-x-2">
-            <Calendar size={18} className="text-[var(--brand-orange)]" />
-            <h3 className="font-spartan font-bold text-sm">Timeline Configuration</h3>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Timeline Grouping Option */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-4 shadow-sm">
+          {/* Header Row */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-semibold text-[var(--text-secondary)]">Group Timeline by:</span>
-              <div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
-                {["hour", "day", "week", "month", "year"].map((unit) => (
-                  <button
-                    key={unit}
-                    onClick={() => setTimelineGroupBy(unit)}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition capitalize ${
-                      timelineGroupBy === unit
-                        ? "bg-[var(--brand-orange)] text-white shadow-sm"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    {unit}
-                  </button>
-                ))}
+              <Calendar size={18} className="text-[var(--brand-orange)]" />
+              <h3 className="font-spartan font-bold text-sm">Timeline Configuration</h3>
+              {maxLookbackUnits > 0 && (
+                <span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--bg-primary)] px-2 py-0.5 rounded-md border border-[var(--border-primary)]">
+                  Data spans ~{maxLookbackUnits} {timelineGroupBy}{maxLookbackUnits !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Timeline Grouping Option */}
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-semibold text-[var(--text-secondary)]">Group by:</span>
+                <div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
+                  {["hour", "day", "week", "month", "year"].map((unit) => (
+                    <button
+                      key={unit}
+                      onClick={() => setTimelineGroupBy(unit)}
+                      className={`px-3 py-1 text-xs font-bold rounded-lg transition capitalize ${
+                        timelineGroupBy === unit
+                          ? "bg-[var(--brand-orange)] text-white shadow-sm"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {unit}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Show All Checkbox */}
+              <label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
+                <input
+                  type="checkbox"
+                  checked={showAllTimelineData}
+                  onChange={(e) => {
+                    setShowAllTimelineData(e.target.checked);
+                    if (e.target.checked) {
+                      setTimelineLookback("all");
+                    } else {
+                      setTimelineLookback(Math.min(30, maxLookbackUnits || 30));
+                    }
+                  }}
+                  className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
+                />
+                <span>Show All Data</span>
+              </label>
             </div>
           </div>
+
+          {/* Range Controls Row — only when NOT showing all */}
+          {!showAllTimelineData && (
+            <div className="bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 space-y-3">
+              {/* Quick Lookback Presets */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Quick Lookback:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {lookbackPresets.map((n) => {
+                    const unitLabel = timelineGroupBy === "hour" ? "h" : timelineGroupBy === "day" ? "d" : timelineGroupBy === "week" ? "w" : timelineGroupBy === "month" ? "m" : "y";
+                    const isActive = timelineLookback === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setTimelineLookback(n)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                          isActive
+                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+                            : "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)]"
+                        }`}
+                      >
+                        {n}{unitLabel}
+                      </button>
+                    );
+                  })}
+                  {lookbackPresets.length === 0 && (
+                    <span className="text-[10px] text-zinc-400 font-medium italic">Not enough data for presets</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom Lookback & Group Size */}
+              <div className="flex flex-wrap items-end gap-4">
+                {/* Custom Lookback Input */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+                    Show last
+                  </label>
+                  <div className="flex items-center space-x-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxLookbackUnits || undefined}
+                      value={typeof timelineLookback === "number" ? timelineLookback : ""}
+                      onChange={(e) => {
+                        const val = e.target.value === "" ? 1 : parseInt(e.target.value, 10);
+                        if (!isNaN(val)) setTimelineLookback(val);
+                      }}
+                      className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
+                    />
+                    <span className="text-xs font-bold text-[var(--text-secondary)] capitalize">{timelineGroupBy}(s)</span>
+                  </div>
+                  {!lookbackValidation.valid && (
+                    <span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
+                      ⚠ {lookbackValidation.error}
+                    </span>
+                  )}
+                </div>
+
+                {/* Group Size Input */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+                    Group every
+                  </label>
+                  <div className="flex items-center space-x-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={typeof effectiveLookback === "number" ? effectiveLookback : maxLookbackUnits || undefined}
+                      value={timelineGroupSize}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) setTimelineGroupSize(Math.max(1, val));
+                      }}
+                      className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
+                    />
+                    <span className="text-xs font-bold text-[var(--text-secondary)] capitalize">{timelineGroupBy}(s)</span>
+                  </div>
+                  {!groupSizeValidation.valid && (
+                    <span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
+                      ⚠ {groupSizeValidation.error}
+                    </span>
+                  )}
+                </div>
+
+                {/* Quick Group Size presets */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+                    Quick Group
+                  </label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 6].filter(g => {
+                      const eff = typeof effectiveLookback === "number" ? effectiveLookback : maxLookbackUnits;
+                      return g <= eff;
+                    }).map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setTimelineGroupSize(g)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          timelineGroupSize === g
+                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+                            : "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-orange)]"
+                        }`}
+                      >
+                        {g === 1 ? "×1" : `×${g}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Timeline Charts Grid */}
@@ -1842,6 +2180,8 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={addedStartDate}
                   onChange={(e) => setAddedStartDate(e.target.value)}
+                  min={datePickerMins.added}
+                  max={addedEndDate || todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
                 <span>-</span>
@@ -1849,15 +2189,17 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={addedEndDate}
                   onChange={(e) => setAddedEndDate(e.target.value)}
+                  min={addedStartDate || datePickerMins.added}
+                  max={todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="h-72">
-              {mangaTimeline.length > 0 ? (
+              {processedMangaTimeline.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={mangaTimeline}>
+                  <AreaChart data={processedMangaTimeline}>
                     <defs>
                       <linearGradient id="colorManga" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--brand-orange)" stopOpacity={0.4} />
@@ -1894,6 +2236,8 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={completedStartDate}
                   onChange={(e) => setCompletedStartDate(e.target.value)}
+                  min={datePickerMins.completed}
+                  max={completedEndDate || todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
                 <span>-</span>
@@ -1901,15 +2245,17 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={completedEndDate}
                   onChange={(e) => setCompletedEndDate(e.target.value)}
+                  min={completedStartDate || datePickerMins.completed}
+                  max={todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="h-72">
-              {completedTimeline.length > 0 ? (
+              {processedCompletedTimeline.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={completedTimeline}>
+                  <AreaChart data={processedCompletedTimeline}>
                     <defs>
                       <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
@@ -1946,6 +2292,8 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={reviewStartDate}
                   onChange={(e) => setReviewStartDate(e.target.value)}
+                  min={datePickerMins.review}
+                  max={reviewEndDate || todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
                 <span>-</span>
@@ -1953,15 +2301,17 @@ export const AnalyticsPage: React.FC = () => {
                   type="date"
                   value={reviewEndDate}
                   onChange={(e) => setReviewEndDate(e.target.value)}
+                  min={reviewStartDate || datePickerMins.review}
+                  max={todayStr}
                   className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="h-72">
-              {reviewTimeline.length > 0 ? (
+              {processedReviewTimeline.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={reviewTimeline}>
+                  <LineChart data={processedReviewTimeline}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="period" />
                     <YAxis allowDecimals={false} />

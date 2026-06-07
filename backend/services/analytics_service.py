@@ -509,6 +509,68 @@ class AnalyticsService:
             "max_year": max_year
         }
 
+    async def get_timeline_date_range(self, filter_query: Dict[str, Any]) -> Dict[str, Any]:
+        """Get earliest and latest dates for all 3 timeline data sources.
+        Used by frontend to compute valid lookback ranges and date picker limits."""
+        mangas_coll = self._get_mangas_collection()
+        reviews_coll = self._get_reviews_collection()
+        audit_coll = self._get_audit_collection()
+        
+        # Earliest/latest added_at from mangas
+        added_pipeline = [
+            {"$match": {**filter_query, "added_at": {"$ne": None}}},
+            {"$group": {
+                "_id": None,
+                "earliest": {"$min": "$added_at"},
+                "latest": {"$max": "$added_at"}
+            }}
+        ]
+        added_res = await mangas_coll.aggregate(added_pipeline).to_list(1)
+        
+        # Get manga_ids for review and audit queries
+        manga_ids = [str(mid) for mid in await mangas_coll.find(filter_query).distinct("_id")]
+        
+        # Earliest/latest review created_at
+        review_pipeline = [
+            {"$match": {"is_deleted": {"$ne": True}, "manga_id": {"$in": manga_ids}, "created_at": {"$ne": None}}},
+            {"$group": {
+                "_id": None,
+                "earliest": {"$min": "$created_at"},
+                "latest": {"$max": "$created_at"}
+            }}
+        ]
+        review_res = await reviews_coll.aggregate(review_pipeline).to_list(1)
+        
+        # Earliest/latest completed timestamp from audit_logs
+        completed_pipeline = [
+            {"$match": {
+                "entity_type": "manga",
+                "entity_id": {"$in": manga_ids},
+                "action": "update_status",
+                "field": "read_status",
+                "new_value": {"$in": ["completed", "ReadStatus.COMPLETED"]},
+                "timestamp": {"$ne": None}
+            }},
+            {"$group": {
+                "_id": None,
+                "earliest": {"$min": "$timestamp"},
+                "latest": {"$max": "$timestamp"}
+            }}
+        ]
+        completed_res = await audit_coll.aggregate(completed_pipeline).to_list(1)
+        
+        def fmt(dt):
+            return dt.isoformat() if dt else None
+        
+        return {
+            "earliest_added_at": fmt(added_res[0]["earliest"]) if added_res else None,
+            "latest_added_at": fmt(added_res[0]["latest"]) if added_res else None,
+            "earliest_review": fmt(review_res[0]["earliest"]) if review_res else None,
+            "latest_review": fmt(review_res[0]["latest"]) if review_res else None,
+            "earliest_completed": fmt(completed_res[0]["earliest"]) if completed_res else None,
+            "latest_completed": fmt(completed_res[0]["latest"]) if completed_res else None
+        }
+
     async def get_all_analytics(self, filter_query: Dict[str, Any], group_by: str = "month",
                                 added_start: Optional[datetime] = None, added_end: Optional[datetime] = None,
                                 review_start: Optional[datetime] = None, review_end: Optional[datetime] = None,
@@ -529,6 +591,7 @@ class AnalyticsService:
         top_creators = await self.get_top_creators(filter_query)
         rating_insights = await self.get_rating_insights(filter_query)
         year_distribution = await self.get_year_distribution(filter_query)
+        timeline_date_range = await self.get_timeline_date_range(filter_query)
         
         return {
             "overview": overview,
@@ -540,7 +603,8 @@ class AnalyticsService:
             "metadata_distributions": metadata_distributions,
             "top_creators": top_creators,
             "rating_insights": rating_insights,
-            "year_distribution": year_distribution
+            "year_distribution": year_distribution,
+            "timeline_date_range": timeline_date_range
         }
 
 analytics_service = AnalyticsService()
