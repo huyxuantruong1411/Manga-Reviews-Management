@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from bson import ObjectId
 from typing import Dict, Any, List, Optional
@@ -40,12 +41,30 @@ class AnalyticsService:
         clauses = []
         
         if search:
-            clauses.append({"$or": [
-                {"title": {"$regex": search, "$options": "i"}},
-                {"alt_titles": {"$regex": search, "$options": "i"}},
-                {"author": {"$regex": search, "$options": "i"}},
-                {"artist": {"$regex": search, "$options": "i"}}
-            ]})
+            escaped = re.escape(search)
+            # Full escaped-string match (exact substring)
+            full_match = {"$or": [
+                {"title": {"$regex": escaped, "$options": "i"}},
+                {"alt_titles": {"$regex": escaped, "$options": "i"}},
+                {"author": {"$regex": escaped, "$options": "i"}},
+                {"artist": {"$regex": escaped, "$options": "i"}}
+            ]}
+            # Multi-word AND match: each word must appear somewhere in any searchable field
+            words = [w.strip() for w in search.split() if w.strip()]
+            if len(words) > 1:
+                word_patterns = []
+                for word in words:
+                    ew = re.escape(word)
+                    word_patterns.append({"$or": [
+                        {"title": {"$regex": ew, "$options": "i"}},
+                        {"alt_titles": {"$regex": ew, "$options": "i"}},
+                        {"author": {"$regex": ew, "$options": "i"}},
+                        {"artist": {"$regex": ew, "$options": "i"}}
+                    ]})
+                multi_word_match = {"$and": word_patterns}
+                clauses.append({"$or": [full_match, multi_word_match]})
+            else:
+                clauses.append(full_match)
             
         # Read status include
         status_include = []
@@ -93,9 +112,9 @@ class AnalyticsService:
                 if not words:
                     continue
                 if len(words) == 1:
-                    or_clauses.append({field: {"$regex": words[0], "$options": "i"}})
+                    or_clauses.append({field: {"$regex": re.escape(words[0]), "$options": "i"}})
                 else:
-                    or_clauses.append({"$and": [{field: {"$regex": w, "$options": "i"}} for w in words]})
+                    or_clauses.append({"$and": [{field: {"$regex": re.escape(w), "$options": "i"}} for w in words]})
             if or_clauses:
                 return {"$or": or_clauses}
             return None

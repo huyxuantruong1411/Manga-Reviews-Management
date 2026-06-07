@@ -26,7 +26,7 @@ class CreatorService:
         """
         coll = self._get_creators_collection()
         # Case insensitive search in local MongoDB
-        existing = await coll.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}})
+        existing = await coll.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
         if existing:
             return serialize_doc(existing)
 
@@ -48,7 +48,7 @@ class CreatorService:
                     "updated_at": datetime.utcnow()
                 }
                 # Double-check case-insensitive before inserting, to avoid race conditions
-                race_check = await coll.find_one({"name": {"$regex": f"^{details['name']}$", "$options": "i"}})
+                race_check = await coll.find_one({"name": {"$regex": f"^{re.escape(details['name'])}$", "$options": "i"}})
                 if not race_check:
                     await coll.insert_one(creator_doc)
                 else:
