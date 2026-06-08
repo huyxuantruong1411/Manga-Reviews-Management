@@ -248,6 +248,98 @@ class AnalyticsService:
             })
         return formatted
 
+    async def get_tags_details(self, filter_query: Dict[str, Any]) -> List[Dict[str, Any]]:
+        mangas_coll = self._get_mangas_collection()
+        tags_coll = self._get_tags_collection()
+        
+        # 1. Fetch all tags for metadata (names & colors)
+        tag_metadata = {}
+        async for doc in tags_coll.find({}):
+            tag_id_str = str(doc["_id"])
+            names = doc.get("name", {})
+            name_en = names.get("en") or (list(names.values())[0] if names else "Unknown")
+            tag_metadata[tag_id_str] = {
+                "name": name_en,
+                "color": doc.get("color")
+            }
+            
+        # 2. Run MongoDB aggregation
+        pipeline = [
+            {"$match": filter_query},
+            {"$unwind": "$tag_ids"},
+            {
+                "$group": {
+                    "_id": {
+                        "tag_id": "$tag_ids",
+                        "demographic": "$publication_demographic",
+                        "content_rating": "$content_rating",
+                        "status": "$status",
+                        "read_status": "$read_status",
+                        "rating": "$personal_rating"
+                    },
+                    "count": {"$sum": 1}
+                }
+            }
+        ]
+        
+        # 3. Post-process the results
+        tag_analytics = {}
+        async for item in mangas_coll.aggregate(pipeline):
+            group_info = item["_id"]
+            tag_id = group_info["tag_id"]
+            count = item["count"]
+            
+            if tag_id not in tag_analytics:
+                meta = tag_metadata.get(tag_id, {"name": "Unknown", "color": None})
+                tag_analytics[tag_id] = {
+                    "tag_id": tag_id,
+                    "name": meta["name"],
+                    "color": meta["color"],
+                    "count": 0,
+                    "demographics": {},
+                    "content_ratings": {},
+                    "statuses": {},
+                    "ratings": {}
+                }
+                
+            stats = tag_analytics[tag_id]
+            stats["count"] += count
+            
+            # Demographic
+            demo = group_info.get("demographic") or "Unknown"
+            demo = demo.capitalize()
+            stats["demographics"][demo] = stats["demographics"].get(demo, 0) + count
+            
+            # Content Rating
+            cr = group_info.get("content_rating") or "Unknown"
+            cr = cr.capitalize()
+            stats["content_ratings"][cr] = stats["content_ratings"].get(cr, 0) + count
+            
+            # Publication Status
+            status = group_info.get("status") or "Unknown"
+            status = status.capitalize()
+            stats["statuses"][status] = stats["statuses"].get(status, 0) + count
+            
+            # Personal rating for completed mangas
+            read_status = group_info.get("read_status") or "unread"
+            rating = group_info.get("rating")
+            if read_status in ["completed", "ReadStatus.COMPLETED"] and rating is not None:
+                rating_int = int(rating)
+                stats["ratings"][rating_int] = stats["ratings"].get(rating_int, 0) + count
+                
+        # 4. Format outputs as sorted list by total manga count descending
+        formatted_list = list(tag_analytics.values())
+        formatted_list.sort(key=lambda x: x["count"], reverse=True)
+        
+        # Format mapping dicts into Recharts-friendly lists
+        for stats in formatted_list:
+            stats["demographics"] = [{"name": k, "value": v} for k, v in stats["demographics"].items()]
+            stats["content_ratings"] = [{"name": k, "value": v} for k, v in stats["content_ratings"].items()]
+            stats["statuses"] = [{"name": k, "value": v} for k, v in stats["statuses"].items()]
+            stats["ratings"] = [{"score": k, "count": v} for k, v in sorted(stats["ratings"].items())]
+            
+        return formatted_list
+
     async def get_manga_added_timeline(self, filter_query: Dict[str, Any], group_by: str = "month",
                                         start_date: Optional[datetime] = None,
                                         end_date: Optional[datetime] = None) -> List[Dict[str, Any]]:

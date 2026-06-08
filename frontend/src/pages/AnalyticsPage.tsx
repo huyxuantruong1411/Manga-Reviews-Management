@@ -219,6 +219,14 @@ export const AnalyticsPage: React.FC = () => {
   // UI States
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
 
+  // Tag Detailed Analytics state
+  const [showAllTagDetails, setShowAllTagDetails] = useState(false);
+  const [tagDetails, setTagDetails] = useState<any[]>([]);
+  const [tagDetailsLoading, setTagDetailsLoading] = useState(false);
+  const [tagDetailsSearch, setTagDetailsSearch] = useState("");
+  const [expandedTagId, setExpandedTagId] = useState<string | null>(null);
+
+
   // Analytics API Data States
   const [overview, setOverview] = useState<OverviewStats | null>(null);
   const [scoreDist, setScoreDist] = useState<ScoreDist[]>([]);
@@ -746,7 +754,63 @@ export const AnalyticsPage: React.FC = () => {
     completedEndDate
   ]);
 
+  // Fetch detailed tag analytics
+  const fetchTagDetails = async () => {
+    try {
+      setTagDetailsLoading(true);
+      const params: any = {};
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      if (selectedReadStatuses.length > 0) params.read_statuses = selectedReadStatuses;
+      if (excludeReadStatuses.length > 0) params.exclude_read_statuses = excludeReadStatuses;
+      if (selectedTags.length > 0) params.tags = selectedTags;
+      if (excludeTags.length > 0) params.exclude_tags = excludeTags;
+      if (tagMode) params.tag_mode = tagMode;
+      if (contentRatings.length > 0) params.content_ratings = contentRatings;
+      if (demographics.length > 0) params.demographics = demographics;
+      if (statuses.length > 0) params.statuses = statuses;
+      if (originalLanguages.length > 0) params.original_languages = originalLanguages;
+      if (selectedAuthors.length > 0) params.authors = selectedAuthors;
+      if (selectedArtists.length > 0) params.artists = selectedArtists;
+      if (ratingMin !== "") params.rating_min = Number(ratingMin);
+      if (ratingMax !== "") params.rating_max = Number(ratingMax);
+      if (yearStart.trim()) params.year_start = yearStart.trim();
+      if (yearEnd.trim()) params.year_end = yearEnd.trim();
+
+      const res = await client.get("/api/analytics/tags-details", { params });
+      setTagDetails(res.data);
+    } catch (err) {
+      console.error("Error loading tag details:", err);
+    } finally {
+      setTagDetailsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showAllTagDetails) {
+      fetchTagDetails();
+    }
+  }, [
+    showAllTagDetails,
+    debouncedSearch,
+    selectedReadStatuses,
+    excludeReadStatuses,
+    selectedTags,
+    excludeTags,
+    tagMode,
+    contentRatings,
+    demographics,
+    statuses,
+    originalLanguages,
+    selectedAuthors,
+    selectedArtists,
+    ratingMin,
+    ratingMax,
+    yearStart,
+    yearEnd
+  ]);
+
   const handleTagClick = (tagId: string) => {
+
     const isIncluded = selectedTags.includes(tagId);
     const isExcluded = excludeTags.includes(tagId);
 
@@ -2430,38 +2494,256 @@ export const AnalyticsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Top Tags Count */}
+      {/* Genres / Tags in Pool Section */}
       <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
-        <h3 className="text-lg font-bold flex items-center space-x-2">
-          <TrendingUp size={20} className="text-[var(--brand-orange)]" />
-          <span>Top 10 Genres / Tags in Pool</span>
-        </h3>
-        
-        {topTags.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {topTags.map((tag, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl">
-                <div className="flex items-center space-x-3">
-                  <span className="w-6 h-6 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
-                    {idx + 1}
-                  </span>
-                  <span
-                    className="px-2 py-0.5 rounded text-xs font-semibold text-white"
-                    style={{ backgroundColor: tag.color || "var(--brand-orange)" }}
-                  >
-                    {tag.name}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h3 className="text-lg font-bold flex items-center space-x-2">
+            <TrendingUp size={20} className="text-[var(--brand-orange)]" />
+            <span>{showAllTagDetails ? "Genres / Tags Analysis Dashboard" : "Top 10 Genres / Tags in Pool"}</span>
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Show all tag details toggle */}
+            <button
+              onClick={() => setShowAllTagDetails(!showAllTagDetails)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold border transition duration-200 ${
+                showAllTagDetails
+                  ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-md shadow-orange-500/20"
+                  : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              {showAllTagDetails ? "Show Top 10 Summary" : "Show All & Analyze Distributions"}
+            </button>
+
+            {/* Search filter for all tags (only shown when showAllTagDetails is true) */}
+            {showAllTagDetails && (
+              <div className="relative w-full md:w-56">
+                <Search size={14} className="absolute left-3 top-2.5 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search tags..."
+                  value={tagDetailsSearch}
+                  onChange={(e) => setTagDetailsSearch(e.target.value)}
+                  className="w-full pl-8 pr-4 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {!showAllTagDetails ? (
+          /* Render simple list of Top 10 tags */
+          topTags.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {topTags.map((tag, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl">
+                  <div className="flex items-center space-x-3">
+                    <span className="w-6 h-6 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
+                      {idx + 1}
+                    </span>
+                    <span
+                      className="px-2 py-0.5 rounded text-xs font-semibold text-white"
+                      style={{ backgroundColor: tag.color || "var(--brand-orange)" }}
+                    >
+                      {tag.name}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-[var(--text-secondary)]">
+                    {tag.count} {tag.count === 1 ? "manga" : "mangas"}
                   </span>
                 </div>
-                <span className="text-sm font-semibold text-[var(--text-secondary)]">
-                  {tag.count} {tag.count === 1 ? "manga" : "mangas"}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-[var(--text-secondary)] text-sm">No tags aggregated in the selected pool.</div>
+          )
         ) : (
-          <div className="text-center py-8 text-[var(--text-secondary)] text-sm">No tags aggregated in the selected pool.</div>
+          /* Render detailed interactive tag dashboard */
+          tagDetailsLoading ? (
+            <div className="flex justify-center items-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
+            </div>
+          ) : (
+            (() => {
+              const filteredTagDetails = tagDetails.filter(t =>
+                t.name.toLowerCase().includes(tagDetailsSearch.toLowerCase())
+              );
+              
+              if (filteredTagDetails.length === 0) {
+                return (
+                  <div className="text-center py-8 text-[var(--text-secondary)] text-sm">
+                    {tagDetails.length === 0 ? "No tags found in this pool." : "No tags match your search query."}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {filteredTagDetails.map((tag) => {
+                    const isExpanded = expandedTagId === tag.tag_id;
+                    return (
+                      <div
+                        key={tag.tag_id}
+                        className={`border rounded-2xl bg-[var(--bg-primary)] overflow-hidden transition-all duration-300 ${
+                          isExpanded 
+                            ? "border-[var(--brand-orange)] shadow-md shadow-orange-500/5" 
+                            : "border-[var(--border-primary)] hover:border-zinc-400"
+                        }`}
+                      >
+                        {/* Tag Header Accordion Trigger */}
+                        <div
+                          onClick={() => setExpandedTagId(isExpanded ? null : tag.tag_id)}
+                          className="flex items-center justify-between p-4 cursor-pointer select-none"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <span
+                              className="px-3 py-1 rounded-lg text-xs font-bold text-white shadow-sm"
+                              style={{ backgroundColor: tag.color || "var(--brand-orange)" }}
+                            >
+                              {tag.name}
+                            </span>
+                            <span className="text-xs text-[var(--text-secondary)] font-semibold">
+                              ({tag.count} {tag.count === 1 ? "title" : "titles"})
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 text-[var(--text-secondary)]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+                              {isExpanded ? "Collapse Analysis" : "Deep Analyze"}
+                            </span>
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </div>
+                        </div>
+
+                        {/* Tag Distributions Panel */}
+                        {isExpanded && (
+                          <div className="p-6 bg-[var(--bg-card)] border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-350">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Demographic Chart */}
+                              <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+                                <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">Demographics</span>
+                                <div className="h-44">
+                                  {tag.demographics && tag.demographics.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={tag.demographics} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
+                                        <XAxis type="number" allowDecimals={false} />
+                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                          {tag.demographics.map((entry: any, index: number) => {
+                                            const demoColors: Record<string, string> = {
+                                              Shounen: "#3B82F6",
+                                              Seinen: "#8B5CF6",
+                                              Shoujo: "#EC4899",
+                                              Josei: "#F43F5E",
+                                              Unknown: "#9CA3AF"
+                                            };
+                                            return <Cell key={`cell-${index}`} fill={demoColors[entry.name] || "#3B82F6"} />;
+                                          })}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">No demographic data.</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Content Rating Chart */}
+                              <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+                                <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">Content Ratings</span>
+                                <div className="h-44">
+                                  {tag.content_ratings && tag.content_ratings.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={tag.content_ratings} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
+                                        <XAxis type="number" allowDecimals={false} />
+                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                          {tag.content_ratings.map((entry: any, index: number) => {
+                                            const ratingColors: Record<string, string> = {
+                                              Safe: "#10B981",
+                                              Suggestive: "#F59E0B",
+                                              Erotica: "#D946EF",
+                                              Pornographic: "#EF4444",
+                                              Unknown: "#9CA3AF"
+                                            };
+                                            return <Cell key={`cell-${index}`} fill={ratingColors[entry.name] || "#10B981"} />;
+                                          })}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">No content rating data.</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Publication Status Chart */}
+                              <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+                                <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">Publication Status</span>
+                                <div className="h-44">
+                                  {tag.statuses && tag.statuses.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={tag.statuses} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
+                                        <XAxis type="number" allowDecimals={false} />
+                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                          {tag.statuses.map((entry: any, index: number) => {
+                                            const statusColors: Record<string, string> = {
+                                              Ongoing: "#3B82F6",
+                                              Completed: "#10B981",
+                                              Hiatus: "#F59E0B",
+                                              Cancelled: "#EF4444",
+                                              Unknown: "#9CA3AF"
+                                            };
+                                            return <Cell key={`cell-${index}`} fill={statusColors[entry.name] || "#3B82F6"} />;
+                                          })}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">No status data.</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Score Distribution Chart */}
+                              <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+                                <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">Personal Scores (Completed)</span>
+                                <div className="h-44">
+                                  {tag.ratings && tag.ratings.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={tag.ratings} margin={{ left: 5, right: 5, top: 10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                                        <XAxis dataKey="score" style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                        <YAxis allowDecimals={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <Bar dataKey="count" fill="var(--brand-orange)" radius={[4, 4, 0, 0]} />
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">No ratings on completed mangas.</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          )
         )}
       </div>
+
     </div>
   );
 };

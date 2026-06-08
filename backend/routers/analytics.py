@@ -351,3 +351,36 @@ async def get_completed_timeline(
         return await analytics_service.get_manga_completed_timeline(manga_ids, timeline_group_by, start_dt, end_dt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tags-details")
+async def get_tags_details(
+    search: Optional[str] = Query(None),
+    read_status: Optional[str] = Query(None),
+    read_statuses: Optional[List[str]] = Query(None),
+    exclude_read_statuses: Optional[List[str]] = Query(None),
+    tags: Optional[List[str]] = Query(None),
+    exclude_tags: Optional[List[str]] = Query(None),
+    tag_mode: str = Query("all"),
+    content_ratings: Optional[List[str]] = Query(None),
+    demographics: Optional[List[str]] = Query(None),
+    statuses: Optional[List[str]] = Query(None),
+    original_languages: Optional[List[str]] = Query(None),
+    authors: Optional[List[str]] = Query(None),
+    artists: Optional[List[str]] = Query(None),
+    rating_min: Optional[float] = Query(None),
+    rating_max: Optional[float] = Query(None),
+    year_start: Optional[str] = Query(None),
+    year_end: Optional[str] = Query(None)
+):
+    """Get detailed breakdowns (demographic, status, content rating, and scores) for all tags in the filtered pool."""
+    try:
+        filter_query = get_filter_params(
+            search=search, read_status=read_status, read_statuses=read_statuses, exclude_read_statuses=exclude_read_statuses,
+            tags=tags, exclude_tags=exclude_tags, tag_mode=tag_mode,
+            content_ratings=content_ratings, demographics=demographics, statuses=statuses, original_languages=original_languages,
+            authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
+        )
+        return await analytics_service.get_tags_details(filter_query)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
