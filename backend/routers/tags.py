@@ -23,7 +23,7 @@ async def list_tags(source: Optional[str] = Query(None, description="Filter by s
             {"$group": {"_id": "$tag_ids", "count": {"$sum": 1}}}
         ]
         async for agg in db.mangas.aggregate(pipeline):
-            counts[agg["_id"]] = agg["count"]
+            counts[str(agg["_id"])] = agg["count"]
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Failed to aggregate tag counts: {e}")
@@ -49,11 +49,10 @@ async def create_custom_tag(data: TagCreate):
         raise HTTPException(status_code=400, detail="Tag English name is required")
         
     existing = await coll.find_one({
-        "source": "custom",
         "name.en": {"$regex": f"^{re.escape(en_name)}$", "$options": "i"}
     })
     if existing:
-        raise HTTPException(status_code=400, detail="Custom tag with this name already exists")
+        raise HTTPException(status_code=400, detail="A tag with this name already exists")
 
     tag_doc = {
         "mangadex_id": None,
