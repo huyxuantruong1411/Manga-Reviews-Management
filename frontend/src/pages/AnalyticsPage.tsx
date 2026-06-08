@@ -2503,9 +2503,14 @@ export const AnalyticsPage: React.FC = () => {
                 {ratingInsights.demographic_ratings.length > 0 ? (
                   <div className="space-y-2">
                     {ratingInsights.demographic_ratings.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg">
-                        <span className="text-xs font-semibold">{item.name}</span>
-                        <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center">
+                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-semibold truncate">{item.name}</span>
+                        </div>
+                        <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
                           {item.avg_rating} <Star size={10} className="fill-yellow-500 text-yellow-500 ml-0.5" />
                         </span>
                       </div>
@@ -2522,9 +2527,14 @@ export const AnalyticsPage: React.FC = () => {
                 {ratingInsights.status_ratings.length > 0 ? (
                   <div className="space-y-2">
                     {ratingInsights.status_ratings.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg">
-                        <span className="text-xs font-semibold">{item.name}</span>
-                        <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center">
+                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-semibold truncate">{item.name}</span>
+                        </div>
+                        <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
                           {item.avg_rating} <Star size={10} className="fill-yellow-500 text-yellow-500 ml-0.5" />
                         </span>
                       </div>
@@ -2550,12 +2560,23 @@ export const AnalyticsPage: React.FC = () => {
                 <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Top Authors</h4>
                 {topCreators.authors.length > 0 ? (
                   <div className="space-y-2">
-                    {topCreators.authors.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg">
-                        <span className="text-xs font-semibold truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                        <span className="text-xs font-bold text-[var(--text-secondary)]">{item.count} {item.count === 1 ? "manga" : "mangas"}</span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const poolTotal = overviewStats?.total_manga || 0;
+                      return topCreators.authors.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-semibold truncate" title={item.name}>{item.name}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
+                            {item.count} {item.count === 1 ? "title" : "titles"}
+                            {poolTotal > 0 && ` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
+                          </span>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 ) : (
                   <p className="text-xs text-zinc-400 italic">No creator details.</p>
@@ -2567,12 +2588,23 @@ export const AnalyticsPage: React.FC = () => {
                 <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Top Artists</h4>
                 {topCreators.artists.length > 0 ? (
                   <div className="space-y-2">
-                    {topCreators.artists.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg">
-                        <span className="text-xs font-semibold truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                        <span className="text-xs font-bold text-[var(--text-secondary)]">{item.count} {item.count === 1 ? "manga" : "mangas"}</span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const poolTotal = overviewStats?.total_manga || 0;
+                      return topCreators.artists.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-semibold truncate" title={item.name}>{item.name}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
+                            {item.count} {item.count === 1 ? "title" : "titles"}
+                            {poolTotal > 0 && ` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
+                          </span>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 ) : (
                   <p className="text-xs text-zinc-400 italic">No creator details.</p>
