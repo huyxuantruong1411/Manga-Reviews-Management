@@ -23,6 +23,7 @@ class TagUpdate(BaseModel):
 class TagResponse(TagBase):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
+    manga_count: Optional[int] = 0
 
     class Config:
         populate_by_name = True

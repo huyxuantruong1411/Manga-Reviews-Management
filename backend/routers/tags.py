@@ -15,11 +15,26 @@ async def list_tags(source: Optional[str] = Query(None, description="Filter by s
     if source:
         query["source"] = source
         
+    db = get_db()
+    counts = {}
+    try:
+        pipeline = [
+            {"$unwind": "$tag_ids"},
+            {"$group": {"_id": "$tag_ids", "count": {"$sum": 1}}}
+        ]
+        async for agg in db.mangas.aggregate(pipeline):
+            counts[agg["_id"]] = agg["count"]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to aggregate tag counts: {e}")
+
     cursor = coll.find(query).sort([("source", 1), ("name.en", 1)])
     tags = []
     async for doc in cursor:
         if "_id" in doc:
-            doc["_id"] = str(doc["_id"])
+            tag_id_str = str(doc["_id"])
+            doc["_id"] = tag_id_str
+            doc["manga_count"] = counts.get(tag_id_str, 0)
         tags.append(doc)
     return tags
 
@@ -55,6 +70,7 @@ async def create_custom_tag(data: TagCreate):
     
     res = await coll.insert_one(tag_doc)
     tag_doc["_id"] = str(res.inserted_id)
+    tag_doc["manga_count"] = 0
     return tag_doc
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -119,6 +135,8 @@ async def update_tag(tag_id: str = Path(...), data: TagCreate = ...):
     
     updated_tag = await coll.find_one({"_id": ObjectId(tag_id)})
     if updated_tag:
-        updated_tag["_id"] = str(updated_tag["_id"])
+        tag_id_str = str(updated_tag["_id"])
+        updated_tag["_id"] = tag_id_str
+        updated_tag["manga_count"] = await get_db().mangas.count_documents({"tag_ids": tag_id_str})
     return updated_tag
 

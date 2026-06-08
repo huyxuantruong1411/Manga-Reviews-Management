@@ -235,6 +235,26 @@ export const TagsPage: React.FC = () => {
             <span>{editingTag ? `Edit Tag: ${editingTag.name.en}` : "Create Custom Tag"}</span>
           </h2>
           
+          {editingTag && (
+            <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl space-y-2 animate-in fade-in duration-200">
+              <h3 className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Tag Statistics</h3>
+              <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                <div>
+                  <span className="text-[10px] text-zinc-500 block uppercase tracking-wider">Manga Count</span>
+                  <strong className="text-sm font-extrabold text-[var(--text-primary)]">
+                    {(editingTag as any).manga_count ?? 0} titles
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 block uppercase tracking-wider">Source Type</span>
+                  <span className="text-sm font-extrabold text-[var(--text-primary)] capitalize">
+                    {editingTag.source}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleCreateOrUpdateTag} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
@@ -243,6 +263,7 @@ export const TagsPage: React.FC = () => {
               <input
                 type="text"
                 value={enName}
+                disabled={editingTag !== null && editingTag.source !== "custom"}
                 onChange={(e) => handleEnNameChange(e.target.value)}
                 placeholder="e.g. Recommended"
                 className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition disabled:opacity-60 disabled:cursor-not-allowed"
@@ -257,6 +278,7 @@ export const TagsPage: React.FC = () => {
               <input
                 type="text"
                 value={viName}
+                disabled={editingTag !== null && editingTag.source !== "custom"}
                 onChange={(e) => setViName(e.target.value)}
                 placeholder="e.g. Khuyên đọc"
                 className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition disabled:opacity-60 disabled:cursor-not-allowed"
@@ -270,9 +292,10 @@ export const TagsPage: React.FC = () => {
               <input
                 type="text"
                 value={group}
+                disabled={editingTag !== null && editingTag.source !== "custom"}
                 onChange={(e) => setGroup(e.target.value)}
                 placeholder="e.g. personal, review"
-                className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+                className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition disabled:opacity-60 disabled:cursor-not-allowed"
               />
               {distinctGroups.length > 0 && (
                 <div className="mt-2.5">
@@ -471,6 +494,8 @@ export const TagsPage: React.FC = () => {
                       <span className="uppercase">{tag.source}</span>
                       <span>•</span>
                       <span>{tag.group}</span>
+                      <span>•</span>
+                      <span>{(tag as any).manga_count ?? 0} titles</span>
                     </div>
                   </div>
                   
