@@ -29,6 +29,8 @@ import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 import { BlurredCover } from "../components/ui/BlurredCover";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
+import { CoverArtGallery } from "../components/manga/CoverArtGallery";
+import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
 
 interface Tag {
   _id: string;
@@ -529,6 +531,11 @@ export const MangaDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
 
+  // Sync manager integration states (tabs)
+  const [activeTab, setActiveTab] = useState<"details" | "art" | "recommendations">("details");
+  const [coversCount, setCoversCount] = useState<number>(0);
+  const [recsCount, setRecsCount] = useState<number>(0);
+
   // Creator links helper
   const renderCreatorLinks = (creatorString: string) => {
     if (!creatorString || creatorString === "Unknown" || creatorString === "N/A") {
@@ -756,6 +763,52 @@ export const MangaDetailPage: React.FC = () => {
   const [reviewTitle, setReviewTitle] = useState("");
   const [isCreatingReview, setIsCreatingReview] = useState(false);
 
+  // Stepper sync states
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncSteps, setSyncSteps] = useState<{
+    metadata: "pending" | "running" | "completed" | "failed";
+    covers: "pending" | "running" | "completed" | "failed";
+    recommendations: "pending" | "running" | "completed" | "failed";
+  }>({
+    metadata: "pending",
+    covers: "pending",
+    recommendations: "pending"
+  });
+  const [syncStatusMsg, setSyncStatusMsg] = useState("");
+  const [syncStats, setSyncStats] = useState<{
+    coversSynced: number;
+    coversFailed: number;
+    recsSynced: number;
+  }>({
+    coversSynced: 0,
+    coversFailed: 0,
+    recsSynced: 0
+  });
+
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
+  const [syncProgress, setSyncProgress] = useState<number>(0);
+
+  const addLog = (msg: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setSyncLogs(prev => [...prev, `[${timestamp}] ${msg}`]);
+  };
+
+  const fetchCounts = async (mangaDexId: string) => {
+    if (!mangaDexId) return;
+    try {
+      const coversRes = await client.get(`/api/manga/${id}/covers`);
+      setCoversCount(coversRes.data.length);
+    } catch (countErr) {
+      console.error("Error loading covers count:", countErr);
+    }
+    try {
+      const recsRes = await client.get(`/api/manga/${id}/recommendations`);
+      setRecsCount(recsRes.data.length);
+    } catch (countErr) {
+      console.error("Error loading recommendations count:", countErr);
+    }
+  };
+
   const fetchMangaDetails = async () => {
     try {
       setLoading(true);
@@ -770,9 +823,12 @@ export const MangaDetailPage: React.FC = () => {
       setReviews(reviewsRes.data);
       setHistory(historyRes.data);
       setAllTags(tagsRes.data);
-
-      // Prepopulate edit inputs
       setEditTags(mangaRes.data.tag_ids);
+
+      // Load counts for covers and recommendations asynchronously (non-blocking)
+      if (mangaRes.data.mangadex_id) {
+        fetchCounts(mangaRes.data.mangadex_id);
+      }
     } catch (err) {
       console.error("Error loading details:", err);
     } finally {
@@ -784,30 +840,131 @@ export const MangaDetailPage: React.FC = () => {
     fetchMangaDetails();
   }, [id]);
 
-  // Sync details from MangaDex
+  // Sync details from MangaDex with real stepper progress modal
   const handleSyncMetadata = async () => {
     if (!manga?.mangadex_id) return;
+    setIsSyncModalOpen(true);
+    setSyncLogs([]);
+    setSyncProgress(5);
+    setSyncSteps({
+      metadata: "running",
+      covers: "pending",
+      recommendations: "pending"
+    });
+    setSyncStatusMsg("Connecting to MangaDex API and downloading metadata...");
+    addLog("Connecting to MangaDex API...");
+
+    let progressInterval: any = null;
+
     try {
-      setLoading(true);
-      const res = await client.post(`/api/manga/${manga._id}/sync`);
-      setManga(res.data);
-      // Reload history
-      const historyRes = await client.get(`/api/manga/${id}/history`);
-      setHistory(historyRes.data);
-      showAlert({
-        title: "Sync Success",
-        message: "Metadata successfully synced from MangaDex!",
-        type: "success",
-      });
+      // Step 1: Metadata
+      addLog("Step 1: Synchronizing catalog metadata...");
+      const metaRes = await client.post(`/api/manga/${manga._id}/sync`);
+      setManga(metaRes.data);
+      setSyncProgress(30);
+      setSyncSteps(prev => ({ ...prev, metadata: "completed", covers: "running" }));
+      setSyncStatusMsg("Metadata synced! Now scanning and fetching all Cover Arts...");
+      addLog("Metadata updated in database successfully.");
+
+      // Step 2: Cover Arts
+      addLog("Step 2: Scanning cover art assets on MangaDex...");
+      
+      let coverTick = 0;
+      progressInterval = setInterval(() => {
+        coverTick++;
+        setSyncProgress(prev => Math.min(prev + 3, 65));
+        if (coverTick === 1) addLog("Resolving volume list & language locales...");
+        if (coverTick === 2) addLog("Downloading cover art files...");
+        if (coverTick === 3) addLog("Generating premium covers thumbnails (256px/512px)...");
+        if (coverTick === 4) addLog("Saving assets to MinIO cloud storage...");
+        if (coverTick === 5) addLog("Index caching in database...");
+      }, 1500);
+
+      try {
+        const coverRes = await client.post(`/api/manga/${manga._id}/covers/sync`);
+        if (progressInterval) clearInterval(progressInterval);
+        
+        setSyncStats(prev => ({
+          ...prev,
+          coversSynced: coverRes.data.covers_synced || 0,
+          coversFailed: coverRes.data.covers_failed || 0
+        }));
+        setSyncProgress(70);
+        setSyncSteps(prev => ({ ...prev, covers: "completed", recommendations: "running" }));
+        setSyncStatusMsg(`Downloaded ${coverRes.data.covers_synced || 0} covers successfully! Now syncing recommended titles...`);
+        addLog(`Step 2 complete: ${coverRes.data.covers_synced || 0} covers cached. (${coverRes.data.covers_failed || 0} failed)`);
+      } catch (covErr) {
+        if (progressInterval) clearInterval(progressInterval);
+        console.error("Cover sync failed:", covErr);
+        setSyncProgress(70);
+        setSyncSteps(prev => ({ ...prev, covers: "failed", recommendations: "running" }));
+        setSyncStatusMsg("Failed to sync some cover arts. Moving to recommendations sync...");
+        addLog("Step 2 failure: An error occurred during cover art sync.");
+      }
+
+      // Step 3: Recommendations
+      addLog("Step 3: Accessing similar titles and user recommendations...");
+      let recTick = 0;
+      progressInterval = setInterval(() => {
+        recTick++;
+        setSyncProgress(prev => Math.min(prev + 4, 95));
+        if (recTick === 1) addLog("Deduplicating local system library entries...");
+        if (recTick === 2) addLog("Fetching external covers from MangaDex for match list...");
+        if (recTick === 3) addLog("Writing recommendations cache inside MongoDB...");
+      }, 1500);
+
+      try {
+        const recRes = await client.post(`/api/manga/${manga._id}/recommendations/sync`);
+        if (progressInterval) clearInterval(progressInterval);
+        
+        setSyncStats(prev => ({
+          ...prev,
+          recsSynced: recRes.data.recommendations_synced || 0
+        }));
+        setSyncProgress(100);
+        setSyncSteps(prev => ({ ...prev, recommendations: "completed" }));
+        setSyncStatusMsg("Sync complete! Cached recommendations successfully.");
+        addLog(`Step 3 complete: ${recRes.data.recommendations_synced || 0} recommendations synchronized.`);
+        addLog("Sync execution finished successfully!");
+      } catch (recErr) {
+        if (progressInterval) clearInterval(progressInterval);
+        console.error("Rec sync failed:", recErr);
+        setSyncProgress(100);
+        setSyncSteps(prev => ({ ...prev, recommendations: "failed" }));
+        setSyncStatusMsg("Failed to cache recommendations.");
+        addLog("Step 3 failure: Failed to sync recommendations.");
+      }
+
+      // Reload counts and history in background
+      try {
+        const historyRes = await client.get(`/api/manga/${id}/history`);
+        setHistory(historyRes.data);
+      } catch (err) {
+        console.error("Error reloading history:", err);
+      }
+      try {
+        const coversRes = await client.get(`/api/manga/${id}/covers`);
+        setCoversCount(coversRes.data.length);
+      } catch (err) {
+        console.error("Error reloading covers count:", err);
+      }
+      try {
+        const recsRes = await client.get(`/api/manga/${id}/recommendations`);
+        setRecsCount(recsRes.data.length);
+      } catch (err) {
+        console.error("Error reloading recommendations count:", err);
+      }
+
     } catch (err) {
-      console.error("Sync failed:", err);
-      showAlert({
-        title: "Sync Failed",
-        message: "Failed to sync metadata from MangaDex.",
-        type: "error",
-      });
-    } finally {
-      setLoading(false);
+      if (progressInterval) clearInterval(progressInterval);
+      console.error("Metadata sync failed:", err);
+      setSyncSteps(prev => ({
+        metadata: "failed",
+        covers: prev.covers === "running" ? "failed" : prev.covers,
+        recommendations: prev.recommendations === "running" ? "failed" : prev.recommendations
+      }));
+      setSyncStatusMsg("Critical error: Failed to connect to MangaDex.");
+      addLog("Critical sync process aborted due to server error.");
     }
   };
 
@@ -1720,96 +1877,103 @@ export const MangaDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Details body columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Description & Audit Timeline */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Alternative Titles */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold">Alternative Titles</h3>
-              {!isEditingAltTitles ? (
-                <button
-                  onClick={handleStartEditAltTitles}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
-                >
-                  <Edit2 size={12} />
-                  <span>Edit</span>
-                </button>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleSaveAltTitles}
-                    disabled={savingAltTitles}
-                    className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-sm"
-                  >
-                    {savingAltTitles ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Check size={12} />
-                    )}
-                    <span>Save</span>
-                  </button>
-                  <button
-                    onClick={() => setIsEditingAltTitles(false)}
-                    disabled={savingAltTitles}
-                    className="flex items-center space-x-1 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
-                  >
-                    <X size={12} />
-                    <span>Cancel</span>
-                  </button>
-                </div>
+      {/* Tab Navigation */}
+      <div className="flex border-b border-[var(--border-primary)] space-x-6 text-sm font-semibold pt-4 mb-6">
+        <button
+          onClick={() => setActiveTab("details")}
+          className={`pb-3 px-1 transition-all cursor-pointer ${
+            activeTab === "details"
+              ? "border-b-2 border-[var(--brand-orange)] text-[var(--brand-orange)] font-bold"
+              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          Details
+        </button>
+        {manga.mangadex_id && (
+          <>
+            <button
+              onClick={() => setActiveTab("art")}
+              className={`pb-3 px-1 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "art"
+                  ? "border-b-2 border-[var(--brand-orange)] text-[var(--brand-orange)] font-bold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Art
+              {coversCount > 0 && (
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-850 text-zinc-500">
+                  {coversCount}
+                </span>
               )}
-            </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("recommendations")}
+              className={`pb-3 px-1 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "recommendations"
+                  ? "border-b-2 border-[var(--brand-orange)] text-[var(--brand-orange)] font-bold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Recommendations
+              {recsCount > 0 && (
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-855 text-zinc-500">
+                  {recsCount}
+                </span>
+              )}
+            </button>
+          </>
+        )}
+      </div>
 
-            {!isEditingAltTitles ? (
-              manga.alt_titles && manga.alt_titles.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <tbody>
-                      {manga.alt_titles.map((alt, idx) => {
-                        let lang = "en";
-                        let title = alt;
-                        if (alt.includes("|")) {
-                          const parts = alt.split("|");
-                          lang = parts[0];
-                          title = parts.slice(1).join("|");
-                        }
-                        const flag = getFlagInfo(lang);
-                        return (
-                          <tr key={idx} className="border-b border-[var(--border-primary)]/40 last:border-0">
-                            <td className="py-2.5 pr-4 flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
-                              <img src={flag.flagUrl} alt={flag.label} className="w-5 h-3.5 object-cover rounded shadow-sm" onError={(e) => {
-                                (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png"; // Fallback
-                              }} />
-                              <span className="min-w-[20px]">{flag.label}</span>
-                              {flag.isRomanized && (
-                                <span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
-                                  RO
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
-                              {title}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-sm text-[var(--text-secondary)] italic py-2">
-                  No alternative titles available. Click Edit to add titles.
-                </div>
-              )
-            ) : (
-              <div className="space-y-4">
-                {localAltTitles.length > 0 ? (
+      {/* Tab Contents */}
+      {activeTab === "details" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Description & Audit Timeline */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Alternative Titles */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold">Alternative Titles</h3>
+                {!isEditingAltTitles ? (
+                  <button
+                    onClick={handleStartEditAltTitles}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+                  >
+                    <Edit2 size={12} />
+                    <span>Edit</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleSaveAltTitles}
+                      disabled={savingAltTitles}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-sm"
+                    >
+                      {savingAltTitles ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Check size={12} />
+                      )}
+                      <span>Save</span>
+                    </button>
+                    <button
+                      onClick={() => setIsEditingAltTitles(false)}
+                      disabled={savingAltTitles}
+                      className="flex items-center space-x-1 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+                    >
+                      <X size={12} />
+                      <span>Cancel</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {!isEditingAltTitles ? (
+                manga.alt_titles && manga.alt_titles.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <tbody>
-                        {localAltTitles.map((alt, idx) => {
+                        {manga.alt_titles.map((alt, idx) => {
                           let lang = "en";
                           let title = alt;
                           if (alt.includes("|")) {
@@ -1834,16 +1998,6 @@ export const MangaDetailPage: React.FC = () => {
                               <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
                                 {title}
                               </td>
-                              <td className="py-2.5 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteAltTitle(idx)}
-                                  className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 hover:text-red-700 rounded transition"
-                                  title="Delete alternative title"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
                             </tr>
                           );
                         })}
@@ -1852,187 +2006,394 @@ export const MangaDetailPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--text-secondary)] italic py-2">
-                    No alternative titles. Use the form below to add.
+                    No alternative titles available. Click Edit to add titles.
                   </div>
-                )}
+                )
+              ) : (
+                <div className="space-y-4">
+                  {localAltTitles.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <tbody>
+                          {localAltTitles.map((alt, idx) => {
+                            let lang = "en";
+                            let title = alt;
+                            if (alt.includes("|")) {
+                              const parts = alt.split("|");
+                              lang = parts[0];
+                              title = parts.slice(1).join("|");
+                            }
+                            const flag = getFlagInfo(lang);
+                            return (
+                              <tr key={idx} className="border-b border-[var(--border-primary)]/40 last:border-0">
+                                <td className="py-2.5 pr-4 flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
+                                  <img src={flag.flagUrl} alt={flag.label} className="w-5 h-3.5 object-cover rounded shadow-sm" onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "https://flagcdn.com/w20/us.png"; // Fallback
+                                  }} />
+                                  <span className="min-w-[20px]">{flag.label}</span>
+                                  {flag.isRomanized && (
+                                    <span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+                                      RO
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 text-sm text-[var(--text-primary)] font-medium">
+                                  {title}
+                                </td>
+                                <td className="py-2.5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAltTitle(idx)}
+                                    className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 hover:text-red-700 rounded transition"
+                                    title="Delete alternative title"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[var(--text-secondary)] italic py-2">
+                      No alternative titles. Use the form below to add.
+                    </div>
+                  )}
 
-                {/* Add new Alt Title Form */}
-                <div className="pt-3 border-t border-[var(--border-primary)]/40 flex items-center gap-3">
-                  <select
-                    value={newAltLang}
-                    onChange={(e) => setNewAltLang(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none"
-                  >
-                    <option value="vi">VI (Vietnamese)</option>
-                    <option value="ja">JA (Japanese)</option>
-                    <option value="ja-ro">JA-RO (Romanized)</option>
-                    <option value="en">EN (English)</option>
-                    <option value="ko">KO (Korean)</option>
-                    <option value="ko-ro">KO-RO (Romanized)</option>
-                    <option value="zh">ZH (Chinese)</option>
-                    <option value="zh-ro">ZH-RO (Romanized)</option>
-                    <option value="fr">FR (French)</option>
-                    <option value="de">DE (German)</option>
-                    <option value="es">ES (Spanish)</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={newAltTitle}
-                    onChange={(e) => setNewAltTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddAltTitle();
-                      }
-                    }}
-                    placeholder="Enter alternative title..."
-                    className="flex-1 px-3 py-1.5 text-sm rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddAltTitle}
-                    className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm flex-shrink-0"
-                  >
-                    <Plus size={12} />
-                    <span>Add</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Synopsis */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
-            <h3 className="text-lg font-bold">Synopsis</h3>
-            <div className="text-sm leading-relaxed text-[var(--text-secondary)]">
-              {renderMarkdown(manga.description)}
-            </div>
-            {providers.length > 0 && (
-              <div className="pt-4 border-t border-[var(--border-primary)] space-y-2">
-                <span className="text-xs font-extrabold text-[var(--text-secondary)] uppercase tracking-wider block">
-                  Official Links & Retailers
-                </span>
-                <div className="flex flex-wrap gap-2.5">
-                  {providers.map((link, idx) => (
-                    <a
-                      key={idx}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition ${getProviderStyle(link.title)}`}
+                  {/* Add new Alt Title Form */}
+                  <div className="pt-3 border-t border-[var(--border-primary)]/40 flex items-center gap-3">
+                    <select
+                      value={newAltLang}
+                      onChange={(e) => setNewAltLang(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none"
                     >
-                      {getProviderIcon(link.title)}
-                      <span>{link.title}</span>
-                    </a>
+                      <option value="vi">VI (Vietnamese)</option>
+                      <option value="ja">JA (Japanese)</option>
+                      <option value="ja-ro">JA-RO (Romanized)</option>
+                      <option value="en">EN (English)</option>
+                      <option value="ko">KO (Korean)</option>
+                      <option value="ko-ro">KO-RO (Romanized)</option>
+                      <option value="zh">ZH (Chinese)</option>
+                      <option value="zh-ro">ZH-RO (Romanized)</option>
+                      <option value="fr">FR (French)</option>
+                      <option value="de">DE (German)</option>
+                      <option value="es">ES (Spanish)</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={newAltTitle}
+                      onChange={(e) => setNewAltTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddAltTitle();
+                        }
+                      }}
+                      placeholder="Enter alternative title..."
+                      className="flex-1 px-3 py-1.5 text-sm rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddAltTitle}
+                      className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm flex-shrink-0"
+                    >
+                      <Plus size={12} />
+                      <span>Add</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Synopsis */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
+              <h3 className="text-lg font-bold">Synopsis</h3>
+              <div className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                {renderMarkdown(manga.description)}
+              </div>
+              {providers.length > 0 && (
+                <div className="pt-4 border-t border-[var(--border-primary)] space-y-2">
+                  <span className="text-xs font-extrabold text-[var(--text-secondary)] uppercase tracking-wider block">
+                    Official Links & Retailers
+                  </span>
+                  <div className="flex flex-wrap gap-2.5">
+                    {providers.map((link, idx) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition ${getProviderStyle(link.title)}`}
+                      >
+                        {getProviderIcon(link.title)}
+                        <span>{link.title}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Audit History Timeline */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
+              <h3 className="text-lg font-bold flex items-center space-x-2">
+                <History size={18} className="text-zinc-500" />
+                <span>Review Activity History</span>
+              </h3>
+
+              {history.length > 0 ? (
+                <div className="relative border-l border-zinc-200 dark:border-zinc-800 pl-4 space-y-6 ml-2">
+                  {history.map((log) => (
+                    <div key={log._id} className="relative">
+                      {/* Circle marker */}
+                      <div className="absolute -left-[21px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)]" />
+                      
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-[var(--text-secondary)] font-semibold block">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
+                        <p className="text-xs text-[var(--text-primary)]">
+                          <strong className="capitalize">{log.action.replace("_", " ")}</strong>
+                          {log.field && (
+                            <span>
+                              {" "}
+                              on <code className="px-1 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded">{log.field}</code>
+                            </span>
+                          )}
+                          {log.old_value !== undefined && log.new_value !== undefined && (
+                            <span className="text-[var(--text-secondary)] block text-[11px] pt-0.5">
+                              Changed from "{formatHistoryValue(log.field, log.old_value)}" to "{formatHistoryValue(log.field, log.new_value)}"
+                            </span>
+                          )}
+                        </p>
+                        {log.note && (
+                          <p className="text-[11px] text-[var(--text-secondary)] italic">Note: {log.note}</p>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Audit History Timeline */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4">
-            <h3 className="text-lg font-bold flex items-center space-x-2">
-              <History size={18} className="text-zinc-500" />
-              <span>Review Activity History</span>
-            </h3>
-
-            {history.length > 0 ? (
-              <div className="relative border-l border-zinc-200 dark:border-zinc-800 pl-4 space-y-6 ml-2">
-                {history.map((log) => (
-                  <div key={log._id} className="relative">
-                    {/* Circle marker */}
-                    <div className="absolute -left-[21px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)]" />
-                    
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-[var(--text-secondary)] font-semibold block">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </span>
-                      <p className="text-xs text-[var(--text-primary)]">
-                        <strong className="capitalize">{log.action.replace("_", " ")}</strong>
-                        {log.field && (
-                          <span>
-                            {" "}
-                            on <code className="px-1 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded">{log.field}</code>
-                          </span>
-                        )}
-                        {log.old_value !== undefined && log.new_value !== undefined && (
-                          <span className="text-[var(--text-secondary)] block text-[11px] pt-0.5">
-                            Changed from "{formatHistoryValue(log.field, log.old_value)}" to "{formatHistoryValue(log.field, log.new_value)}"
-                          </span>
-                        )}
-                      </p>
-                      {log.note && (
-                        <p className="text-[11px] text-[var(--text-secondary)] italic">Note: {log.note}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-6 text-xs text-[var(--text-secondary)]">
-                No activity history found.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Reviews */}
-        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold flex items-center space-x-2">
-              <FileText size={18} className="text-[var(--brand-orange)]" />
-              <span>Personal Reviews ({reviews.length})</span>
-            </h3>
-            <button
-              onClick={handleStartCreateReview}
-              className="p-1.5 text-zinc-500 hover:text-[var(--brand-orange)] rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
-              title="Add Review"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-
-          {/* List reviews */}
-          <div className="divide-y divide-[var(--border-primary)] max-h-[400px] overflow-y-auto pr-2 space-y-2">
-            {reviews.map((r) => (
-              <div
-                key={r._id}
-                onClick={() => handleSelectReview(r)}
-                className={`pt-2 pb-2 px-3 rounded-xl cursor-pointer transition flex items-center justify-between group ${
-                  (selectedReview as any)?._id === r._id
-                    ? "bg-zinc-100 dark:bg-zinc-800"
-                    : "hover:bg-gray-50 dark:hover:bg-zinc-800/40"
-                }`}
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-[var(--text-primary)] line-clamp-1">{r.title}</h4>
-                  <span className="text-[9px] text-[var(--text-secondary)] block">
-                    Updated {new Date(r.updated_at).toLocaleDateString()}
-                  </span>
+              ) : (
+                <div className="text-center py-6 text-xs text-[var(--text-secondary)]">
+                  No activity history found.
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteReview(r._id);
-                  }}
-                  className="p-1 text-zinc-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition"
-                  title="Delete Review"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
+              )}
+            </div>
+          </div>
 
-            {reviews.length === 0 && !isCreatingReview && (
-              <div className="text-center py-8 text-xs text-[var(--text-secondary)]">
-                No reviews yet. Click the + icon to write one!
-              </div>
-            )}
+          {/* Right Column: Reviews */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold flex items-center space-x-2">
+                <FileText size={18} className="text-[var(--brand-orange)]" />
+                <span>Personal Reviews ({reviews.length})</span>
+              </h3>
+              <button
+                onClick={handleStartCreateReview}
+                className="p-1.5 text-zinc-500 hover:text-[var(--brand-orange)] rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+                title="Add Review"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+
+            {/* List reviews */}
+            <div className="divide-y divide-[var(--border-primary)] max-h-[400px] overflow-y-auto pr-2 space-y-2">
+              {reviews.map((r) => (
+                <div
+                  key={r._id}
+                  onClick={() => handleSelectReview(r)}
+                  className={`pt-2 pb-2 px-3 rounded-xl cursor-pointer transition flex items-center justify-between group ${
+                    (selectedReview as any)?._id === r._id
+                      ? "bg-zinc-100 dark:bg-zinc-800"
+                      : "hover:bg-gray-50 dark:hover:bg-zinc-800/40"
+                  }`}
+                >
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--text-primary)] line-clamp-1">{r.title}</h4>
+                    <span className="text-[9px] text-[var(--text-secondary)] block">
+                      Updated {new Date(r.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteReview(r._id);
+                    }}
+                    className="p-1 text-zinc-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition"
+                    title="Delete Review"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+
+              {reviews.length === 0 && !isCreatingReview && (
+                <div className="text-center py-8 text-xs text-[var(--text-secondary)]">
+                  No reviews yet. Click the + icon to write one!
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === "art" && manga.mangadex_id && (
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+          <CoverArtGallery key={`${id}-${manga.updated_at}`} mangaId={id!} onCoversCountChange={setCoversCount} />
+        </div>
+      )}
+
+      {activeTab === "recommendations" && manga.mangadex_id && (
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+          <RecommendationsPanel key={`${id}-${manga.updated_at}`} mangaId={id!} onRecommendationsCountChange={setRecsCount} />
+        </div>
+      )}
+
+      {/* SYNC PROGRESS MODAL */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full max-w-md p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="text-center">
+              <h3 className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">MangaDex Sync Manager</h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">Synchronizing files and API metadata</p>
+            </div>
+
+            {/* Stepper progress */}
+            <div className="space-y-3">
+              {/* Step 1 */}
+              <div className="flex items-center justify-between p-3 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                    syncSteps.metadata === "completed" ? "bg-green-500 text-white" :
+                    syncSteps.metadata === "running" ? "bg-[var(--brand-orange)] text-white animate-pulse" :
+                    syncSteps.metadata === "failed" ? "bg-red-500 text-white" :
+                    "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                  }`}>
+                    {syncSteps.metadata === "completed" ? <Check size={14} /> : "1"}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-[var(--text-primary)]">Metadata & Details</span>
+                    <span className="text-[10px] text-[var(--text-secondary)]">Main info, tags, and creators</span>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                  syncSteps.metadata === "completed" ? "bg-green-50 dark:bg-green-950/20 text-green-600" :
+                  syncSteps.metadata === "running" ? "bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)]" :
+                  syncSteps.metadata === "failed" ? "bg-red-50 dark:bg-red-950/20 text-red-500" :
+                  "text-zinc-400"
+                }`}>
+                  {syncSteps.metadata}
+                </span>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex items-center justify-between p-3 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                    syncSteps.covers === "completed" ? "bg-green-500 text-white" :
+                    syncSteps.covers === "running" ? "bg-[var(--brand-orange)] text-white animate-pulse" :
+                    syncSteps.covers === "failed" ? "bg-red-500 text-white" :
+                    "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                  }`}>
+                    {syncSteps.covers === "completed" ? <Check size={14} /> : "2"}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-[var(--text-primary)]">Cover Art Gallery</span>
+                    <span className="text-[10px] text-[var(--text-secondary)]">
+                      {syncSteps.covers === "completed" ? `Downloaded ${syncStats.coversSynced} covers` : "Download all versions"}
+                    </span>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                  syncSteps.covers === "completed" ? "bg-green-50 dark:bg-green-950/20 text-green-600" :
+                  syncSteps.covers === "running" ? "bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)]" :
+                  syncSteps.covers === "failed" ? "bg-red-50 dark:bg-red-950/20 text-red-500" :
+                  "text-zinc-400"
+                }`}>
+                  {syncSteps.covers}
+                </span>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex items-center justify-between p-3 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                    syncSteps.recommendations === "completed" ? "bg-green-500 text-white" :
+                    syncSteps.recommendations === "running" ? "bg-[var(--brand-orange)] text-white animate-pulse" :
+                    syncSteps.recommendations === "failed" ? "bg-red-500 text-white" :
+                    "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                  }`}>
+                    {syncSteps.recommendations === "completed" ? <Check size={14} /> : "3"}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-[var(--text-primary)]">User Recommendations</span>
+                    <span className="text-[10px] text-[var(--text-secondary)]">
+                      {syncSteps.recommendations === "completed" ? `Found ${syncStats.recsSynced} similar titles` : "Similar readings cache"}
+                    </span>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                  syncSteps.recommendations === "completed" ? "bg-green-50 dark:bg-green-950/20 text-green-600" :
+                  syncSteps.recommendations === "running" ? "bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)]" :
+                  syncSteps.recommendations === "failed" ? "bg-red-50 dark:bg-red-950/20 text-red-500" :
+                  "text-zinc-400"
+                }`}>
+                  {syncSteps.recommendations}
+                </span>
+              </div>
+            </div>
+
+            {/* Terminal log console */}
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Sync Execution Logs</span>
+              <div className="h-40 bg-zinc-950 text-green-400 font-mono text-[10px] p-3 rounded-2xl overflow-y-auto border border-zinc-900 space-y-1 scrollbar-thin scrollbar-thumb-zinc-850">
+                {syncLogs.length === 0 ? (
+                  <span className="text-zinc-500 italic">No logs generated yet...</span>
+                ) : (
+                  syncLogs.map((log, idx) => (
+                    <div key={idx} className="leading-normal whitespace-pre-wrap">{log}</div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Overall progress bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] font-extrabold text-zinc-450 uppercase tracking-wider">
+                <span>Overall Progress</span>
+                <span className="text-[var(--brand-orange)]">{syncProgress}%</span>
+              </div>
+              <div className="w-full bg-zinc-150 dark:bg-zinc-850 h-2 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                <div
+                  className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${syncProgress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Status updates */}
+            <div className="p-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl text-center space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--brand-orange)]">Status Feed</span>
+              <p className="text-xs font-semibold text-[var(--text-primary)] leading-normal">{syncStatusMsg}</p>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex justify-end pt-2">
+              <button
+                disabled={Object.values(syncSteps).includes("running")}
+                onClick={() => setIsSyncModalOpen(false)}
+                className="px-6 py-2.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Metadata Modal */}
       {isEditOpen && (

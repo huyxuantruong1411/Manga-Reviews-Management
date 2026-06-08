@@ -381,6 +381,21 @@ class MangaService:
         if dex_data.personal_rating is not None:
             await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating))
             
+        # Proactively sync cover art gallery and recommendations
+        try:
+            from backend.services.cover_art_service import cover_art_service
+            logger.info(f"Proactively syncing cover arts for newly imported manga {manga_id} ({details['title']})")
+            await cover_art_service.sync_covers_for_manga(str(manga_id))
+        except Exception as e:
+            logger.error(f"Failed to sync covers for newly imported manga {manga_id}: {e}")
+
+        try:
+            from backend.services.recommendation_service import recommendation_service
+            logger.info(f"Proactively syncing recommendations for newly imported manga {manga_id} ({details['title']})")
+            await recommendation_service.sync_recommendations(str(manga_id))
+        except Exception as e:
+            logger.error(f"Failed to sync recommendations for newly imported manga {manga_id}: {e}")
+
         manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
         return serialize_doc(manga_doc)
 
@@ -486,6 +501,17 @@ class MangaService:
         # Delete cover from MinIO
         if existing.get("minio_cover_key"):
             minio_service.delete_cover(existing["minio_cover_key"])
+            
+        # Delete synced cover arts from MinIO & DB
+        db = get_db()
+        cursor = db.cover_arts.find({"manga_id": manga_id})
+        async for doc in cursor:
+            if doc.get("minio_key"):
+                minio_service.delete_cover(doc["minio_key"])
+        await db.cover_arts.delete_many({"manga_id": manga_id})
+
+        # Delete recommendations
+        await db.manga_recommendations.delete_many({"manga_id": manga_id})
             
         # Delete reviews (or soft delete)
         await get_db().reviews.update_many({"manga_id": manga_id}, {"$set": {"is_deleted": True, "updated_at": datetime.utcnow()}})

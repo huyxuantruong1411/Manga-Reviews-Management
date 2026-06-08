@@ -701,4 +701,155 @@ class MangaDexService:
                 logger.error(f"Error downloading image bytes from {url}: {e}")
                 return None
 
+    async def get_manga_covers(self, mangadex_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all covers for a manga by MangaDex ID.
+        """
+        covers = []
+        offset = 0
+        limit = 100
+        while True:
+            params = {
+                "manga[]": [mangadex_id],
+                "limit": limit,
+                "offset": offset,
+                "order[volume]": "asc"
+            }
+            data = await self._request("/cover", params)
+            if not data or "data" not in data:
+                break
+            
+            for item in data["data"]:
+                attr = item["attributes"]
+                covers.append({
+                    "mangadex_cover_id": item["id"],
+                    "file_name": attr.get("fileName"),
+                    "volume": attr.get("volume"),
+                    "description": attr.get("description"),
+                    "locale": attr.get("locale"),
+                    "version": attr.get("version"),
+                    "created_at": attr.get("createdAt"),
+                    "updated_at": attr.get("updatedAt"),
+                })
+            
+            if offset + limit >= data.get("total", 0):
+                break
+            offset += limit
+            
+        return covers
+
+    async def get_manga_recommendations(self, mangadex_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch recommended manga for a manga by MangaDex ID.
+        """
+        params = {
+            "includes[]": ["manga"],
+        }
+        params["contentRating[]"] = self.CONTENT_RATINGS
+        
+        data = await self._request(f"/manga/{mangadex_id}/recommendation", params)
+        if not data or "data" not in data:
+            return []
+            
+        recommendations = []
+        for item in data["data"]:
+            score = item.get("attributes", {}).get("score", 0)
+            
+            manga_rel = None
+            for rel in item.get("relationships", []):
+                if rel["type"] == "manga" and rel["id"] != mangadex_id:
+                    manga_rel = rel
+                    break
+            
+            if not manga_rel:
+                continue
+                
+            m_id = manga_rel["id"]
+            m_attr = manga_rel.get("attributes", {})
+            if not m_attr:
+                continue
+                
+            title = m_attr.get("title", {}).get("en") or list(m_attr.get("title", {}).values())[0] if m_attr.get("title") else "No Title"
+            
+            recommendations.append({
+                "mangadex_id": m_id,
+                "score": score,
+                "title": title,
+                "author": "Unknown",
+                "artist": "Unknown",
+                "cover_url": None,
+                "status": m_attr.get("status"),
+                "year": str(m_attr.get("year")) if m_attr.get("year") else "N/A"
+            })
+            
+        # Batch fetch cover arts to populate cover_url for all recommendations in one call
+        m_ids = [r["mangadex_id"] for r in recommendations]
+        covers_by_manga = {}
+        if m_ids:
+            try:
+                # Retrieve manga details in batch (limit 100) and expand cover_art
+                manga_data = await self._request("/manga", {
+                    "ids[]": m_ids,
+                    "includes[]": ["cover_art"],
+                    "limit": 100
+                })
+                if manga_data and "data" in manga_data:
+                    for m_item in manga_data["data"]:
+                        m_item_id = m_item["id"]
+                        cover_file = None
+                        for rel in m_item.get("relationships", []):
+                            if rel["type"] == "cover_art" and "attributes" in rel:
+                                cover_file = rel["attributes"]["fileName"]
+                                break
+                        if cover_file:
+                            covers_by_manga[m_item_id] = cover_file
+            except Exception as e:
+                logger.error(f"Failed to batch fetch cover arts for recommendations: {e}")
+
+        # Update cover URLs with the 256px resolution thumbnail
+        for r in recommendations:
+            cov_file = covers_by_manga.get(r["mangadex_id"])
+            if cov_file:
+                r["cover_url"] = f"https://uploads.mangadex.org/covers/{r['mangadex_id']}/{cov_file}.256.jpg"
+
+        return recommendations[:20]
+
+    async def get_manga_basic_info(self, mangadex_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Lightweight metadata fetch - title, cover, status, year, author, artist.
+        """
+        params = {
+            "includes[]": ["author", "artist", "cover_art"]
+        }
+        data = await self._request(f"/manga/{mangadex_id}", params)
+        if not data or "data" not in data:
+            return None
+            
+        item = data["data"]
+        attr = item["attributes"]
+        m_id = item["id"]
+        
+        title = attr["title"].get("en") or list(attr["title"].values())[0] if attr["title"] else "No Title"
+        authors = [rel["attributes"]["name"] for rel in item.get("relationships", []) if rel["type"] == "author" and "attributes" in rel]
+        artists = [rel["attributes"]["name"] for rel in item.get("relationships", []) if rel["type"] == "artist" and "attributes" in rel]
+        
+        cover_file = None
+        for rel in item.get("relationships", []):
+            if rel["type"] == "cover_art" and "attributes" in rel:
+                cover_file = rel["attributes"]["fileName"]
+                break
+        
+        cover_url = f"https://uploads.mangadex.org/covers/{m_id}/{cover_file}" if cover_file else None
+        
+        return {
+            "mangadex_id": m_id,
+            "title": title,
+            "author": ", ".join(authors) if authors else "Unknown",
+            "artist": ", ".join(artists) if artists else "Unknown",
+            "cover_url": cover_url,
+            "status": attr.get("status"),
+            "year": str(attr.get("year")) if attr.get("year") else "N/A",
+            "description": attr.get("description", {}).get("en") or attr.get("description", {}).get("vi") or ""
+        }
+
 mangadex_service = MangaDexService()

@@ -29,6 +29,24 @@ async def init_db_indexes():
         await db.creators.create_index("mangadex_id", sparse=True)
         await db.creators.create_index("name")
         
+        # cover_arts
+        await db.cover_arts.create_index([("manga_id", 1), ("mangadex_cover_id", 1)])
+        await db.cover_arts.create_index("mangadex_manga_id")
+
+        # manga_recommendations
+        await db.manga_recommendations.create_index("manga_id", unique=True)
+        await db.manga_recommendations.create_index("expires_at")
+
+        # sync_configs
+        await db.sync_configs.create_index("enabled")
+
+        # sync_logs
+        await db.sync_logs.create_index([("manga_id", 1), ("started_at", -1)])
+        await db.sync_logs.create_index("sync_config_id")
+
+        # sync_runs
+        await db.sync_runs.create_index([("started_at", -1)])
+
         logger.info("Database indexes initialized successfully.")
     except Exception as e:
         logger.error(f"Error initializing indexes: {e}")

@@ -13,13 +13,10 @@ services:
       MINIO_ROOT_PASSWORD: password
     command: server /data --console-address ":9001"
     volumes:
-      - minio_data:/data
+      - D:/Projects/Manga/Manga-Reviews-Management/backend/minio_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-volumes:
-  minio_data:

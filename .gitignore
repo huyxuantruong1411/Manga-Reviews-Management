@@ -37,3 +37,6 @@ downloads/
 mangadex_access.txt
 get_mangadex_access_token.py
 *_source_dump.txt
+backend/minio_data/
+backend/scratch/
+ref/

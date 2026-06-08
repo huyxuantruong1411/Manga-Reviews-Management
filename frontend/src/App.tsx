@@ -8,6 +8,7 @@ import TagsPage from "./pages/TagsPage";
 import AuthorDetailPage from "./pages/AuthorDetailPage";
 import ImageToolsPage from "./pages/ImageToolsPage";
 import DownloadsPage from "./pages/DownloadsPage";
+import SyncManagerPage from "./pages/SyncManagerPage";
 import { AlertProvider } from "./hooks/useAlert";
 import { DownloadProvider } from "./hooks/useDownload";
 
@@ -25,6 +26,7 @@ export const App: React.FC = () => {
               <Route path="author/:name" element={<AuthorDetailPage />} />
               <Route path="tools" element={<ImageToolsPage />} />
               <Route path="downloads" element={<DownloadsPage />} />
+              <Route path="sync" element={<SyncManagerPage />} />
             </Route>
           </Routes>
         </DownloadProvider>
