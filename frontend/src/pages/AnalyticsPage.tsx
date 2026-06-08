@@ -2561,7 +2561,7 @@ export const AnalyticsPage: React.FC = () => {
                 {topCreators.authors.length > 0 ? (
                   <div className="space-y-2">
                     {(() => {
-                      const poolTotal = overviewStats?.total_manga || 0;
+                      const poolTotal = overview?.total_manga || 0;
                       return topCreators.authors.map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
                           <div className="flex items-center space-x-2 min-w-0">
@@ -2589,7 +2589,7 @@ export const AnalyticsPage: React.FC = () => {
                 {topCreators.artists.length > 0 ? (
                   <div className="space-y-2">
                     {(() => {
-                      const poolTotal = overviewStats?.total_manga || 0;
+                      const poolTotal = overview?.total_manga || 0;
                       return topCreators.artists.map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3">
                           <div className="flex items-center space-x-2 min-w-0">
