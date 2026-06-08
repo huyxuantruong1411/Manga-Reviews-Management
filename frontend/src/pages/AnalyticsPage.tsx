@@ -1508,8 +1508,13 @@ export const AnalyticsPage: React.FC = () => {
                     contentStyle={{
                       backgroundColor: "var(--bg-card)",
                       borderColor: "var(--border-primary)",
-                      color: "var(--text-primary)"
+                      color: "var(--text-primary)",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                     }}
+                    itemStyle={{ color: "var(--text-primary)" }}
+                    labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
                   />
                   <Bar dataKey="count" fill="var(--brand-orange)" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -1544,17 +1549,33 @@ export const AnalyticsPage: React.FC = () => {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--bg-card)",
+                          borderColor: "var(--border-primary)",
+                          color: "var(--text-primary)",
+                          borderRadius: "12px",
+                          fontSize: "12px"
+                        }}
+                        itemStyle={{ color: "var(--text-primary)" }}
+                        labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-                  {pieData.map((item, idx) => (
-                    <div key={idx} className="flex items-center space-x-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-[var(--text-secondary)]">{item.name} ({item.value})</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const totalVal = pieData.reduce((sum, item) => sum + item.value, 0);
+                    return pieData.map((item, idx) => {
+                      const percentage = totalVal > 0 ? ((item.value / totalVal) * 100).toFixed(1) : "0.0";
+                      return (
+                        <div key={idx} className="flex items-center space-x-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className="text-[var(--text-secondary)]">{item.name} ({item.value} - {percentage}%)</span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </>
             ) : (
@@ -1591,17 +1612,34 @@ export const AnalyticsPage: React.FC = () => {
                             <Cell key={`cell-${index}`} fill={DEMO_COLORS[entry.name] || "#6B7280"} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "var(--bg-card)",
+                            borderColor: "var(--border-primary)",
+                            color: "var(--text-primary)",
+                            borderRadius: "12px",
+                            fontSize: "12px"
+                          }}
+                          itemStyle={{ color: "var(--text-primary)" }}
+                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-                    {metadataDists.demographic.filter(d => d.value > 0).map((item, idx) => (
-                      <div key={idx} className="flex items-center space-x-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DEMO_COLORS[item.name] || "#6B7280" }} />
-                        <span className="text-[var(--text-secondary)]">{item.name} ({item.value})</span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const activeDemos = metadataDists.demographic.filter(d => d.value > 0);
+                      const totalVal = activeDemos.reduce((sum, item) => sum + item.value, 0);
+                      return activeDemos.map((item, idx) => {
+                        const percentage = totalVal > 0 ? ((item.value / totalVal) * 100).toFixed(1) : "0.0";
+                        return (
+                          <div key={idx} className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DEMO_COLORS[item.name] || "#6B7280" }} />
+                            <span className="text-[var(--text-secondary)]">{item.name} ({item.value} - {percentage}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </>
               ) : (
@@ -1634,17 +1672,34 @@ export const AnalyticsPage: React.FC = () => {
                             <Cell key={`cell-${index}`} fill={PUB_STATUS_COLORS[entry.name] || "#6B7280"} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "var(--bg-card)",
+                            borderColor: "var(--border-primary)",
+                            color: "var(--text-primary)",
+                            borderRadius: "12px",
+                            fontSize: "12px"
+                          }}
+                          itemStyle={{ color: "var(--text-primary)" }}
+                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-                    {metadataDists.publishing_status.filter(d => d.value > 0).map((item, idx) => (
-                      <div key={idx} className="flex items-center space-x-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PUB_STATUS_COLORS[item.name] || "#6B7280" }} />
-                        <span className="text-[var(--text-secondary)]">{item.name} ({item.value})</span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const activePubs = metadataDists.publishing_status.filter(d => d.value > 0);
+                      const totalVal = activePubs.reduce((sum, item) => sum + item.value, 0);
+                      return activePubs.map((item, idx) => {
+                        const percentage = totalVal > 0 ? ((item.value / totalVal) * 100).toFixed(1) : "0.0";
+                        return (
+                          <div key={idx} className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PUB_STATUS_COLORS[item.name] || "#6B7280" }} />
+                            <span className="text-[var(--text-secondary)]">{item.name} ({item.value} - {percentage}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </>
               ) : (
@@ -1677,17 +1732,34 @@ export const AnalyticsPage: React.FC = () => {
                             <Cell key={`cell-${index}`} fill={CONTENT_RATING_COLORS[entry.name] || "#6B7280"} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "var(--bg-card)",
+                            borderColor: "var(--border-primary)",
+                            color: "var(--text-primary)",
+                            borderRadius: "12px",
+                            fontSize: "12px"
+                          }}
+                          itemStyle={{ color: "var(--text-primary)" }}
+                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-                    {metadataDists.content_rating.filter(d => d.value > 0).map((item, idx) => (
-                      <div key={idx} className="flex items-center space-x-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CONTENT_RATING_COLORS[item.name] || "#6B7280" }} />
-                        <span className="text-[var(--text-secondary)]">{item.name} ({item.value})</span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const activeRatings = metadataDists.content_rating.filter(d => d.value > 0);
+                      const totalVal = activeRatings.reduce((sum, item) => sum + item.value, 0);
+                      return activeRatings.map((item, idx) => {
+                        const percentage = totalVal > 0 ? ((item.value / totalVal) * 100).toFixed(1) : "0.0";
+                        return (
+                          <div key={idx} className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CONTENT_RATING_COLORS[item.name] || "#6B7280" }} />
+                            <span className="text-[var(--text-secondary)]">{item.name} ({item.value} - {percentage}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </>
               ) : (
@@ -2002,6 +2074,8 @@ export const AnalyticsPage: React.FC = () => {
                       fontSize: "12px",
                       boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                     }}
+                    itemStyle={{ color: "var(--text-primary)" }}
+                    labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
                   />
                   
                   {yearChartMode === "total" && (
@@ -2277,8 +2351,13 @@ export const AnalyticsPage: React.FC = () => {
                       contentStyle={{
                         backgroundColor: "var(--bg-card)",
                         borderColor: "var(--border-primary)",
-                        color: "var(--text-primary)"
+                        color: "var(--text-primary)",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                       }}
+                      itemStyle={{ color: "var(--text-primary)" }}
+                      labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
                     />
                     <Area type="monotone" dataKey="count" stroke="var(--brand-orange)" fillOpacity={1} fill="url(#colorManga)" strokeWidth={2} />
                   </AreaChart>
@@ -2333,8 +2412,13 @@ export const AnalyticsPage: React.FC = () => {
                       contentStyle={{
                         backgroundColor: "var(--bg-card)",
                         borderColor: "var(--border-primary)",
-                        color: "var(--text-primary)"
+                        color: "var(--text-primary)",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                       }}
+                      itemStyle={{ color: "var(--text-primary)" }}
+                      labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
                     />
                     <Area type="monotone" dataKey="count" stroke="#10B981" fillOpacity={1} fill="url(#colorCompleted)" strokeWidth={2} />
                   </AreaChart>
@@ -2383,8 +2467,13 @@ export const AnalyticsPage: React.FC = () => {
                       contentStyle={{
                         backgroundColor: "var(--bg-card)",
                         borderColor: "var(--border-primary)",
-                        color: "var(--text-primary)"
+                        color: "var(--text-primary)",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                       }}
+                      itemStyle={{ color: "var(--text-primary)" }}
+                      labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
                     />
                     <Line type="monotone" dataKey="count" stroke="var(--brand-coral)" strokeWidth={2} activeDot={{ r: 8 }} />
                   </LineChart>
@@ -2581,6 +2670,7 @@ export const AnalyticsPage: React.FC = () => {
                 <div className="space-y-4">
                   {filteredTagDetails.map((tag) => {
                     const isExpanded = expandedTagId === tag.tag_id;
+                    const tagGlobalRank = tagDetails.findIndex(t => t.tag_id === tag.tag_id) + 1;
                     return (
                       <div
                         key={tag.tag_id}
@@ -2596,6 +2686,9 @@ export const AnalyticsPage: React.FC = () => {
                           className="flex items-center justify-between p-4 cursor-pointer select-none"
                         >
                           <div className="flex items-center space-x-3 min-w-0">
+                            <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
+                              {tagGlobalRank}
+                            </span>
                             <span
                               className="px-3 py-1 rounded-lg text-xs font-bold text-white shadow-sm"
                               style={{ backgroundColor: tag.color || "var(--brand-orange)" }}
@@ -2628,8 +2721,28 @@ export const AnalyticsPage: React.FC = () => {
                                       <BarChart data={tag.demographics} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
                                         <XAxis type="number" allowDecimals={false} />
-                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
-                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <YAxis
+                                          dataKey="name"
+                                          type="category"
+                                          width={120}
+                                          style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                          tickFormatter={(name) => {
+                                            const entry = tag.demographics.find((d: any) => d.name === name);
+                                            const total = tag.demographics.reduce((sum: number, d: any) => sum + d.value, 0);
+                                            return entry && total > 0 ? `${name} (${Math.round((entry.value / total) * 100)}%)` : name;
+                                          }}
+                                        />
+                                        <Tooltip
+                                          contentStyle={{
+                                            backgroundColor: "var(--bg-card)",
+                                            borderColor: "var(--border-primary)",
+                                            color: "var(--text-primary)",
+                                            borderRadius: "12px",
+                                            fontSize: "12px"
+                                          }}
+                                          itemStyle={{ color: "var(--text-primary)" }}
+                                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                                        />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                                           {tag.demographics.map((entry: any, index: number) => {
                                             const demoColors: Record<string, string> = {
@@ -2659,8 +2772,28 @@ export const AnalyticsPage: React.FC = () => {
                                       <BarChart data={tag.content_ratings} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
                                         <XAxis type="number" allowDecimals={false} />
-                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
-                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <YAxis
+                                          dataKey="name"
+                                          type="category"
+                                          width={120}
+                                          style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                          tickFormatter={(name) => {
+                                            const entry = tag.content_ratings.find((c: any) => c.name === name);
+                                            const total = tag.content_ratings.reduce((sum: number, c: any) => sum + c.value, 0);
+                                            return entry && total > 0 ? `${name} (${Math.round((entry.value / total) * 100)}%)` : name;
+                                          }}
+                                        />
+                                        <Tooltip
+                                          contentStyle={{
+                                            backgroundColor: "var(--bg-card)",
+                                            borderColor: "var(--border-primary)",
+                                            color: "var(--text-primary)",
+                                            borderRadius: "12px",
+                                            fontSize: "12px"
+                                          }}
+                                          itemStyle={{ color: "var(--text-primary)" }}
+                                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                                        />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                                           {tag.content_ratings.map((entry: any, index: number) => {
                                             const ratingColors: Record<string, string> = {
@@ -2690,8 +2823,28 @@ export const AnalyticsPage: React.FC = () => {
                                       <BarChart data={tag.statuses} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
                                         <XAxis type="number" allowDecimals={false} />
-                                        <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px', fontWeight: 'bold' }} />
-                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <YAxis
+                                          dataKey="name"
+                                          type="category"
+                                          width={120}
+                                          style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                          tickFormatter={(name) => {
+                                            const entry = tag.statuses.find((s: any) => s.name === name);
+                                            const total = tag.statuses.reduce((sum: number, s: any) => sum + s.value, 0);
+                                            return entry && total > 0 ? `${name} (${Math.round((entry.value / total) * 100)}%)` : name;
+                                          }}
+                                        />
+                                        <Tooltip
+                                          contentStyle={{
+                                            backgroundColor: "var(--bg-card)",
+                                            borderColor: "var(--border-primary)",
+                                            color: "var(--text-primary)",
+                                            borderRadius: "12px",
+                                            fontSize: "12px"
+                                          }}
+                                          itemStyle={{ color: "var(--text-primary)" }}
+                                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                                        />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                                           {tag.statuses.map((entry: any, index: number) => {
                                             const statusColors: Record<string, string> = {
@@ -2722,7 +2875,17 @@ export const AnalyticsPage: React.FC = () => {
                                         <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                                         <XAxis dataKey="score" style={{ fontSize: '10px', fontWeight: 'bold' }} />
                                         <YAxis allowDecimals={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }} />
+                                        <Tooltip
+                                          contentStyle={{
+                                            backgroundColor: "var(--bg-card)",
+                                            borderColor: "var(--border-primary)",
+                                            color: "var(--text-primary)",
+                                            borderRadius: "12px",
+                                            fontSize: "12px"
+                                          }}
+                                          itemStyle={{ color: "var(--text-primary)" }}
+                                          labelStyle={{ color: "var(--text-secondary)", fontWeight: "bold" }}
+                                        />
                                         <Bar dataKey="count" fill="var(--brand-orange)" radius={[4, 4, 0, 0]} />
                                       </BarChart>
                                     </ResponsiveContainer>
