@@ -136,6 +136,11 @@ export const MangaListPage: React.FC = () => {
   const [manualStatus, setManualStatus] = useState("ongoing");
   const [manualReadStatus, setManualReadStatus] = useState("unread");
   const [manualYear, setManualYear] = useState("");
+  const [manualOriginalLanguage, setManualOriginalLanguage] = useState("ja");
+  const [manualPublicationDemographic, setManualPublicationDemographic] = useState("");
+  const [manualContentRating, setManualContentRating] = useState("safe");
+  const [manualVolumes, setManualVolumes] = useState<number | "">("");
+  const [manualChapters, setManualChapters] = useState<number | "">("");
   const [manualLinks] = useState<{ title: string; url: string }[]>([
     { title: "Source", url: "" }
   ]);
@@ -478,7 +483,12 @@ export const MangaListPage: React.FC = () => {
         status: manualStatus,
         tag_ids: importTags, // Uses the same modal tag selector state
         year: manualYear.trim() || "N/A",
-        links: manualLinks.filter((l) => l.title && l.url)
+        links: manualLinks.filter((l) => l.title && l.url),
+        original_language: manualOriginalLanguage || null,
+        publication_demographic: manualPublicationDemographic || null,
+        content_rating: manualContentRating || null,
+        volumes: manualVolumes === "" ? null : Number(manualVolumes),
+        chapters: manualChapters === "" ? null : Number(manualChapters)
       };
       if (manualRating !== "") payload.personal_rating = Number(manualRating);
 
@@ -509,6 +519,11 @@ export const MangaListPage: React.FC = () => {
       setManualDescription("");
       setManualRating("");
       setManualYear("");
+      setManualOriginalLanguage("ja");
+      setManualPublicationDemographic("");
+      setManualContentRating("safe");
+      setManualVolumes("");
+      setManualChapters("");
       setManualCover(null);
       setManualCoverPreview(null);
       setImportTags([]);
@@ -1996,6 +2011,79 @@ export const MangaListPage: React.FC = () => {
                         min="0"
                         max="10"
                         step="0.5"
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Advanced Search Comparison Fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Original Language</label>
+                      <select
+                        value={manualOriginalLanguage}
+                        onChange={(e) => setManualOriginalLanguage(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+                      >
+                        <option value="ja">Japanese (ja)</option>
+                        <option value="ko">Korean (ko)</option>
+                        <option value="zh">Chinese (zh)</option>
+                        <option value="en">English (en)</option>
+                        <option value="vi">Vietnamese (vi)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Demographic</label>
+                      <select
+                        value={manualPublicationDemographic}
+                        onChange={(e) => setManualPublicationDemographic(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+                      >
+                        <option value="">None</option>
+                        <option value="shounen">Shounen</option>
+                        <option value="shoujo">Shoujo</option>
+                        <option value="seinen">Seinen</option>
+                        <option value="josei">Josei</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Content Rating</label>
+                      <select
+                        value={manualContentRating}
+                        onChange={(e) => setManualContentRating(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+                      >
+                        <option value="safe">Safe</option>
+                        <option value="suggestive">Suggestive</option>
+                        <option value="erotica">Erotica</option>
+                        <option value="pornographic">Pornographic</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Total Volumes</label>
+                      <input
+                        type="number"
+                        value={manualVolumes}
+                        onChange={(e) => setManualVolumes(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder="e.g. 12"
+                        min="0"
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Total Chapters</label>
+                      <input
+                        type="number"
+                        value={manualChapters}
+                        onChange={(e) => setManualChapters(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder="e.g. 120"
+                        min="0"
                         className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
                       />
                     </div>
