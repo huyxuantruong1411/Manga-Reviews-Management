@@ -95,26 +95,48 @@ async def resolve_manga_reference(identifier: str = Path(...)):
         raise HTTPException(status_code=404, detail="Manga not found")
     return manga
 
-@router.post("/dex", response_model=MangaResponse, status_code=status.HTTP_201_CREATED)
+from fastapi.responses import StreamingResponse
+from fastapi.encoders import jsonable_encoder
+
+@router.post("/dex")
 async def add_manga_from_dex(data: MangaCreateDex):
-    """Add a new manga using a MangaDex UUID."""
-    try:
-        manga = await manga_service.add_manga_by_dex(data)
-        return manga
-    except DuplicateMangaException as e:
-        raise HTTPException(
-            status_code=400,
-            detail={
+    """Add a new manga using a MangaDex UUID with streaming progress updates."""
+    async def event_generator():
+        current_step = "metadata"
+        try:
+            async for update in manga_service.import_manga_by_dex_stream(data):
+                if "step" in update:
+                    current_step = update["step"]
+                yield f"data: {json.dumps(jsonable_encoder(update))}\n\n"
+        except DuplicateMangaException as e:
+            err_data = {
+                "step": "error",
+                "failed_step": current_step,
+                "error_type": "DUPLICATE_MANGA",
                 "code": "DUPLICATE_MANGA",
                 "message": str(e),
                 "manga_id": e.manga_id,
                 "title": e.title
             }
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to add manga: {e}")
+            yield f"data: {json.dumps(jsonable_encoder(err_data))}\n\n"
+        except ValueError as e:
+            err_data = {
+                "step": "error",
+                "failed_step": current_step,
+                "error_type": "VALUE_ERROR",
+                "message": str(e)
+            }
+            yield f"data: {json.dumps(jsonable_encoder(err_data))}\n\n"
+        except Exception as e:
+            err_data = {
+                "step": "error",
+                "failed_step": current_step,
+                "error_type": "UNKNOWN_ERROR",
+                "message": f"Failed to add manga: {e}"
+            }
+            yield f"data: {json.dumps(jsonable_encoder(err_data))}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/manual", response_model=MangaResponse, status_code=status.HTTP_201_CREATED)
 async def add_manga_manually(

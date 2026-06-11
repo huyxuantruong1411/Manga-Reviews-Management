@@ -346,6 +346,10 @@ class MangaService:
         else:
             minio_cover_key = None
 
+        init_status = str(dex_data.read_status).lower()
+        if init_status.startswith("readstatus."):
+            init_status = init_status.split(".", 1)[1]
+
         manga_doc = {
             "_id": manga_id,
             "mangadex_id": dex_data.mangadex_id,
@@ -369,7 +373,14 @@ class MangaService:
             "volumes": safe_int(details.get("last_volume")),
             "chapters": safe_int(details.get("last_chapter")),
             "added_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
+            "unread_at": datetime.utcnow() if init_status == "unread" else None,
+            "reading_at": datetime.utcnow() if init_status == "reading" else None,
+            "completed_at": datetime.utcnow() if init_status == "completed" else None,
+            "dropped_at": datetime.utcnow() if init_status == "dropped" else None,
+            "on_hold_at": datetime.utcnow() if init_status == "on_hold" else None,
+            "plan_to_read_at": datetime.utcnow() if init_status == "plan_to_read" else None,
+            "re_reading_at": datetime.utcnow() if init_status == "re_reading" else None,
         }
 
         await self._get_mangas_collection().insert_one(manga_doc)
@@ -399,6 +410,150 @@ class MangaService:
         manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
         return serialize_doc(manga_doc)
 
+    async def import_manga_by_dex_stream(self, dex_data: MangaCreateDex):
+        # Step 1: Metadata
+        yield {"step": "metadata", "message": "Fetching metadata from MangaDex...", "progress": 10}
+        details = await mangadex_service.get_manga_details(dex_data.mangadex_id)
+        if not details:
+            raise ValueError(f"Could not find manga details on MangaDex for ID {dex_data.mangadex_id}")
+            
+        # Step 2: Sync creators
+        yield {"step": "creators", "message": "Syncing authors and artists profiles...", "progress": 30}
+        from backend.services.creator_service import creator_service
+        for author_meta in details.get("authors_meta", []):
+            try:
+                await creator_service.sync_creator_by_dex_id(author_meta["id"])
+            except Exception as e:
+                logger.error(f"Failed to sync creator {author_meta['id']}: {e}")
+        for artist_meta in details.get("artists_meta", []):
+            try:
+                await creator_service.sync_creator_by_dex_id(artist_meta["id"])
+            except Exception as e:
+                logger.error(f"Failed to sync creator {artist_meta['id']}: {e}")
+            
+        # Step 3: Resolve tags
+        yield {"step": "tags", "message": "Organizing and mapping genre tags...", "progress": 50}
+        existing = await self._get_mangas_collection().find_one({"mangadex_id": dex_data.mangadex_id})
+        if existing:
+            raise DuplicateMangaException(str(existing["_id"]), existing.get("title", "Unknown"))
+
+        local_tag_ids = []
+        tags_coll = self._get_tags_collection()
+        tags_from_details = details.get("tags", [])
+        mangadex_ids = [t["mangadex_id"] for t in tags_from_details if t.get("mangadex_id")]
+        
+        existing_tags = {}
+        if mangadex_ids:
+            cursor = tags_coll.find({"mangadex_id": {"$in": mangadex_ids}})
+            async for doc in cursor:
+                existing_tags[doc["mangadex_id"]] = doc
+
+        for t in tags_from_details:
+            tag_doc = existing_tags.get(t["mangadex_id"])
+            if not tag_doc:
+                new_tag = {
+                    "mangadex_id": t["mangadex_id"],
+                    "source": "mangadex",
+                    "name": t["name"],
+                    "group": t["group"],
+                    "description": t["description"],
+                    "color": get_tag_default_color(t["name"].get("en", "")),
+                    "created_at": datetime.utcnow()
+                }
+                res = await tags_coll.insert_one(new_tag)
+                local_tag_ids.append(str(res.inserted_id))
+            else:
+                local_tag_ids.append(str(tag_doc["_id"]))
+
+        for utid in dex_data.tag_ids:
+            if utid not in local_tag_ids:
+                local_tag_ids.append(utid)
+
+        # Step 4: Cover
+        yield {"step": "cover", "message": "Downloading cover artwork & uploading to storage...", "progress": 70}
+        manga_id = ObjectId()
+        minio_cover_key = f"covers/{manga_id}.jpg"
+        
+        cover_url = details.get("cover_url")
+        if cover_url:
+            cover_bytes = await mangadex_service.download_image_bytes(cover_url)
+            if cover_bytes:
+                minio_service.upload_cover(minio_cover_key, cover_bytes)
+            else:
+                minio_cover_key = None
+        else:
+            minio_cover_key = None
+
+        # Step 5: Save
+        yield {"step": "save", "message": "Saving manga to local database...", "progress": 85}
+        init_status = str(dex_data.read_status).lower()
+        if init_status.startswith("readstatus."):
+            init_status = init_status.split(".", 1)[1]
+
+        manga_doc = {
+            "_id": manga_id,
+            "mangadex_id": dex_data.mangadex_id,
+            "title": details["title"],
+            "alt_titles": details["alt_titles"],
+            "description": details["description"],
+            "author": details["author"],
+            "artist": details["artist"],
+            "year": details["year"],
+            "status": details["status"],
+            "minio_cover_key": minio_cover_key,
+            "read_status": dex_data.read_status,
+            "personal_rating": dex_data.personal_rating,
+            "tag_ids": local_tag_ids,
+            "links": details.get("links", []),
+            "content_rating": details.get("content_rating"),
+            "publication_demographic": details.get("publication_demographic"),
+            "original_language": details.get("original_language"),
+            "published_start_date": None,
+            "published_end_date": None,
+            "volumes": safe_int(details.get("last_volume")),
+            "chapters": safe_int(details.get("last_chapter")),
+            "added_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "unread_at": datetime.utcnow() if init_status == "unread" else None,
+            "reading_at": datetime.utcnow() if init_status == "reading" else None,
+            "completed_at": datetime.utcnow() if init_status == "completed" else None,
+            "dropped_at": datetime.utcnow() if init_status == "dropped" else None,
+            "on_hold_at": datetime.utcnow() if init_status == "on_hold" else None,
+            "plan_to_read_at": datetime.utcnow() if init_status == "plan_to_read" else None,
+            "re_reading_at": datetime.utcnow() if init_status == "re_reading" else None,
+        }
+
+        await self._get_mangas_collection().insert_one(manga_doc)
+        
+        await self.log_action(str(manga_id), "create", note="Added from MangaDex UUID")
+        if dex_data.read_status != ReadStatus.UNREAD:
+            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, dex_data.read_status)
+        if dex_data.personal_rating is not None:
+            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating))
+            
+        # Step 6: Sync cover art and recommendations
+        yield {"step": "sync_assets", "message": "Fetching alternative covers & recommendations...", "progress": 95}
+        try:
+            from backend.services.cover_art_service import cover_art_service
+            await cover_art_service.sync_covers_for_manga(str(manga_id))
+        except Exception as e:
+            logger.error(f"Failed to sync covers for newly imported manga {manga_id}: {e}")
+
+        try:
+            from backend.services.recommendation_service import recommendation_service
+            await recommendation_service.sync_recommendations(str(manga_id))
+        except Exception as e:
+            logger.error(f"Failed to sync recommendations for newly imported manga {manga_id}: {e}")
+
+        manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
+        
+        yield {
+            "step": "done",
+            "message": f"Successfully imported '{details['title']}'!",
+            "progress": 100,
+            "manga": serialize_doc(manga_doc)
+        }
+
     async def add_manga_manual(self, manual_data: MangaCreate, cover_file: Optional[bytes] = None) -> Dict[str, Any]:
         manga_id = ObjectId()
         minio_cover_key = None
@@ -406,6 +561,10 @@ class MangaService:
         if cover_file:
             minio_cover_key = f"covers/{manga_id}.jpg"
             minio_service.upload_cover(minio_cover_key, cover_file)
+
+        init_status = str(manual_data.read_status).lower()
+        if init_status.startswith("readstatus."):
+            init_status = init_status.split(".", 1)[1]
 
         manga_doc = {
             "_id": manga_id,
@@ -430,7 +589,14 @@ class MangaService:
             "volumes": manual_data.volumes,
             "chapters": manual_data.chapters,
             "added_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
+            "unread_at": datetime.utcnow() if init_status == "unread" else None,
+            "reading_at": datetime.utcnow() if init_status == "reading" else None,
+            "completed_at": datetime.utcnow() if init_status == "completed" else None,
+            "dropped_at": datetime.utcnow() if init_status == "dropped" else None,
+            "on_hold_at": datetime.utcnow() if init_status == "on_hold" else None,
+            "plan_to_read_at": datetime.utcnow() if init_status == "plan_to_read" else None,
+            "re_reading_at": datetime.utcnow() if init_status == "re_reading" else None,
         }
 
         await self._get_mangas_collection().insert_one(manga_doc)
@@ -466,6 +632,11 @@ class MangaService:
                 # Create audit log entries for key updates
                 if field == "read_status":
                     await self.log_action(manga_id, "update_status", "read_status", str(old_val), str(new_val))
+                    new_status_str = str(new_val).lower()
+                    if new_status_str.startswith("readstatus."):
+                        new_status_str = new_status_str.split(".", 1)[1]
+                    status_field = f"{new_status_str}_at"
+                    update_dict[status_field] = datetime.utcnow()
                 elif field == "personal_rating":
                     await self.log_action(manga_id, "update_rating", "personal_rating", str(old_val), str(new_val))
                 else:

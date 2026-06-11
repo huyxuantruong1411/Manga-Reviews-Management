@@ -299,6 +299,7 @@ class AnalyticsService:
                     "demographics": {},
                     "content_ratings": {},
                     "statuses": {},
+                    "read_statuses": {},
                     "ratings": {}
                 }
                 
@@ -320,6 +321,20 @@ class AnalyticsService:
             status = status.capitalize()
             stats["statuses"][status] = stats["statuses"].get(status, 0) + count
             
+            # Read Status
+            read_status_labels = {
+                "unread": "Unread",
+                "reading": "Reading",
+                "completed": "Completed",
+                "dropped": "Dropped",
+                "on_hold": "On Hold",
+                "plan_to_read": "Plan to Read",
+                "re_reading": "Re-Reading"
+            }
+            rs_raw = group_info.get("read_status") or "unread"
+            rs_formatted = read_status_labels.get(rs_raw.lower(), rs_raw.capitalize())
+            stats["read_statuses"][rs_formatted] = stats["read_statuses"].get(rs_formatted, 0) + count
+            
             # Personal rating for completed mangas
             read_status = group_info.get("read_status") or "unread"
             rating = group_info.get("rating")
@@ -336,9 +351,154 @@ class AnalyticsService:
             stats["demographics"] = [{"name": k, "value": v} for k, v in stats["demographics"].items()]
             stats["content_ratings"] = [{"name": k, "value": v} for k, v in stats["content_ratings"].items()]
             stats["statuses"] = [{"name": k, "value": v} for k, v in stats["statuses"].items()]
+            stats["read_statuses"] = [{"name": k, "value": v} for k, v in stats["read_statuses"].items()]
             stats["ratings"] = [{"score": k, "count": v} for k, v in sorted(stats["ratings"].items())]
             
         return formatted_list
+
+    async def get_creators_details(self, filter_query: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+        mangas_coll = self._get_mangas_collection()
+        tags_coll = self._get_tags_collection()
+        
+        # 1. Fetch all tags for metadata (names & colors)
+        tag_metadata = {}
+        async for doc in tags_coll.find({}):
+            tag_id_str = str(doc["_id"])
+            names = doc.get("name", {})
+            name_en = names.get("en") or (list(names.values())[0] if names else "Unknown")
+            tag_metadata[tag_id_str] = {
+                "name": name_en,
+                "color": doc.get("color")
+            }
+            
+        read_status_labels = {
+            "unread": "Unread",
+            "reading": "Reading",
+            "completed": "Completed",
+            "dropped": "Dropped",
+            "on_hold": "On Hold",
+            "plan_to_read": "Plan to Read",
+            "re_reading": "Re-Reading"
+        }
+        
+        async def run_pipeline(creator_field: str, other_creator_field: str, is_author_list: bool):
+            pipeline = [
+                {"$match": filter_query},
+                {"$match": {creator_field: {"$ne": None, "$nin": ["Unknown", "N/A"]}}},
+                {
+                    "$group": {
+                        "_id": {
+                            "creator": f"${creator_field}",
+                            "demographic": "$publication_demographic",
+                            "content_rating": "$content_rating",
+                            "read_status": "$read_status",
+                            "rating": "$personal_rating",
+                            "other_creator": f"${other_creator_field}"
+                        },
+                        "tag_ids": {"$push": "$tag_ids"},
+                        "count": {"$sum": 1}
+                    }
+                }
+            ]
+            
+            creator_analytics = {}
+            async for item in mangas_coll.aggregate(pipeline):
+                group_info = item["_id"]
+                creator = group_info["creator"]
+                other_creator = group_info.get("other_creator")
+                count = item["count"]
+                pushed_tags = item.get("tag_ids", [])
+                
+                if creator not in creator_analytics:
+                    creator_analytics[creator] = {
+                        "name": creator,
+                        "count": 0,
+                        "demographics": {},
+                        "content_ratings": {},
+                        "read_statuses": {},
+                        "ratings": {},
+                        "tag_counts": {},
+                        "roles": {
+                            "Author only" if is_author_list else "Artist only": 0,
+                            "Both": 0
+                        }
+                    }
+                    
+                stats = creator_analytics[creator]
+                stats["count"] += count
+                
+                # Role count
+                if other_creator == creator:
+                    stats["roles"]["Both"] = stats["roles"].get("Both", 0) + count
+                else:
+                    sole_role = "Author only" if is_author_list else "Artist only"
+                    stats["roles"][sole_role] = stats["roles"].get(sole_role, 0) + count
+                
+                # Demographic
+                demo = group_info.get("demographic") or "Unknown"
+                demo = demo.capitalize()
+                stats["demographics"][demo] = stats["demographics"].get(demo, 0) + count
+                
+                # Content Rating
+                cr = group_info.get("content_rating") or "Unknown"
+                cr = cr.capitalize()
+                stats["content_ratings"][cr] = stats["content_ratings"].get(cr, 0) + count
+                
+                # Read Status
+                rs_raw = group_info.get("read_status") or "unread"
+                rs_formatted = read_status_labels.get(rs_raw.lower(), rs_raw.capitalize())
+                stats["read_statuses"][rs_formatted] = stats["read_statuses"].get(rs_formatted, 0) + count
+                
+                # Personal rating for completed mangas
+                read_status = group_info.get("read_status") or "unread"
+                rating = group_info.get("rating")
+                if read_status in ["completed", "ReadStatus.COMPLETED"] and rating is not None:
+                    rating_int = int(rating)
+                    stats["ratings"][rating_int] = stats["ratings"].get(rating_int, 0) + count
+                    
+                # Tags accumulation
+                for tag_list in pushed_tags:
+                    if isinstance(tag_list, list):
+                        for tid in tag_list:
+                            if tid:
+                                stats["tag_counts"][str(tid)] = stats["tag_counts"].get(str(tid), 0) + count
+                    elif tag_list:
+                        stats["tag_counts"][str(tag_list)] = stats["tag_counts"].get(str(tag_list), 0) + count
+                        
+            # Format and map tags
+            formatted_creators = []
+            for name, stats in creator_analytics.items():
+                top_tags = []
+                for tid, tcnt in stats["tag_counts"].items():
+                    meta = tag_metadata.get(tid, {"name": "Unknown", "color": None})
+                    top_tags.append({
+                        "name": meta["name"],
+                        "count": tcnt,
+                        "color": meta["color"]
+                    })
+                top_tags.sort(key=lambda x: x["count"], reverse=True)
+                
+                formatted_creators.append({
+                    "name": name,
+                    "count": stats["count"],
+                    "roles": [{"name": k, "value": v} for k, v in stats["roles"].items()],
+                    "demographics": [{"name": k, "value": v} for k, v in stats["demographics"].items()],
+                    "content_ratings": [{"name": k, "value": v} for k, v in stats["content_ratings"].items()],
+                    "read_statuses": [{"name": k, "value": v} for k, v in stats["read_statuses"].items()],
+                    "ratings": [{"score": k, "count": v} for k, v in sorted(stats["ratings"].items())],
+                    "tags": top_tags[:8]
+                })
+                
+            formatted_creators.sort(key=lambda x: x["count"], reverse=True)
+            return formatted_creators
+            
+        authors_details = await run_pipeline("author", "artist", is_author_list=True)
+        artists_details = await run_pipeline("artist", "author", is_author_list=False)
+        
+        return {
+            "authors": authors_details,
+            "artists": artists_details
+        }
 
     async def get_manga_added_timeline(self, filter_query: Dict[str, Any], group_by: str = "month",
                                         start_date: Optional[datetime] = None,

@@ -98,6 +98,13 @@ class MangaResponse(MangaBase):
     minio_cover_key: Optional[str] = None
     added_at: datetime
     updated_at: datetime
+    unread_at: Optional[datetime] = None
+    reading_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    dropped_at: Optional[datetime] = None
+    on_hold_at: Optional[datetime] = None
+    plan_to_read_at: Optional[datetime] = None
+    re_reading_at: Optional[datetime] = None
 
     class Config:
         populate_by_name = True

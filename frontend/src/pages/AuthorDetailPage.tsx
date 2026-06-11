@@ -62,7 +62,15 @@ export const AuthorDetailPage: React.FC = () => {
       cleanBio = cleanBio.replace(nativeNameMatch[0], "").trim();
     }
 
-    return { nativeName, cleanBio };
+    // Split bio into paragraphs using double-newlines
+    const rawParagraphs = cleanBio.split(/\n\s*\n/);
+    
+    // For each paragraph, replace single newlines (hard wraps) with spaces
+    const paragraphs = rawParagraphs
+      .map(p => p.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    return { nativeName, paragraphs };
   };
 
   // Basic Markdown parser for bold (**text**) and links ([label](url))
@@ -201,7 +209,7 @@ export const AuthorDetailPage: React.FC = () => {
 
   // Bio and native name details
   const bioText = author?.biography?.en || author?.attributes?.biography?.en || "";
-  const { nativeName, cleanBio } = parseBiography(bioText);
+  const { nativeName, paragraphs } = parseBiography(bioText);
 
   // Social handles
   const socials = {
@@ -280,7 +288,7 @@ export const AuthorDetailPage: React.FC = () => {
         {/* Decorative backdrop glow */}
         <div className="absolute top-0 right-0 w-72 h-72 bg-[var(--brand-orange)]/5 rounded-full blur-[80px] pointer-events-none" />
 
-        <div className="space-y-4">
+        <div className="space-y-4 relative z-10">
           <h1 className="text-3xl md:text-4xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)]">
             {name}
           </h1>
@@ -292,11 +300,15 @@ export const AuthorDetailPage: React.FC = () => {
             </div>
           )}
 
-          {cleanBio && (
+          {paragraphs && paragraphs.length > 0 && (
             <div className="space-y-2 pt-2">
               <h3 className="text-lg font-bold text-[var(--text-primary)] font-spartan">Biography</h3>
-              <div className="text-sm leading-relaxed text-[var(--text-secondary)] whitespace-pre-line max-w-4xl">
-                {renderMarkdown(cleanBio)}
+              <div className="text-sm leading-relaxed text-[var(--text-secondary)] space-y-4 w-full">
+                {paragraphs.map((para, i) => (
+                  <p key={i}>
+                    {renderMarkdown(para)}
+                  </p>
+                ))}
               </div>
             </div>
           )}
@@ -304,7 +316,7 @@ export const AuthorDetailPage: React.FC = () => {
 
         {/* Social presence */}
         {(socials.twitter || socials.youtube || socials.pixiv || socials.website) && (
-          <div className="pt-4 border-t border-[var(--border-primary)] space-y-3">
+          <div className="pt-4 border-t border-[var(--border-primary)] space-y-3 relative z-10">
             <h3 className="text-xs font-extrabold text-[var(--text-secondary)] uppercase tracking-wider">Where to find</h3>
             <div className="flex flex-wrap gap-3">
               {socials.twitter && (

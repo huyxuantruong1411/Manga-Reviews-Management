@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, ChevronDown, ChevronUp, Calendar, Grid, List as ListIcon, LayoutGrid } from "lucide-react";
+import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, ChevronDown, ChevronUp, Calendar, Grid, List as ListIcon, LayoutGrid, CheckCircle2, Loader2, Circle, XCircle } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
@@ -126,6 +126,10 @@ export const MangaListPage: React.FC = () => {
   const [importRating, setImportRating] = useState<number | "">("");
   const [importTags, setImportTags] = useState<string[]>([]);
   const [importingManga, setImportingManga] = useState<string | null>(null);
+  const [importProgressStep, setImportProgressStep] = useState<string | null>(null);
+  const [importProgressMessage, setImportProgressMessage] = useState<string>("");
+  const [importProgressPercent, setImportProgressPercent] = useState<number>(0);
+  const [failedStep, setFailedStep] = useState<string | null>(null);
 
   // Manual Form States
   const [manualTitle, setManualTitle] = useState("");
@@ -380,6 +384,11 @@ export const MangaListPage: React.FC = () => {
   const handleImportManga = async (dexId: string) => {
     try {
       setImportingManga(dexId);
+      setImportProgressStep("metadata");
+      setImportProgressMessage("Initializing import...");
+      setImportProgressPercent(0);
+      setFailedStep(null);
+
       const payload: any = {
         mangadex_id: dexId,
         read_status: importStatus,
@@ -387,67 +396,141 @@ export const MangaListPage: React.FC = () => {
       };
       if (importRating !== "") payload.personal_rating = Number(importRating);
 
-      const res = await client.post("/api/manga/dex", payload);
+      const baseUrl = client.defaults.baseURL || "";
+      const url = `${baseUrl}/api/manga/dex`;
 
-      // Update List
-      setMangas((prev) => [res.data, ...prev].slice(0, limit));
-      setTotal((prev) => prev + 1);
-
-      // Reset imports options
-      setImportRating("");
-      setImportTags([]);
-
-      showAlert({
-        title: "Import Success",
-        message: `Imported "${res.data.title}" successfully!`,
-        type: "success"
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload)
       });
-      setIsAddModalOpen(false);
-      setDexResults([]);
-      setDexQuery("");
-    } catch (err: any) {
-      const errorDetail = err.response?.data?.detail;
-      if (errorDetail && typeof errorDetail === "object" && errorDetail.code === "DUPLICATE_MANGA") {
-        const title = errorDetail.title;
-        const mangaId = errorDetail.manga_id;
-        const confirmSync = window.confirm(
-          `Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`
-        );
-        if (confirmSync) {
-          try {
-            showToast("Đang đồng bộ thông tin...", "info");
-            const syncRes = await client.post(`/api/manga/${mangaId}/sync`);
-            
-            // Update local list if the manga is in the current page
-            setMangas((prev) => prev.map((m) => m._id === mangaId ? syncRes.data : m));
-            
-            showAlert({
-              title: "Đồng bộ thành công",
-              message: `Đã đồng bộ thông tin mới cho "${title}"!`,
-              type: "success"
-            });
-            setIsAddModalOpen(false);
-            setDexResults([]);
-            setDexQuery("");
-          } catch (syncErr) {
-            console.error("Failed to sync duplicate manga:", syncErr);
-            showAlert({
-              title: "Đồng bộ thất bại",
-              message: "Không thể đồng bộ thông tin manga.",
-              type: "error"
-            });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body reader available.");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let importedMangaData: any = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            const dataStr = trimmed.slice(6);
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.step === "error") {
+                setImportProgressStep("error");
+                setFailedStep(data.failed_step || "metadata");
+                setImportProgressMessage(data.message);
+                
+                // Intercept duplicate error
+                if (data.code === "DUPLICATE_MANGA" || data.error_type === "DUPLICATE_MANGA") {
+                  const title = data.title;
+                  const mangaId = data.manga_id;
+                  const confirmSync = window.confirm(
+                    `Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`
+                  );
+                  if (confirmSync) {
+                    try {
+                      showToast("Đang đồng bộ thông tin...", "info");
+                      const syncRes = await client.post(`/api/manga/${mangaId}/sync`);
+                      setMangas((prev) => prev.map((m) => m._id === mangaId ? syncRes.data : m));
+                      showAlert({
+                        title: "Đồng bộ thành công",
+                        message: `Đã đồng bộ thông tin mới cho "${title}"!`,
+                        type: "success"
+                      });
+                      setIsAddModalOpen(false);
+                      setDexResults([]);
+                      setDexQuery("");
+                    } catch (syncErr) {
+                      console.error("Failed to sync duplicate manga:", syncErr);
+                      showAlert({
+                        title: "Đồng bộ thất bại",
+                        message: "Không thể đồng bộ thông tin manga.",
+                        type: "error"
+                      });
+                    }
+                  }
+                } else {
+                  showAlert({
+                    title: "Import Failed",
+                    message: data.message || "An unknown error occurred during import.",
+                    type: "error"
+                  });
+                }
+                return;
+              } else {
+                setImportProgressStep(data.step);
+                setImportProgressMessage(data.message);
+                setImportProgressPercent(data.progress || 0);
+                if (data.step === "done" && data.manga) {
+                  importedMangaData = data.manga;
+                }
+              }
+            } catch (jsonErr) {
+              console.error("Failed to parse stream JSON:", jsonErr, dataStr);
+            }
           }
         }
-      } else {
-        const msg = (typeof errorDetail === "string" ? errorDetail : null) || err.response?.data?.detail?.message || "Failed to import manga";
-        showAlert({
-          title: "Import Failed",
-          message: msg,
-          type: "error"
-        });
       }
+
+      if (importedMangaData) {
+        // Update List
+        setMangas((prev) => [importedMangaData, ...prev].slice(0, limit));
+        setTotal((prev) => prev + 1);
+
+        // Reset imports options
+        setImportRating("");
+        setImportTags([]);
+
+        showAlert({
+          title: "Import Success",
+          message: `Imported "${importedMangaData.title}" successfully!`,
+          type: "success"
+        });
+        setIsAddModalOpen(false);
+        setDexResults([]);
+        setDexQuery("");
+      } else {
+        if (importProgressStep !== "error") {
+          showAlert({
+            title: "Import Incomplete",
+            message: "Stream ended without completing the import.",
+            type: "warning"
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("Import request failed:", err);
+      showAlert({
+        title: "Import Failed",
+        message: err.message || "Failed to import manga",
+        type: "error"
+      });
     } finally {
       setImportingManga(null);
+      setImportProgressStep(null);
+      setImportProgressPercent(0);
+      setImportProgressMessage("");
+      setFailedStep(null);
     }
   };
 
@@ -736,9 +819,16 @@ export const MangaListPage: React.FC = () => {
                   className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
                 >
                   <option value="added_at">Date Added</option>
+                  <option value="updated_at">Date Updated</option>
                   <option value="title">Title</option>
                   <option value="personal_rating">Personal Rating</option>
                   <option value="year">Release Year</option>
+                  <option value="completed_at">Date Completed</option>
+                  <option value="reading_at">Date Started Reading</option>
+                  <option value="plan_to_read_at">Date Planned</option>
+                  <option value="dropped_at">Date Dropped</option>
+                  <option value="on_hold_at">Date On Hold</option>
+                  <option value="re_reading_at">Date Re-reading</option>
                 </select>
               </div>
 
@@ -1175,6 +1265,35 @@ export const MangaListPage: React.FC = () => {
             Showing <span className="text-[var(--text-primary)] font-bold">{mangas.length}</span> of <span className="text-[var(--text-primary)] font-bold">{total}</span> manga
           </span>
           <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+              >
+                <option value="added_at">Date Added</option>
+                <option value="updated_at">Date Updated</option>
+                <option value="title">Title</option>
+                <option value="personal_rating">Personal Rating</option>
+                <option value="year">Release Year</option>
+                <option value="completed_at">Date Completed</option>
+                <option value="reading_at">Date Started Reading</option>
+                <option value="plan_to_read_at">Date Planned</option>
+                <option value="dropped_at">Date Dropped</option>
+                <option value="on_hold_at">Date On Hold</option>
+                <option value="re_reading_at">Date Re-reading</option>
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(e) => { setSortOrder(e.target.value); setPage(1); }}
+                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
+
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Per Page:</span>
               <select
@@ -1797,7 +1916,95 @@ export const MangaListPage: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 relative">
+              {importingManga && (
+                <div className="absolute inset-0 bg-[var(--bg-card)]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-200">
+                  <div className="w-full max-w-md space-y-6">
+                    <div className="text-center space-y-2">
+                      <h3 className="text-lg font-extrabold font-spartan">Importing MangaDex Manga</h3>
+                      <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
+                        UUID: <span className="font-mono text-zinc-500 dark:text-zinc-400">{importingManga}</span>
+                      </p>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-[var(--brand-orange)]">{importProgressMessage || "Initializing..."}</span>
+                        <span className="text-[var(--text-secondary)]">{importProgressPercent}%</span>
+                      </div>
+                      <div className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden border border-[var(--border-primary)] p-0.5">
+                        <div
+                          className="h-full bg-gradient-to-r from-[var(--brand-orange)] to-[var(--brand-coral)] rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${importProgressPercent}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Steps Checklist */}
+                    <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-3.5 shadow-inner">
+                      {(() => {
+                        const getStepStatus = (stepName: string) => {
+                          if (importProgressStep === "error") {
+                            if (failedStep === stepName) return "failed";
+                            const stepsOrder = ["metadata", "creators", "tags", "cover", "save", "sync_assets"];
+                            const failedIdx = stepsOrder.indexOf(failedStep || "");
+                            const thisIdx = stepsOrder.indexOf(stepName);
+                            if (thisIdx < failedIdx) return "completed";
+                            return "pending";
+                          }
+
+                          const stepsOrder = ["metadata", "creators", "tags", "cover", "save", "sync_assets", "done"];
+                          const currentStepIndex = importProgressStep ? stepsOrder.indexOf(importProgressStep) : -1;
+                          const thisIdx = stepsOrder.indexOf(stepName);
+
+                          if (currentStepIndex === -1) {
+                            return thisIdx === 0 ? "active" : "pending";
+                          }
+                          if (thisIdx < currentStepIndex) return "completed";
+                          if (thisIdx === currentStepIndex) return "active";
+                          return "pending";
+                        };
+
+                        const renderStepItem = (label: string, stepName: string) => {
+                          const status = getStepStatus(stepName);
+                          let icon = <Circle size={18} className="text-zinc-400 dark:text-zinc-600 flex-shrink-0" />;
+                          let textClass = "text-zinc-500 dark:text-zinc-400 font-medium";
+
+                          if (status === "active") {
+                            icon = <Loader2 size={18} className="text-[var(--brand-orange)] animate-spin flex-shrink-0" />;
+                            textClass = "text-[var(--text-primary)] font-bold animate-pulse";
+                          } else if (status === "completed") {
+                            icon = <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />;
+                            textClass = "text-zinc-700 dark:text-zinc-300 font-semibold";
+                          } else if (status === "failed") {
+                            icon = <XCircle size={18} className="text-rose-500 flex-shrink-0" />;
+                            textClass = "text-rose-500 font-bold";
+                          }
+
+                          return (
+                            <div className="flex items-center space-x-3 text-sm transition duration-200">
+                              {icon}
+                              <span className={textClass}>{label}</span>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <>
+                            {renderStepItem("Fetch manga details from MangaDex", "metadata")}
+                            {renderStepItem("Sync author and artist profiles", "creators")}
+                            {renderStepItem("Organize and map genre tags", "tags")}
+                            {renderStepItem("Download cover & upload to storage", "cover")}
+                            {renderStepItem("Register manga in your library", "save")}
+                            {renderStepItem("Fetch alternative covers & recommendations", "sync_assets")}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
               {addTab === "dex" ? (
                 /* MangaDex Tab */
                 <div className="space-y-6">
