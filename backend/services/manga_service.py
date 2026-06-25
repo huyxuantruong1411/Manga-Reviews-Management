@@ -162,17 +162,23 @@ class MangaService:
         if original_languages:
             clauses.append({"original_language": {"$in": original_languages}})
             
-        # Build creator (author / artist) clauses supporting name-swapping
+        # Build creator (author / artist) clauses using exact name matching.
+        # The author/artist fields store comma-separated names (e.g. "Name1, Name2"),
+        # so we match the full name as a complete entry, not as a substring.
         def build_creator_match_clause(field: str, names: List[str]):
             or_clauses = []
             for name in names:
-                words = [w.strip() for w in name.split() if w.strip()]
-                if not words:
+                stripped = name.strip()
+                if not stripped:
                     continue
-                if len(words) == 1:
-                    or_clauses.append({field: {"$regex": re.escape(words[0]), "$options": "i"}})
-                else:
-                    or_clauses.append({"$and": [{field: {"$regex": re.escape(w), "$options": "i"}} for w in words]})
+                escaped = re.escape(stripped)
+                # Match the exact name as a standalone entry in a comma-separated list:
+                #   - ^name$ (only entry)
+                #   - ^name\s*, (first entry)
+                #   - ,\s*name\s*, (middle entry)
+                #   - ,\s*name$ (last entry)
+                pattern = f"(^|,\\s*){escaped}(\\s*,|$)"
+                or_clauses.append({field: {"$regex": pattern, "$options": "i"}})
             if or_clauses:
                 return {"$or": or_clauses}
             return None
@@ -252,12 +258,43 @@ class MangaService:
             "limit": limit
         }
 
+    async def _try_recover_cover(self, manga_id: str, mangadex_id: str) -> Optional[str]:
+        """Attempt to recover a missing cover image from MangaDex.
+        Returns a presigned MinIO URL on success, or None on failure."""
+        try:
+            details = await mangadex_service.get_manga_details(mangadex_id)
+            if not details or not details.get("cover_url"):
+                return None
+            cover_bytes = await mangadex_service.download_image_bytes(details["cover_url"])
+            if not cover_bytes:
+                return None
+            minio_cover_key = f"covers/{manga_id}.jpg"
+            minio_service.upload_cover(minio_cover_key, cover_bytes)
+            await self._get_mangas_collection().update_one(
+                {"_id": ObjectId(manga_id)},
+                {"$set": {"minio_cover_key": minio_cover_key, "updated_at": datetime.utcnow()}}
+            )
+            logger.info(f"Auto-recovered missing cover for manga {manga_id} ({mangadex_id})")
+            return minio_service.get_presigned_url(minio_cover_key)
+        except Exception as e:
+            logger.warning(f"Failed to auto-recover cover for manga {manga_id}: {e}")
+            return None
+
     async def get_manga_by_id(self, manga_id: str) -> Optional[Dict[str, Any]]:
         if not ObjectId.is_valid(manga_id):
             return None
         doc = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
-        if doc and doc.get("minio_cover_key"):
+        if not doc:
+            return None
+        if doc.get("minio_cover_key"):
             doc["cover_url"] = minio_service.get_presigned_url(doc["minio_cover_key"])
+        elif doc.get("mangadex_id"):
+            # Auto-recover missing cover: attempt to download in-band so the user
+            # sees the cover on this request (or next refresh if it takes too long).
+            recovered_url = await self._try_recover_cover(str(doc["_id"]), doc["mangadex_id"])
+            if recovered_url:
+                doc["cover_url"] = recovered_url
+                doc["minio_cover_key"] = f"covers/{doc['_id']}.jpg"
         return serialize_doc(doc)
 
     async def get_manga_by_any_id(self, identifier: str) -> Optional[Dict[str, Any]]:

@@ -11,7 +11,7 @@ from bson import ObjectId
 from PIL import Image
 from backend.database.connection import get_db
 from backend.services.mangadex_service import mangadex_service
-from backend.utils.file_utils import clean_filename
+from backend.utils.file_utils import clean_filename, normalize_windows_path
 from backend.config import settings
 
 
@@ -85,6 +85,17 @@ class DownloadService:
             {"_id": task_id},
             {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}}
         )
+        return True
+
+    async def delete_task(self, task_id: str) -> bool:
+        task = await self.get_task_status(task_id)
+        if not task:
+            return False
+            
+        if task["status"] not in ["completed", "failed", "cancelled"]:
+            return False
+            
+        await self._get_tasks_collection().delete_one({"_id": task_id})
         return True
 
     async def resume_task(self, task_id: str, background_tasks: Any) -> bool:
@@ -199,9 +210,9 @@ class DownloadService:
             logger.error(f"Error checking oneshot status for manga {manga_id}: {e}")
             
         if is_oneshot:
-            target_dir = base_dir
+            target_dir = normalize_windows_path(base_dir)
         else:
-            target_dir = os.path.join(base_dir, clean_filename(manga_title))
+            target_dir = normalize_windows_path(os.path.join(base_dir, clean_filename(manga_title)))
         
         # Update state to downloading and store resolved download path
         await self._get_tasks_collection().update_one(

@@ -211,7 +211,10 @@ class MangaDexAuthManager:
                 resp = await client.post(
                     AUTH_URL,
                     data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "User-Agent": "Manga-Reviews-Management/1.0.0 (contact@manga-reviews-management.local)"
+                    },
                 )
                 resp.raise_for_status()
                 data = resp.json()

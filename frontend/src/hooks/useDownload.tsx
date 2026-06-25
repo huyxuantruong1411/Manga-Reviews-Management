@@ -26,6 +26,7 @@ interface DownloadContextType {
   activeTasksCount: number;
   cancelTask: (taskId: string) => Promise<boolean>;
   resumeTask: (taskId: string) => Promise<boolean>;
+  deleteTask: (taskId: string) => Promise<boolean>;
   refreshTasks: () => Promise<void>;
   registerNewTask: (taskId: string) => void;
   isWidgetOpen: boolean;
@@ -164,6 +165,24 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
+  const deleteTask = async (taskId: string): Promise<boolean> => {
+    try {
+      await client.delete(`/api/downloads/tasks/${taskId}`);
+      showToast("Download task removed", "success");
+      
+      // Update local state immediately for fast feedback
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
+      
+      // Trigger a refresh
+      refreshTasks();
+      return true;
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+      showToast("Failed to remove download task", "error");
+      return false;
+    }
+  };
+
   const resumeTask = async (taskId: string): Promise<boolean> => {
     try {
       await client.post(`/api/downloads/tasks/${taskId}/resume`);
@@ -195,6 +214,7 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
         activeTasksCount,
         cancelTask,
         resumeTask,
+        deleteTask,
         refreshTasks,
         registerNewTask,
         isWidgetOpen,

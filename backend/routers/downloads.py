@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from backend.database.connection import get_db
 from backend.services.download_service import download_service
 from backend.config import settings
-from backend.utils.file_utils import clean_filename
+from backend.utils.file_utils import clean_filename, normalize_windows_path
 
 logger = logging.getLogger(__name__)
 
@@ -163,8 +163,8 @@ async def download_manga_chapters(
         raise HTTPException(status_code=400, detail="Download path cannot be empty")
         
     try:
-        # Resolve path to absolute
-        abs_path = os.path.abspath(base_dir)
+        # Resolve path to absolute and normalize (strip trailing dots from each component)
+        abs_path = normalize_windows_path(base_dir)
         # Try to make directories (creating folder hierarchy up to the end)
         os.makedirs(abs_path, exist_ok=True)
         # Test write access by writing a temporary mock file
@@ -296,3 +296,14 @@ async def resume_download_task(
     if not resumed:
         raise HTTPException(status_code=400, detail="Task cannot be resumed or not found")
     return {"message": "Download task resume request submitted"}
+
+@router.delete("/downloads/tasks/{task_id}")
+async def delete_download_task(task_id: str = Path(...)):
+    """Delete a completed, failed, or cancelled download task."""
+    deleted = await download_service.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=400, 
+            detail="Nhiệm vụ tải xuống không thể xóa (có thể do đang chạy hoặc không tìm thấy)"
+        )
+    return {"message": "Nhiệm vụ tải xuống đã được xóa thành công"}

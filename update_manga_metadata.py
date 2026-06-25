@@ -5,6 +5,10 @@ import asyncio
 # Adjust Python path to load backend module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Ensure stdout uses UTF-8 to prevent 'charmap' encoding errors on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from backend.database.connection import connect_to_mongo, close_mongo_connection, get_db
 from backend.services.manga_service import manga_service
 

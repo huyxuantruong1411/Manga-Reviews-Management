@@ -60,14 +60,10 @@ class MangaDexService:
     CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
     def _get_headers(self) -> Dict[str, str]:
-        ua = random.choice(self.USER_AGENTS)
         return {
-            "User-Agent": ua,
-            "Referer": "https://mangadex.org/",
-            "Origin": "https://mangadex.org",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Connection": "keep-alive"
+            "User-Agent": "Manga-Reviews-Management/1.0.0 (contact@manga-reviews-management.local)"
         }
+
 
     async def _request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         # Enforce Rate Limiter
@@ -91,7 +87,24 @@ class MangaDexService:
                 return resp.json()
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
-                logger.warning(f"HTTP Error calling MangaDex ({endpoint}): {status_code} - {e.response.text[:200]}")
+                response_text = e.response.text
+                logger.warning(f"HTTP Error calling MangaDex ({endpoint}): {status_code} - {response_text[:200]}")
+                
+                # Check if it looks like a browser block/unsupported browser page (e.g. HTML response)
+                is_html_block = False
+                if "content-type" in e.response.headers:
+                    ct = e.response.headers["content-type"].lower()
+                    if "text/html" in ct or "application/xhtml+xml" in ct:
+                        is_html_block = True
+                elif response_text.strip().startswith("<!doctype html") or "<html" in response_text.lower():
+                    is_html_block = True
+                
+                if is_html_block or "Unsupported Browser" in response_text:
+                    logger.warning(f"Detected browser block/challenge page. Attempting browser simulation fallback...")
+                    fallback_data = await self._request_via_playwright(endpoint, params)
+                    if fallback_data is not None:
+                        return fallback_data
+                
                 # Fallback 1: Try authenticated request for 403 or 5xx errors
                 if status_code in (403,) or status_code >= 500:
                     auth_data = await self._request_authenticated(endpoint, params)
@@ -674,9 +687,10 @@ class MangaDexService:
         hash_ = data["chapter"]["hash"]
         return [f"{base}/data/{hash_}/{f}" for f in data["chapter"]["data"]]
 
-    async def download_image_bytes(self, url: str) -> Optional[bytes]:
+    async def download_image_bytes(self, url: str, _retries: int = 2) -> Optional[bytes]:
         """
         Downloads image bytes for local saving or uploading to MinIO.
+        Retries on transient network failures before falling back to Playwright.
         """
         # Enforce rate limits
         await mangadex_rate_limiter.acquire()
@@ -690,7 +704,34 @@ class MangaDexService:
                 resp = await client.get(url, headers=headers)
                 resp.raise_for_status()
                 return resp.content
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.NetworkError) as e:
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                response_text = e.response.text
+                logger.warning(f"HTTP Error downloading image {url}: {status_code} - {response_text[:200]}")
+                
+                # Check if it looks like a browser block/unsupported browser page (e.g. HTML response)
+                is_html_block = False
+                if "content-type" in e.response.headers:
+                    ct = e.response.headers["content-type"].lower()
+                    if "text/html" in ct or "application/xhtml+xml" in ct:
+                        is_html_block = True
+                elif response_text.strip().startswith("<!doctype html") or "<html" in response_text.lower():
+                    is_html_block = True
+                
+                if is_html_block or "Unsupported Browser" in response_text or status_code == 403:
+                    logger.warning(f"Detected browser block/challenge page for image download. Attempting browser simulation fallback...")
+                    fallback_bytes = await self._download_via_playwright(url)
+                    if fallback_bytes is not None:
+                        return fallback_bytes
+                return None
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout,
+                    httpx.NetworkError, httpx.RemoteProtocolError) as e:
+                # Retry on transient network failures before falling back to Playwright
+                if _retries > 0:
+                    wait = 3 * (3 - _retries)  # 3s, 6s backoff
+                    logger.warning(f"Network error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
+                    await asyncio.sleep(wait)
+                    return await self.download_image_bytes(url, _retries=_retries - 1)
                 logger.warning(f"Network error downloading image {url}: {e}. Attempting browser simulation fallback...")
                 fallback_bytes = await self._download_via_playwright(url)
                 if fallback_bytes is not None:
@@ -698,6 +739,12 @@ class MangaDexService:
                 logger.error(f"Browser simulation fallback also failed for downloading image {url}.")
                 return None
             except Exception as e:
+                # Catch-all: also retry for unexpected transient errors (e.g. RemoteProtocolError variants)
+                if _retries > 0:
+                    wait = 3 * (3 - _retries)
+                    logger.warning(f"Unexpected error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
+                    await asyncio.sleep(wait)
+                    return await self.download_image_bytes(url, _retries=_retries - 1)
                 logger.error(f"Error downloading image bytes from {url}: {e}")
                 return None
 

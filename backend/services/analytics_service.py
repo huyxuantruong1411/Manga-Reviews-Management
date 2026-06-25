@@ -108,13 +108,17 @@ class AnalyticsService:
         def build_creator_match_clause(field: str, names: List[str]):
             or_clauses = []
             for name in names:
-                words = [w.strip() for w in name.split() if w.strip()]
-                if not words:
+                stripped = name.strip()
+                if not stripped:
                     continue
-                if len(words) == 1:
-                    or_clauses.append({field: {"$regex": re.escape(words[0]), "$options": "i"}})
-                else:
-                    or_clauses.append({"$and": [{field: {"$regex": re.escape(w), "$options": "i"}} for w in words]})
+                escaped = re.escape(stripped)
+                # Match the exact name as a standalone entry in a comma-separated list:
+                #   - ^name$ (only entry)
+                #   - ^name\s*, (first entry)
+                #   - ,\s*name\s*, (middle entry)
+                #   - ,\s*name$ (last entry)
+                pattern = f"(^|,\\s*){escaped}(\\s*,|$)"
+                or_clauses.append({field: {"$regex": pattern, "$options": "i"}})
             if or_clauses:
                 return {"$or": or_clauses}
             return None

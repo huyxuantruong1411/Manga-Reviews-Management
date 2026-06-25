@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDownload } from "../../hooks/useDownload";
 import type { DownloadTask } from "../../hooks/useDownload";
-import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks, Play, RotateCcw } from "lucide-react";
+import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks, Play, RotateCcw, Trash2 } from "lucide-react";
 
 export const DownloadWidget: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +11,7 @@ export const DownloadWidget: React.FC = () => {
     activeTasksCount,
     cancelTask,
     resumeTask,
+    deleteTask,
     refreshTasks,
     isWidgetOpen,
     setIsWidgetOpen,
@@ -220,13 +221,22 @@ export const DownloadWidget: React.FC = () => {
                             </button>
                           </>
                         ) : (
-                          <button
-                            onClick={() => resumeTask(task._id)}
-                            title="Resume / Retry Download"
-                            className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-emerald-500/20 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/5 transition cursor-pointer"
-                          >
-                            <RotateCcw size={13} />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => resumeTask(task._id)}
+                              title="Resume / Retry Download"
+                              className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-emerald-500/20 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/5 transition cursor-pointer"
+                            >
+                              <RotateCcw size={13} />
+                            </button>
+                            <button
+                              onClick={() => deleteTask(task._id)}
+                              title="Delete Task"
+                              className="p-1 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:border-rose-500/20 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/5 transition cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>

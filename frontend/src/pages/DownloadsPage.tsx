@@ -14,12 +14,14 @@ import {
   Filter,
   RefreshCw,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Trash2,
+  RotateCcw
 } from "lucide-react";
 
 export const DownloadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { tasks, cancelTask, refreshTasks, activeTasksCount } = useDownload();
+  const { tasks, cancelTask, resumeTask, deleteTask, refreshTasks, activeTasksCount } = useDownload();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -274,16 +276,35 @@ export const DownloadsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Cancel Button */}
-                  {isActive && (
-                    <button
-                      onClick={() => cancelTask(task._id)}
-                      className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/20 hover:border-rose-500/30 text-rose-500 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer"
-                    >
-                      <StopCircle size={14} />
-                      <span>Cancel Task</span>
-                    </button>
-                  )}
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 w-full">
+                    {isActive ? (
+                      <button
+                        onClick={() => cancelTask(task._id)}
+                        className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/20 hover:border-rose-500/30 text-rose-500 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer"
+                      >
+                        <StopCircle size={14} />
+                        <span>Cancel Task</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => resumeTask(task._id)}
+                          className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 hover:border-emerald-500/30 text-emerald-500 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer"
+                        >
+                          <RotateCcw size={14} />
+                          <span>Retry / Resume</span>
+                        </button>
+                        <button
+                          onClick={() => deleteTask(task._id)}
+                          className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/20 hover:border-rose-500/30 text-rose-500 font-bold text-xs rounded-xl transition flex items-center justify-center shadow-sm cursor-pointer"
+                          title="Delete Task"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
