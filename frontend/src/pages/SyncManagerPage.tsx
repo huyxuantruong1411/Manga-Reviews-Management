@@ -834,7 +834,12 @@ export const SyncManagerPage: React.FC = () => {
       setPoolTagsInclude(pool.filters.tags || []);
       setPoolTagsExclude(pool.filters.exclude_tags || []);
       setPoolLanguages(pool.filters.original_languages || []);
-      setPoolSyncOptions(pool.sync_options);
+      setPoolSyncOptions({
+        sync_metadata: pool.sync_options.sync_metadata,
+        sync_covers: pool.sync_options.sync_covers,
+        sync_recommendations: pool.sync_options.sync_recommendations,
+        sync_trackers: !!pool.sync_options.sync_trackers
+      });
       setScheduleType(pool.schedule.type);
       setIntervalHours(pool.schedule.interval_hours || "");
     } else {
@@ -852,11 +857,13 @@ export const SyncManagerPage: React.FC = () => {
       setPoolSyncOptions({
         sync_metadata: true,
         sync_covers: false,
-        sync_recommendations: false
+        sync_recommendations: false,
+        sync_trackers: false
       });
       setScheduleType("manual");
       setIntervalHours("");
     }
+
     setIsPoolModalOpen(true);
   };
 
