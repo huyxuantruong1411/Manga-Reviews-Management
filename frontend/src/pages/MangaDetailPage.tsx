@@ -46,8 +46,8 @@ interface MangaLink {
   url: string;
 }
 
-interface Manga {
 export interface TrackerMetadataCombined {
+
   published_start_date?: string | null;
   published_end_date?: string | null;
   average_score?: number | null;
