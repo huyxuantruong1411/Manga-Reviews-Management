@@ -200,8 +200,20 @@ async def sync_manga_metadata(manga_id: str = Path(...)):
         raise HTTPException(status_code=404, detail="Manga not found or not synced (manual entry)")
     return manga
 
+@router.post("/{manga_id}/enrich-trackers", response_model=MangaResponse)
+async def enrich_manga_tracker_metadata(
+    manga_id: str = Path(...),
+    force_refresh: bool = Query(True, description="Force re-fetch from external tracker APIs")
+):
+    """Enrich manga metadata from external trackers (AniList, MyAnimeList)."""
+    manga = await manga_service.enrich_manga_tracker_metadata(manga_id, force_refresh=force_refresh)
+    if not manga:
+        raise HTTPException(status_code=404, detail="Manga not found")
+    return manga
+
 @router.get("/{manga_id}/history")
 async def get_manga_history(manga_id: str = Path(...)):
     """Get the audit log change history of a manga."""
     history = await manga_service.get_manga_history(manga_id)
     return history
+

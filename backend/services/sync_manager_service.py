@@ -75,8 +75,10 @@ class SyncManagerService:
             "sync_options": pool_config.get("sync_options", {
                 "sync_metadata": True,
                 "sync_covers": False,
-                "sync_recommendations": False
+                "sync_recommendations": False,
+                "sync_trackers": False
             }),
+
             "schedule": pool_config.get("schedule", {
                 "type": "manual",
                 "interval_hours": None
@@ -211,6 +213,15 @@ class SyncManagerService:
                 except Exception as e:
                     logger.error(f"Recommendations sync failed for {manga_id}: {e}")
                     errors.append(f"Recommendations: {str(e)}")
+
+            # 4. Sync tracker metadata (AniList & MAL)
+            if options.get("sync_trackers"):
+                try:
+                    await manga_service.enrich_manga_tracker_metadata(manga_id, force_refresh=True)
+                except Exception as e:
+                    logger.error(f"Tracker metadata sync failed for {manga_id}: {e}")
+                    errors.append(f"Trackers: {str(e)}")
+
 
             status = "completed" if not errors else "failed"
             # If some items succeeded but others failed, we can mark as failed or completed depending on errors

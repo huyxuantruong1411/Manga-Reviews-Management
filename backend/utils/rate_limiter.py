@@ -33,5 +33,10 @@ class AsyncRateLimiter:
                 logger.debug(f"Rate limiter sleeping for {sleep_time:.2f}s...")
                 await asyncio.sleep(sleep_time)
 
-# Global rate limiter for MangaDex
+# Global rate limiters
 mangadex_rate_limiter = AsyncRateLimiter(rate=5.0, capacity=5.0)
+# AniList API limit: 90 req/min (1.5 req/s)
+anilist_rate_limiter = AsyncRateLimiter(rate=1.2, capacity=3.0)
+# Jikan (MAL) API limit: 3 req/s, 60 req/min (1.0 req/s)
+jikan_rate_limiter = AsyncRateLimiter(rate=1.0, capacity=2.0)
+

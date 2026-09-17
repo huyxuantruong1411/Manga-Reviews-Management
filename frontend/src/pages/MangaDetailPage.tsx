@@ -47,6 +47,56 @@ interface MangaLink {
 }
 
 interface Manga {
+export interface TrackerMetadataCombined {
+  published_start_date?: string | null;
+  published_end_date?: string | null;
+  average_score?: number | null;
+  popularity?: number | null;
+  source?: string | null;
+  format?: string | null;
+}
+
+export interface AniListMetadata {
+  id?: number;
+  title?: { romaji?: string; english?: string; native?: string };
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: string | null;
+  average_score?: number | null;
+  mean_score?: number | null;
+  popularity?: number | null;
+  favourites?: number | null;
+  source?: string | null;
+  format?: string | null;
+  genres?: string[];
+  site_url?: string;
+}
+
+export interface MALMetadata {
+  id?: number;
+  title?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: string | null;
+  score?: number | null;
+  score_100?: number | null;
+  scored_by?: number | null;
+  rank?: number | null;
+  popularity?: number | null;
+  members?: number | null;
+  favorites?: number | null;
+  type?: string | null;
+  site_url?: string;
+}
+
+export interface TrackerMetadataPayload {
+  fetched_at?: string;
+  anilist?: AniListMetadata | null;
+  myanimelist?: MALMetadata | null;
+  combined?: TrackerMetadataCombined;
+}
+
+export interface Manga {
   _id: string;
   mangadex_id: string | null;
   title: string;
@@ -70,7 +120,9 @@ interface Manga {
   published_end_date?: string | null;
   volumes?: number | null;
   chapters?: number | null;
+  tracker_metadata?: TrackerMetadataPayload | null;
 }
+
 
 const getReadStatusInfo = (status: string) => {
   const s = status ? status.toLowerCase() : "";
@@ -963,12 +1015,31 @@ export const MangaDetailPage: React.FC = () => {
         covers: prev.covers === "running" ? "failed" : prev.covers,
         recommendations: prev.recommendations === "running" ? "failed" : prev.recommendations
       }));
-      setSyncStatusMsg("Critical error: Failed to connect to MangaDex.");
-      addLog("Critical sync process aborted due to server error.");
+    }
+  };
+
+  const [enrichingTrackers, setEnrichingTrackers] = useState(false);
+
+  const handleEnrichTrackers = async () => {
+    if (!manga) return;
+    try {
+      setEnrichingTrackers(true);
+      const res = await client.post(`/api/manga/${manga._id}/enrich-trackers?force_refresh=true`);
+      setManga(res.data);
+      // Reload history
+      const historyRes = await client.get(`/api/manga/${id}/history`);
+      setHistory(historyRes.data);
+      showToast("Tracker metadata enriched successfully!", "success");
+    } catch (err) {
+      console.error("Failed to enrich tracker metadata:", err);
+      showToast("Failed to fetch tracker metadata.", "error");
+    } finally {
+      setEnrichingTrackers(false);
     }
   };
 
   // Delete Manga
+
   const handleDeleteManga = async () => {
     if (!window.confirm("CRITICAL WARNING: This will permanently delete this manga, all its reviews, and cover assets. Continue?")) return;
     try {
@@ -1628,6 +1699,16 @@ export const MangaDetailPage: React.FC = () => {
               <span>Edit Review Metadata</span>
             </button>
 
+            <button
+              onClick={handleEnrichTrackers}
+              disabled={enrichingTrackers}
+              className="flex items-center space-x-2 px-4 py-2 border border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-500/5 rounded-xl hover:bg-purple-500/10 font-bold text-xs transition disabled:opacity-50"
+              title="Enrich metadata (dates, scores, status) from AniList & MyAnimeList"
+            >
+              <RefreshCw size={14} className={enrichingTrackers ? "animate-spin" : ""} />
+              <span>{enrichingTrackers ? "Fetching Trackers..." : "Enrich Trackers"}</span>
+            </button>
+
             {manga.mangadex_id && (
               <>
                 <button
@@ -1657,6 +1738,80 @@ export const MangaDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Tracker Metadata Showcase Card */}
+      {manga.tracker_metadata && (
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-3">
+            <h3 className="text-sm font-extrabold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+              Tracker Intelligence (AniList & MyAnimeList)
+            </h3>
+            {manga.tracker_metadata.fetched_at && (
+              <span className="text-[10px] text-[var(--text-secondary)] font-medium">
+                Last updated: {new Date(manga.tracker_metadata.fetched_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* AniList Score */}
+            {manga.tracker_metadata.anilist?.average_score != null && (
+              <div className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-blue-500 block">AniList Score</span>
+                  <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400">
+                    {manga.tracker_metadata.anilist.average_score}%
+                  </span>
+                </div>
+                {manga.tracker_metadata.anilist.popularity != null && (
+                  <span className="text-[11px] font-bold text-blue-500 bg-blue-500/20 px-2 py-1 rounded-lg">
+                    {(manga.tracker_metadata.anilist.popularity / 1000).toFixed(1)}k users
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* MAL Score */}
+            {manga.tracker_metadata.myanimelist?.score != null && (
+              <div className="p-3.5 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-sky-500 block">MAL Score</span>
+                  <span className="text-xl font-extrabold text-sky-600 dark:text-sky-400">
+                    ★ {manga.tracker_metadata.myanimelist.score}
+                  </span>
+                </div>
+                {manga.tracker_metadata.myanimelist.rank != null && (
+                  <span className="text-[11px] font-bold text-sky-500 bg-sky-500/20 px-2 py-1 rounded-lg">
+                    #{manga.tracker_metadata.myanimelist.rank}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Source */}
+            {manga.tracker_metadata.combined?.source && (
+              <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-2xl">
+                <span className="text-[10px] uppercase font-bold text-purple-500 block">Original Source</span>
+                <span className="text-sm font-bold text-purple-600 dark:text-purple-300 capitalize">
+                  {manga.tracker_metadata.combined.source.replace(/_/g, ' ')}
+                </span>
+              </div>
+            )}
+
+            {/* Format */}
+            {manga.tracker_metadata.combined?.format && (
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                <span className="text-[10px] uppercase font-bold text-emerald-500 block">Format</span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-300 uppercase">
+                  {manga.tracker_metadata.combined.format}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
 
       {/* Grouped Metadata Grid */}
       <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">

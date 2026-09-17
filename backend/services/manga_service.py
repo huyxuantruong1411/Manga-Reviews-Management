@@ -1,12 +1,14 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 from typing import List, Dict, Any, Optional
 from backend.database.connection import get_db
 from backend.models.manga import MangaCreate, MangaCreateDex, MangaUpdate, ReadStatus
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
+from backend.services.tracker_service import fetch_tracker_metadata
+
 
 logger = logging.getLogger(__name__)
 
@@ -444,8 +446,18 @@ class MangaService:
         except Exception as e:
             logger.error(f"Failed to sync recommendations for newly imported manga {manga_id}: {e}")
 
+        # Proactively enrich tracker metadata
+        try:
+            await self.enrich_manga_tracker_metadata(str(manga_id), force_refresh=True)
+            refreshed_manga = await self._get_mangas_collection().find_one({"_id": manga_id})
+            if refreshed_manga:
+                manga_doc = refreshed_manga
+        except Exception as e:
+            logger.error(f"Failed to enrich tracker metadata for newly imported manga {manga_id}: {e}")
+
         manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
         return serialize_doc(manga_doc)
+
 
     async def import_manga_by_dex_stream(self, dex_data: MangaCreateDex):
         # Step 1: Metadata
@@ -568,8 +580,8 @@ class MangaService:
         if dex_data.personal_rating is not None:
             await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating))
             
-        # Step 6: Sync cover art and recommendations
-        yield {"step": "sync_assets", "message": "Fetching alternative covers & recommendations...", "progress": 95}
+        # Step 6: Sync cover art, recommendations & tracker metadata
+        yield {"step": "sync_assets", "message": "Fetching alternative covers, recommendations & tracker metadata...", "progress": 95}
         try:
             from backend.services.cover_art_service import cover_art_service
             await cover_art_service.sync_covers_for_manga(str(manga_id))
@@ -582,6 +594,14 @@ class MangaService:
         except Exception as e:
             logger.error(f"Failed to sync recommendations for newly imported manga {manga_id}: {e}")
 
+        try:
+            await self.enrich_manga_tracker_metadata(str(manga_id), force_refresh=True)
+            refreshed_manga = await self._get_mangas_collection().find_one({"_id": manga_id})
+            if refreshed_manga:
+                manga_doc = refreshed_manga
+        except Exception as e:
+            logger.error(f"Failed to enrich tracker metadata for newly imported manga {manga_id}: {e}")
+
         manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
         
         yield {
@@ -590,6 +610,7 @@ class MangaService:
             "progress": 100,
             "manga": serialize_doc(manga_doc)
         }
+
 
     async def add_manga_manual(self, manual_data: MangaCreate, cover_file: Optional[bytes] = None) -> Dict[str, Any]:
         manga_id = ObjectId()
@@ -832,12 +853,79 @@ class MangaService:
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_fields})
         await self.log_action(manga_id, "sync_metadata", note="Synced metadata from MangaDex")
         
+        # Also enrich tracker metadata
+        try:
+            await self.enrich_manga_tracker_metadata(manga_id, force_refresh=True)
+        except Exception as e:
+            logger.error(f"Failed to enrich tracker metadata during sync for {manga_id}: {e}")
+
         synced_manga = await coll.find_one({"_id": ObjectId(manga_id)})
         if synced_manga.get("minio_cover_key"):
             synced_manga["cover_url"] = minio_service.get_presigned_url(synced_manga["minio_cover_key"])
         return serialize_doc(synced_manga)
 
+    async def enrich_manga_tracker_metadata(self, manga_id: str, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Fetch external tracker metadata (AniList, MyAnimeList) and enrich manga document.
+        Respects 7 days caching unless force_refresh=True.
+        Auto fills published_start_date and published_end_date if missing.
+        """
+        if not ObjectId.is_valid(manga_id):
+            return None
+        coll = self._get_mangas_collection()
+        manga = await coll.find_one({"_id": ObjectId(manga_id)})
+        if not manga:
+            return None
+
+        # 7-day cache check if not force_refresh
+        if not force_refresh and manga.get("tracker_metadata"):
+            fetched_at_str = manga["tracker_metadata"].get("fetched_at")
+            if fetched_at_str:
+                try:
+                    fetched_at = datetime.fromisoformat(fetched_at_str.replace("Z", "+00:00"))
+                    now = datetime.now(timezone.utc)
+                    if (now - fetched_at).days < 7:
+                        logger.info(f"Tracker metadata for {manga_id} is fresh (< 7 days old). Skipping fetch.")
+                        if manga.get("minio_cover_key"):
+                            manga["cover_url"] = minio_service.get_presigned_url(manga["minio_cover_key"])
+                        return serialize_doc(manga)
+                except Exception as e:
+                    logger.warning(f"Error parsing tracker_metadata timestamp: {e}")
+
+        links = manga.get("links", [])
+        if not links:
+            if manga.get("minio_cover_key"):
+                manga["cover_url"] = minio_service.get_presigned_url(manga["minio_cover_key"])
+            return serialize_doc(manga)
+
+        try:
+            tracker_data = await fetch_tracker_metadata(links)
+            if tracker_data:
+                combined = tracker_data.get("combined", {})
+                update_payload: Dict[str, Any] = {
+                    "tracker_metadata": tracker_data,
+                    "updated_at": datetime.utcnow()
+                }
+
+                # Auto fill start/end dates if currently missing
+                if not manga.get("published_start_date") and combined.get("published_start_date"):
+                    update_payload["published_start_date"] = combined["published_start_date"]
+                if not manga.get("published_end_date") and combined.get("published_end_date"):
+                    update_payload["published_end_date"] = combined["published_end_date"]
+
+                await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_payload})
+                await self.log_action(manga_id, "enrich_trackers", note="Enriched metadata from external trackers")
+                
+                manga = await coll.find_one({"_id": ObjectId(manga_id)})
+        except Exception as e:
+            logger.error(f"Failed to enrich tracker metadata for manga {manga_id}: {e}")
+
+        if manga and manga.get("minio_cover_key"):
+            manga["cover_url"] = minio_service.get_presigned_url(manga["minio_cover_key"])
+        return serialize_doc(manga)
+
     async def get_manga_history(self, manga_id: str) -> List[Dict[str, Any]]:
+
         cursor = self._get_audit_collection().find({"entity_id": manga_id}).sort("timestamp", -1)
         history = []
         async for doc in cursor:

@@ -28,6 +28,7 @@ interface SyncPool {
     sync_metadata: boolean;
     sync_covers: boolean;
     sync_recommendations: boolean;
+    sync_trackers?: boolean;
   };
   schedule: {
     type: "manual" | "interval";
@@ -66,7 +67,9 @@ interface SyncRun {
     sync_metadata: boolean;
     sync_covers: boolean;
     sync_recommendations: boolean;
+    sync_trackers?: boolean;
   };
+
   started_at: string;
   completed_at: string | null;
   logs: string[];
@@ -165,7 +168,8 @@ export const SyncManagerPage: React.FC = () => {
   const [batchOptions, setBatchOptions] = useState({
     sync_metadata: true,
     sync_covers: false,
-    sync_recommendations: false
+    sync_recommendations: false,
+    sync_trackers: false
   });
   const [batchSyncing, setBatchSyncing] = useState(false);
 
@@ -195,8 +199,10 @@ export const SyncManagerPage: React.FC = () => {
   const [poolSyncOptions, setPoolSyncOptions] = useState({
     sync_metadata: true,
     sync_covers: false,
-    sync_recommendations: false
+    sync_recommendations: false,
+    sync_trackers: false
   });
+
   
   // Pool Schedule
   const [scheduleType, setScheduleType] = useState<"manual" | "interval">("manual");
@@ -1484,6 +1490,22 @@ export const SyncManagerPage: React.FC = () => {
                   </span>
                 </div>
               </label>
+
+              {/* Option 4 */}
+              <label className="flex items-start gap-3 p-3.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-purple-200/50 rounded-2xl cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={batchOptions.sync_trackers}
+                  onChange={() => setBatchOptions(prev => ({ ...prev, sync_trackers: !prev.sync_trackers }))}
+                  className="mt-1 accent-purple-500"
+                />
+                <div>
+                  <strong className="text-sm text-[var(--text-primary)] block">Sync Tracker Metadata</strong>
+                  <span className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                    Enrich metadata (dates, scores, status) from AniList & MyAnimeList.
+                  </span>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -1506,7 +1528,7 @@ export const SyncManagerPage: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={handleTriggerBatch}
-              disabled={batchSyncing || selectedMangaIds.length === 0 || (!batchOptions.sync_metadata && !batchOptions.sync_covers && !batchOptions.sync_recommendations)}
+              disabled={batchSyncing || selectedMangaIds.length === 0 || (!batchOptions.sync_metadata && !batchOptions.sync_covers && !batchOptions.sync_recommendations && !batchOptions.sync_trackers)}
               className="flex-1 py-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-zinc-400 disabled:opacity-50 text-[var(--text-primary)] font-bold text-xs rounded-xl shadow transition cursor-pointer flex items-center justify-center gap-1.5"
             >
               Queue Backend
@@ -1516,11 +1538,12 @@ export const SyncManagerPage: React.FC = () => {
                 const selectedMangas = localMangas.filter(m => selectedMangaIds.includes(m._id));
                 triggerSequentialSync(selectedMangas, batchOptions, `Batch of ${selectedMangaIds.length} titles`, "batch");
               }}
-              disabled={selectedMangaIds.length === 0 || (!batchOptions.sync_metadata && !batchOptions.sync_covers && !batchOptions.sync_recommendations)}
+              disabled={selectedMangaIds.length === 0 || (!batchOptions.sync_metadata && !batchOptions.sync_covers && !batchOptions.sync_recommendations && !batchOptions.sync_trackers)}
               className="flex-1 py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer flex items-center justify-center gap-1.5"
             >
               Sequential Sync ({selectedMangaIds.length})
             </button>
+
           </div>
         </div>
       </div>
@@ -2064,8 +2087,18 @@ export const SyncManagerPage: React.FC = () => {
                       />
                       <span>Sync Recommendations</span>
                     </label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)]">
+                      <input
+                        type="checkbox"
+                        checked={poolSyncOptions.sync_trackers}
+                        onChange={() => setPoolSyncOptions(prev => ({ ...prev, sync_trackers: !prev.sync_trackers }))}
+                        className="accent-purple-500"
+                      />
+                      <span>Sync Tracker Metadata (AniList & MAL)</span>
+                    </label>
                   </div>
                 </div>
+
 
                 {/* Pool Scheduling */}
                 <div className="space-y-3">
