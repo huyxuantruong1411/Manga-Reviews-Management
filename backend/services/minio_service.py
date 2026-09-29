@@ -61,6 +61,42 @@ class MinioService:
             logger.error(f"Error generating presigned URL for {object_name}: {e}")
             return ""
 
+    def upload_chapter_page(self, manga_id: str, chapter_id: str, filename: str, data: bytes, content_type: str = "image/jpeg") -> tuple:
+        """
+        Uploads a chapter page image to MinIO.
+        Returns (object_key, file_size, width, height, md5_hash).
+        """
+        import hashlib
+        from PIL import Image
+
+        try:
+            if not self.client.bucket_exists(self.bucket):
+                self.client.make_bucket(self.bucket)
+
+            md5_hash = hashlib.md5(data).hexdigest()
+            file_size = len(data)
+            width, height = None, None
+
+            try:
+                with Image.open(io.BytesIO(data)) as img:
+                    width, height = img.size
+            except Exception as ie:
+                logger.warning(f"Could not read image dimensions for {filename}: {ie}")
+
+            object_name = f"chapters/{manga_id}/{chapter_id}/{filename}"
+            data_stream = io.BytesIO(data)
+            self.client.put_object(
+                self.bucket,
+                object_name,
+                data_stream,
+                length=file_size,
+                content_type=content_type
+            )
+            return object_name, file_size, width, height, md5_hash
+        except Exception as e:
+            logger.error(f"Error uploading chapter page {filename} to MinIO: {e}")
+            raise
+
     def delete_cover(self, object_name: str) -> bool:
         """
         Deletes a cover image from the MinIO bucket.
@@ -75,4 +111,43 @@ class MinioService:
             logger.error(f"Error deleting object {object_name} from MinIO: {e}")
             return False
 
+    def delete_chapter_page(self, object_name: str) -> bool:
+        """
+        Deletes a single chapter page from MinIO.
+        """
+        return self.delete_cover(object_name)
+
+    def delete_chapter_folder(self, manga_id: str, chapter_id: str) -> int:
+        """
+        Deletes all pages belonging to a chapter from MinIO.
+        Returns count of deleted objects.
+        """
+        prefix = f"chapters/{manga_id}/{chapter_id}/"
+        try:
+            objects_to_delete = list(self.client.list_objects(self.bucket, prefix=prefix, recursive=True))
+            if not objects_to_delete:
+                return 0
+            
+            from minio.deleteobjects import DeleteObject
+            delete_list = [DeleteObject(obj.object_name) for obj in objects_to_delete]
+            errors = self.client.remove_objects(self.bucket, delete_list)
+            err_count = sum(1 for _ in errors)
+            deleted_count = len(delete_list) - err_count
+            logger.info(f"Deleted {deleted_count} objects under prefix '{prefix}'.")
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error deleting chapter folder '{prefix}' from MinIO: {e}")
+            return 0
+
+    def get_batch_presigned_urls(self, object_keys: list, expires_hours: int = 24) -> dict:
+        """
+        Generates presigned URLs for multiple object keys.
+        """
+        results = {}
+        for key in object_keys:
+            if key:
+                results[key] = self.get_presigned_url(key)
+        return results
+
 minio_service = MinioService()
+

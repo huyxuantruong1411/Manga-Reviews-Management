@@ -132,6 +132,7 @@ class DownloadRequest(BaseModel):
     chapters: List[DownloadChapterPayload]
     lang: str = "en"
     download_path: Optional[str] = None
+    save_to_disk: bool = False
     force: bool = False
 
 @router.post("/manga/{manga_id}/download", status_code=status.HTTP_202_ACCEPTED)
@@ -140,7 +141,7 @@ async def download_manga_chapters(
     manga_id: str = Path(...),
     req: DownloadRequest = Body(...)
 ):
-    """Start background downloading for selected chapters of a manga."""
+    """Start background downloading for selected chapters of a manga (saves to internal storage by default)."""
     if not ObjectId.is_valid(manga_id):
         raise HTTPException(status_code=400, detail="Invalid manga ID")
         
@@ -151,117 +152,120 @@ async def download_manga_chapters(
     # Format payload
     chapters_list = [c.dict() for c in req.chapters]
     
-    # Path validation
-    base_dir = req.download_path
-    if not base_dir:
-        db_config = await get_db().settings.find_one({"_id": "download_config"})
-        base_dir = db_config.get("base_path") if db_config else None
-    if not base_dir:
-        base_dir = settings.download_dir
-        
-    if not base_dir:
-        raise HTTPException(status_code=400, detail="Download path cannot be empty")
-        
-    try:
-        # Resolve path to absolute and normalize (strip trailing dots from each component)
-        abs_path = normalize_windows_path(base_dir)
-        # Try to make directories (creating folder hierarchy up to the end)
-        os.makedirs(abs_path, exist_ok=True)
-        # Test write access by writing a temporary mock file
-        test_file = os.path.join(abs_path, f".test_write_{str(uuid.uuid4())}")
+    # Path validation only if saving duplicate to disk
+    if req.save_to_disk:
+        base_dir = req.download_path
+        if not base_dir:
+            db_config = await get_db().settings.find_one({"_id": "download_config"})
+            base_dir = db_config.get("base_path") if db_config else None
+        if not base_dir:
+            base_dir = settings.download_dir
+            
+        if not base_dir:
+            raise HTTPException(status_code=400, detail="Download path cannot be empty when save_to_disk is enabled")
+            
         try:
-            with open(test_file, "w") as f:
-                f.write("test")
-            os.remove(test_file)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Directory is not writable")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=f"Invalid or unwriteable download path: {str(e)}")
-
-    # Resolve target directory (checking oneshot status)
-    is_oneshot = False
-    try:
-        tag_ids = manga.get("tag_ids", [])
-        oid_list = []
-        for tid in tag_ids:
-            if isinstance(tid, str) and ObjectId.is_valid(tid):
-                oid_list.append(ObjectId(tid))
-            elif isinstance(tid, ObjectId):
-                oid_list.append(tid)
-        
-        if oid_list:
-            local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
-            for tag in local_tags:
-                tag_name = tag.get("name")
-                if isinstance(tag_name, dict):
-                    en_name = tag_name.get("en", "")
-                    if en_name.lower() == "oneshot":
-                        is_oneshot = True
-                        break
-                elif isinstance(tag_name, str):
-                    if tag_name.lower() == "oneshot":
-                        is_oneshot = True
-                        break
-    except Exception as e:
-        logger.error(f"Error checking oneshot status during path validation: {e}")
-
-    if is_oneshot:
-        target_dir = abs_path
-    else:
-        target_dir = os.path.join(abs_path, clean_filename(manga["title"]))
-
-    # Validate target directory content (check if contains files/folders)
-    if not req.force:
-        is_dirty = False
-        if os.path.exists(target_dir) and os.path.isdir(target_dir):
+            # Resolve path to absolute and normalize (strip trailing dots from each component)
+            abs_path = normalize_windows_path(base_dir)
+            # Try to make directories (creating folder hierarchy up to the end)
+            os.makedirs(abs_path, exist_ok=True)
+            # Test write access by writing a temporary mock file
+            test_file = os.path.join(abs_path, f".test_write_{str(uuid.uuid4())}")
             try:
-                contents = os.listdir(target_dir)
-                if contents:
-                    if is_oneshot:
-                        # Oneshot target folder contains images. If folders or non-image files are present, it's dirty
-                        for item in contents:
-                            item_path = os.path.join(target_dir, item)
-                            if os.path.isdir(item_path):
-                                is_dirty = True
-                                break
-                            ext = os.path.splitext(item)[1].lower()
-                            if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
-                                is_dirty = True
-                                break
-                    else:
-                        # Normal manga target folder should only contain chapter folders.
-                        for item in contents:
-                            item_path = os.path.join(target_dir, item)
-                            if os.path.isfile(item_path):
-                                is_dirty = True
-                                break
-                            if not item.lower().startswith("chapter"):
-                                is_dirty = True
-                                break
-            except Exception as le:
-                logger.error(f"Error listing target directory contents: {le}")
-                
-        if is_dirty:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Thư mục tải xuống chứa các tệp hoặc thư mục khác. Tiếp tục tải xuống có thể ghi đè các tệp trùng tên. Bạn có muốn tiếp tục không?"
-            )
+                with open(test_file, "w") as f:
+                    f.write("test")
+                os.remove(test_file)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Directory is not writable")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=400, detail=f"Invalid or unwriteable download path: {str(e)}")
+
+        # Resolve target directory (checking oneshot status)
+        is_oneshot = False
+        try:
+            tag_ids = manga.get("tag_ids", [])
+            oid_list = []
+            for tid in tag_ids:
+                if isinstance(tid, str) and ObjectId.is_valid(tid):
+                    oid_list.append(ObjectId(tid))
+                elif isinstance(tid, ObjectId):
+                    oid_list.append(tid)
+            
+            if oid_list:
+                local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
+                for tag in local_tags:
+                    tag_name = tag.get("name")
+                    if isinstance(tag_name, dict):
+                        en_name = tag_name.get("en", "")
+                        if en_name.lower() == "oneshot":
+                            is_oneshot = True
+                            break
+                    elif isinstance(tag_name, str):
+                        if tag_name.lower() == "oneshot":
+                            is_oneshot = True
+                            break
+        except Exception as e:
+            logger.error(f"Error checking oneshot status during path validation: {e}")
+
+        if is_oneshot:
+            target_dir = abs_path
+        else:
+            target_dir = os.path.join(abs_path, clean_filename(manga["title"]))
+
+        # Validate target directory content (check if contains files/folders)
+        if not req.force:
+            is_dirty = False
+            if os.path.exists(target_dir) and os.path.isdir(target_dir):
+                try:
+                    contents = os.listdir(target_dir)
+                    if contents:
+                        if is_oneshot:
+                            for item in contents:
+                                item_path = os.path.join(target_dir, item)
+                                if os.path.isdir(item_path):
+                                    is_dirty = True
+                                    break
+                                ext = os.path.splitext(item)[1].lower()
+                                if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                                    is_dirty = True
+                                    break
+                        else:
+                            for item in contents:
+                                item_path = os.path.join(target_dir, item)
+                                if os.path.isfile(item_path):
+                                    is_dirty = True
+                                    break
+                                if not item.lower().startswith("chapter"):
+                                    is_dirty = True
+                                    break
+                except Exception as le:
+                    logger.error(f"Error listing target directory contents: {le}")
+                    
+            if is_dirty:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Thư mục tải xuống chứa các tệp hoặc thư mục khác. Tiếp tục tải xuống có thể ghi đè các tệp trùng tên. Bạn có muốn tiếp tục không?"
+                )
 
     # Create task in DB
     task_id = await download_service.create_task(
         manga_id=manga_id,
         manga_title=manga["title"],
-        chapters=chapters_list
+        chapters=chapters_list,
+        save_to_disk=req.save_to_disk,
+        lang=req.lang,
+        download_path=req.download_path if req.save_to_disk else None
     )
     
     # Run in background
     background_tasks.add_task(
         download_service.start_download_background,
         task_id=task_id,
-        download_path=req.download_path
+        download_path=req.download_path if req.save_to_disk else None
     )
+
     
     return {"task_id": task_id, "status": "pending"}
 

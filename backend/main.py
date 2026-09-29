@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database.connection import connect_to_mongo, close_mongo_connection
 from backend.database.indexes import init_db_indexes
-from backend.routers import manga, reviews, tags, mangadex, downloads, analytics, creators, ai, image_tools, cover_arts, recommendations, sync_manager, audit_logs
+from backend.routers import manga, reviews, tags, mangadex, downloads, analytics, creators, ai, image_tools, cover_arts, recommendations, sync_manager, audit_logs, chapters
 
 # Configure Logging
 logging.basicConfig(
@@ -67,6 +67,7 @@ app.include_router(cover_arts.router)
 app.include_router(recommendations.router)
 app.include_router(sync_manager.router)
 app.include_router(audit_logs.router)
+app.include_router(chapters.router)
 
 @app.get("/health")
 async def health_check():

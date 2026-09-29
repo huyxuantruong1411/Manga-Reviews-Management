@@ -137,6 +137,15 @@ async def init_db_indexes():
         # sync_runs
         await db.sync_runs.create_index([("started_at", -1)])
 
+        # chapters
+        await db.chapters.create_index([("manga_id", 1), ("chapter_numeric", 1)])
+        await db.chapters.create_index([("manga_id", 1), ("chapter_number", 1)])
+        await db.chapters.create_index([("manga_id", 1), ("language", 1)])
+        await db.chapters.create_index("created_at")
+
+        # reading_progress
+        await db.reading_progress.create_index("manga_id", unique=True)
+
         # Run backfill
         await backfill_manga_status_timestamps()
 
