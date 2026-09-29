@@ -151,6 +151,6 @@ export const FileAttachmentExtension = Node.create({
             attrs: options,
           });
         },
-    };
+    } as any;
   },
 });

@@ -35,6 +35,8 @@ import { BlurredCover } from "../components/ui/BlurredCover";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
 import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
+import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
+import { MangaReader } from "../components/manga/MangaReader";
 
 interface Tag {
   _id: string;
@@ -721,12 +723,18 @@ export const MangaDetailPage: React.FC = () => {
 
   // Download Modal States
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [saveToDisk, setSaveToDisk] = useState(false);
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLang, setSelectedLang] = useState("en");
   const [chapters, setChapters] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [customPath, setCustomPath] = useState("");
+
+  // Reader & Storage States
+  const [readingChapterId, setReadingChapterId] = useState<string | null>(null);
+  const [readingPageNumber, setReadingPageNumber] = useState<number>(1);
+  const [lastReadProgress, setLastReadProgress] = useState<any>(null);
 
   const uniqueGroups = useMemo(() => {
     const groupsMap = new Map();
@@ -939,6 +947,13 @@ export const MangaDetailPage: React.FC = () => {
       setHistory(historyRes.data);
       setAllTags(tagsRes.data);
       setEditTags(mangaRes.data.tag_ids);
+
+      // Load reading progress
+      client.get(`/api/manga/${id}/reading-progress`).then((progressRes) => {
+        if (progressRes.data?.last_read_chapter_id) {
+          setLastReadProgress(progressRes.data);
+        }
+      }).catch(() => {});
 
       // Load counts for covers and recommendations asynchronously (non-blocking)
       if (mangaRes.data.mangadex_id) {
@@ -1420,9 +1435,10 @@ export const MangaDetailPage: React.FC = () => {
             volume: c.volume,
           })),
         lang: selectedLang,
+        save_to_disk: saveToDisk,
         force,
       };
-      if (customPath.trim()) payload.download_path = customPath.trim();
+      if (saveToDisk && customPath.trim()) payload.download_path = customPath.trim();
 
       const res = await client.post(`/api/manga/${manga?._id}/download`, payload);
       showAlert({
@@ -1896,6 +1912,30 @@ export const MangaDetailPage: React.FC = () => {
                   <span>Download Chapters</span>
                 </button>
               </>
+            )}
+
+            {lastReadProgress?.last_read_chapter_id ? (
+              <button
+                onClick={() => {
+                  setReadingChapterId(lastReadProgress.last_read_chapter_id);
+                  setReadingPageNumber(lastReadProgress.last_read_page || 1);
+                  document.getElementById("manga-reader-section")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition shadow-sm"
+              >
+                <BookOpen size={14} />
+                <span>Đọc tiếp Ch. {lastReadProgress.last_read_chapter_number || ""} (Trang {lastReadProgress.last_read_page || 1})</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  document.getElementById("manga-storage-section")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="flex items-center space-x-2 px-4 py-2 border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl font-bold text-xs transition shadow-sm"
+              >
+                <BookOpen size={14} />
+                <span>Đọc truyện & Storage</span>
+              </button>
             )}
 
             <button
@@ -2453,6 +2493,45 @@ export const MangaDetailPage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Manga Reader Section */}
+            {readingChapterId && (
+              <div id="manga-reader-section" className="scroll-mt-6">
+                <MangaReader
+                  mangaId={manga._id}
+                  mangaTitle={manga.title}
+                  initialChapterId={readingChapterId}
+                  initialPageNumber={readingPageNumber}
+                  onClose={() => setReadingChapterId(null)}
+                  onChapterChange={(newChapId) => {
+                    setReadingChapterId(newChapId);
+                    client.get(`/api/manga/${manga._id}/reading-progress`).then((res) => {
+                      setLastReadProgress(res.data);
+                    }).catch(() => {});
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Storage & Chapter Manager Section */}
+            <div id="manga-storage-section" className="scroll-mt-6">
+              <ChapterStorageManager
+                mangaId={manga._id}
+                mangaTitle={manga.title}
+                onOpenReader={(chapId, page) => {
+                  setReadingChapterId(chapId);
+                  setReadingPageNumber(page || 1);
+                  setTimeout(() => {
+                    document.getElementById("manga-reader-section")?.scrollIntoView({ behavior: "smooth" });
+                  }, 100);
+                }}
+                onRefreshChapters={() => {
+                  client.get(`/api/manga/${manga._id}/reading-progress`).then((res) => {
+                    setLastReadProgress(res.data);
+                  }).catch(() => {});
+                }}
+              />
             </div>
 
             {/* Audit History Timeline */}
@@ -3174,74 +3253,109 @@ export const MangaDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Custom Download Path */}
-              <div className="p-4 bg-[var(--brand-orange)]/5 border border-[var(--brand-orange)]/25 rounded-2xl space-y-3">
+              {/* Storage Destination & Save to Disk Option */}
+              <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1">
-                    <FolderPlus size={14} />
-                    <span>Download Destination Path</span>
-                  </label>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
-                    Editable Base Path
+                  <div className="flex items-center space-x-2.5">
+                    <div className="p-2 rounded-xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
+                      <Layers size={16} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[var(--text-primary)]">Lưu trữ System Storage (Mặc định)</div>
+                      <div className="text-[11px] text-[var(--text-secondary)]">
+                        Hệ thống tự động lưu trữ, lập chỉ mục và quản lý để bạn có thể đọc trực tiếp bất cứ lúc nào.
+                      </div>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                    Sẵn sàng
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    type="text"
-                    value={customPath}
-                    onChange={(e) => {
-                      handlePathChange(e.target.value);
-                      setVerifyResult(null);
-                    }}
-                    placeholder="e.g. C:\Downloads\Manga"
-                    className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyPath}
-                    disabled={verifying || !customPath.trim()}
-                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
-                  >
-                    {verifying ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Check size={14} />
-                    )}
-                    <span>Verify Path</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsTitleModalOpen(true);
-                      setVerifyResult(null);
-                    }}
-                    title="Select and append manga title or alternative title as subfolder"
-                    className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <Plus size={14} className="stroke-[3]" />
-                    <span>Append Title</span>
-                  </button>
+
+                <div className="pt-3 border-t border-[var(--border-primary)]">
+                  <label className="flex items-center space-x-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={saveToDisk}
+                      onChange={(e) => setSaveToDisk(e.target.checked)}
+                      className="w-4 h-4 rounded text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-[var(--text-primary)]">
+                      Tải thêm một bản sao lưu ra thư mục ổ đĩa trên máy tính (Duplicate to external folder)
+                    </span>
+                  </label>
                 </div>
-                {verifyResult && (
-                  <div className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
-                    verifyResult.writable 
-                      ? (verifyResult.exists ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400")
-                      : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
-                  }`}>
-                    {verifyResult.writable ? (
-                      verifyResult.exists ? <Check size={14} className="shrink-0 mt-0.5" /> : <Info size={14} className="shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+
+                {saveToDisk && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-primary)]/70 space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1">
+                        <FolderPlus size={14} />
+                        <span>Download Destination Path</span>
+                      </label>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
+                        Editable Base Path
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        value={customPath}
+                        onChange={(e) => {
+                          handlePathChange(e.target.value);
+                          setVerifyResult(null);
+                        }}
+                        placeholder="e.g. C:\Downloads\Manga"
+                        className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyPath}
+                        disabled={verifying || !customPath.trim()}
+                        className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                      >
+                        {verifying ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Check size={14} />
+                        )}
+                        <span>Verify Path</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTitleModalOpen(true);
+                          setVerifyResult(null);
+                        }}
+                        title="Select and append manga title or alternative title as subfolder"
+                        className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
+                      >
+                        <Plus size={14} className="stroke-[3]" />
+                        <span>Append Title</span>
+                      </button>
+                    </div>
+                    {verifyResult && (
+                      <div className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
+                        verifyResult.writable 
+                          ? (verifyResult.exists ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400")
+                          : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                      }`}>
+                        {verifyResult.writable ? (
+                          verifyResult.exists ? <Check size={14} className="shrink-0 mt-0.5" /> : <Info size={14} className="shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        )}
+                        <span className="leading-relaxed">{verifyResult.message}</span>
+                      </div>
                     )}
-                    <span className="leading-relaxed">{verifyResult.message}</span>
+                    <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
+                      <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
+                      <span>
+                        Đường dẫn này được khởi tạo từ cấu hình mặc định. Bạn có thể chỉnh sửa trực tiếp. Nhấn <strong>Append Title</strong> để thêm tên manga vào thư mục con.
+                      </span>
+                    </div>
                   </div>
                 )}
-                <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
-                  <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
-                  <span>
-                    This path is initialized from the default base path configuration. You can edit/delete it directly. Click <strong>Append Title</strong> to create a dedicated subfolder using the manga name.
-                  </span>
-                </div>
               </div>
 
               {/* Chapters List */}

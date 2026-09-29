@@ -278,12 +278,13 @@ export const ResizableImageView: React.FC<ResizableImageViewProps> = ({
     );
   }, [cropRect, extension, updateAttributes]);
 
-  const alignClass = {
+  const alignMap: Record<string, string> = {
     left: "mr-auto",
     center: "mx-auto",
     right: "ml-auto",
     full: "w-full",
-  }[alignment] || "mx-auto";
+  };
+  const alignClass = alignMap[alignment] || "mx-auto";
 
   const displayWidth = currentWidth ? `${currentWidth}%` : width;
 

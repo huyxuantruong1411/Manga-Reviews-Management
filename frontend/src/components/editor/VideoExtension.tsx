@@ -7,7 +7,7 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import React, { useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
-import { Trash2, Maximize2, AlignCenter, Play } from "lucide-react";
+import { Trash2, Maximize2, Play } from "lucide-react";
 
 // ─── React NodeView ──────────────────────────────────────────
 const VideoNodeView: React.FC<{
@@ -113,6 +113,6 @@ export const VideoExtension = Node.create({
             attrs: options,
           });
         },
-    };
+    } as any;
   },
 });

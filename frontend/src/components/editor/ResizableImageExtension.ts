@@ -59,7 +59,7 @@ export const ResizableImageExtension = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(ResizableImageView);
+    return ReactNodeViewRenderer(ResizableImageView as any);
   },
 
   addCommands() {
@@ -72,6 +72,6 @@ export const ResizableImageExtension = Node.create({
             attrs: options,
           });
         },
-    };
+    } as any;
   },
 });

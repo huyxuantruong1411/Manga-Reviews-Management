@@ -102,6 +102,6 @@ export const AudioExtension = Node.create({
             attrs: options,
           });
         },
-    };
+    } as any;
   },
 });
