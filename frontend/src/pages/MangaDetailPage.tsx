@@ -26,6 +26,8 @@ import {
   Sparkles,
   Zap,
   Clock,
+  Search,
+  Database,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -874,6 +876,7 @@ export const MangaDetailPage: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [customPath, setCustomPath] = useState("");
+  const [chapterSearch, setChapterSearch] = useState("");
 
   // Reader & Storage States
   const [readingChapterId, setReadingChapterId] = useState<string | null>(null);
@@ -896,6 +899,15 @@ export const MangaDetailPage: React.FC = () => {
     if (!selectedGroup) return chapters;
     return chapters.filter((c: any) => (c.group_id || "no-group") === selectedGroup);
   }, [chapters, selectedGroup]);
+
+  const filteredChapters = useMemo(() => {
+    if (!chapterSearch.trim()) return displayedChapters;
+    const q = chapterSearch.trim().toLowerCase();
+    return displayedChapters.filter((c: any) =>
+      String(c.chapter).toLowerCase().includes(q) ||
+      (c.title && c.title.toLowerCase().includes(q))
+    );
+  }, [displayedChapters, chapterSearch]);
   const handlePathChange = (val: string) => {
     // Remove characters that are absolutely forbidden in paths: * ? " < > |
     let cleaned = val.replace(/[*?"<>|]/g, '');
@@ -1474,6 +1486,7 @@ export const MangaDetailPage: React.FC = () => {
     setIsDownloadOpen(true);
     setCustomPath("");
     setVerifyResult(null);
+    setChapterSearch("");
     try {
       setLoadingChapters(true);
       // Fetch default download path
@@ -1509,6 +1522,7 @@ export const MangaDetailPage: React.FC = () => {
       const fetchedChapters = res.data;
       setChapters(fetchedChapters);
       setSelectedChapters([]); // Reset selections
+      setChapterSearch("");
 
       // Compute unique groups and select the first one by default
       const groupsMap = new Map();
@@ -1539,15 +1553,15 @@ export const MangaDetailPage: React.FC = () => {
   };
 
   const toggleAllChapters = () => {
-    const allDisplayedIds = displayedChapters.map((c) => c.id);
-    const allSelected = allDisplayedIds.length > 0 && allDisplayedIds.every((id) => selectedChapters.includes(id));
+    const targetIds = filteredChapters.map((c) => c.id);
+    const allSelected = targetIds.length > 0 && targetIds.every((id) => selectedChapters.includes(id));
     
     if (allSelected) {
-      setSelectedChapters((prev) => prev.filter((id) => !allDisplayedIds.includes(id)));
+      setSelectedChapters((prev) => prev.filter((id) => !targetIds.includes(id)));
     } else {
       setSelectedChapters((prev) => {
         const newSelection = [...prev];
-        allDisplayedIds.forEach((id) => {
+        targetIds.forEach((id) => {
           if (!newSelection.includes(id)) {
             newSelection.push(id);
           }
@@ -3363,241 +3377,415 @@ export const MangaDetailPage: React.FC = () => {
 
       {/* Download Chapters Modal */}
       {isDownloadOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold flex items-center space-x-2">
-                  <Download size={20} className="text-[var(--brand-orange)]" />
-                  <span>Download Chapters: {manga.title}</span>
-                </h2>
+            <div className="px-6 py-4.5 border-b border-[var(--border-primary)] bg-[var(--bg-card)]/90 backdrop-blur flex justify-between items-center z-10 shrink-0">
+              <div className="flex items-center space-x-3.5 min-w-0">
+                <div className="p-2.5 rounded-2xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] shrink-0">
+                  <Download size={22} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold font-spartan text-[var(--text-primary)] flex items-center gap-2 flex-wrap">
+                    <span>Download Chapters</span>
+                    <span className="text-xs font-normal text-zinc-400 hidden sm:inline">•</span>
+                    <span className="text-sm font-semibold text-[var(--brand-orange)] truncate max-w-[280px] sm:max-w-md" title={manga?.title}>
+                      {manga?.title}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Chọn ngôn ngữ, nhóm dịch, phương thức lưu trữ và danh sách chương cần tải
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsDownloadOpen(false)}
-                className="p-1 rounded text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                className="p-2 rounded-xl text-zinc-400 hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer shrink-0 ml-2"
+                title="Đóng modal"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* Language Selector */}
-              {languages.length > 0 && (
-                <div className="flex items-center space-x-4">
-                  <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                    Select Language:
-                  </span>
-                  <div className="flex gap-2">
-                    {languages.map((lang) => (
-                      <button
-                        key={lang}
-                        onClick={() => {
-                          setSelectedLang(lang);
-                          fetchChapters(lang);
-                        }}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg border transition ${
-                          selectedLang === lang
-                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
-                            : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                        }`}
-                      >
-                        {lang.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+              {/* Group 1: Source & Translation */}
+              <div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+                <div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+                  <Globe size={15} />
+                  <span>Ngôn ngữ & Nhóm dịch (Source & Translation)</span>
                 </div>
-              )}
 
-              {/* Group Selector */}
-              {uniqueGroups.length > 1 && (
-                <div className="flex items-center space-x-4 animate-in fade-in duration-200">
-                  <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                    Select Group:
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {uniqueGroups.map((group) => (
-                      <button
-                        key={group.id}
-                        onClick={() => {
-                          setSelectedGroup(group.id);
-                          setSelectedChapters([]);
-                        }}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg border transition ${
-                          selectedGroup === group.id
-                            ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
-                            : "bg-transparent border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                        }`}
-                      >
-                        {group.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Storage Destination & Save to Disk Option */}
-              <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="p-2 rounded-xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
-                      <Layers size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-[var(--text-primary)]">Lưu trữ System Storage (Mặc định)</div>
-                      <div className="text-[11px] text-[var(--text-secondary)]">
-                        Hệ thống tự động lưu trữ, lập chỉ mục và quản lý để bạn có thể đọc trực tiếp bất cứ lúc nào.
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Language Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-2">
+                      Ngôn ngữ (Language)
+                    </label>
+                    {languages.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {languages.map((lang) => {
+                          const isSelected = selectedLang === lang;
+                          return (
+                            <button
+                              key={lang}
+                              type="button"
+                              onClick={() => {
+                                setSelectedLang(lang);
+                                fetchChapters(lang);
+                              }}
+                              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isSelected
+                                  ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm ring-2 ring-[var(--brand-orange)]/30"
+                                  : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400 hover:text-[var(--text-primary)]"
+                              }`}
+                            >
+                              <span>{lang.toUpperCase()}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                    </div>
+                    ) : (
+                      <span className="text-xs text-zinc-400 italic">Đang tải danh sách ngôn ngữ...</span>
+                    )}
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
-                    Sẵn sàng
-                  </span>
+
+                  {/* Group Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-2">
+                      Nhóm dịch (Scanlation Group)
+                    </label>
+                    {uniqueGroups.length > 1 ? (
+                      <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pr-1">
+                        {uniqueGroups.map((group) => {
+                          const isSelected = selectedGroup === group.id;
+                          return (
+                            <button
+                              key={group.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedGroup(group.id);
+                                setSelectedChapters([]);
+                              }}
+                              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer truncate max-w-full ${
+                                isSelected
+                                  ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm ring-2 ring-[var(--brand-orange)]/30"
+                                  : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400 hover:text-[var(--text-primary)]"
+                              }`}
+                              title={group.name}
+                            >
+                              {group.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[var(--text-secondary)] py-1 font-medium flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] font-bold text-[var(--text-primary)]">
+                          {uniqueGroups[0]?.name || "Mặc định (Default)"}
+                        </span>
+                        <span className="text-zinc-400 text-[11px]">(Chỉ có 1 nhóm dịch cho ngôn ngữ này)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Storage Destination & Save to Disk Option */}
+              <div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+                <div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+                  <Layers size={15} />
+                  <span>Điểm đến lưu trữ & Sao lưu (Storage & Backup)</span>
                 </div>
 
-                <div className="pt-3 border-t border-[var(--border-primary)]">
-                  <label className="flex items-center space-x-2.5 cursor-pointer select-none">
+                {/* Default System Storage Banner */}
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-start sm:items-center space-x-3.5 min-w-0">
+                    <div className="p-2.5 rounded-2xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] shrink-0">
+                      <Database size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-[var(--text-primary)]">Lưu trữ System Storage</span>
+                        <span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 border border-[var(--brand-orange)]/20 text-[var(--brand-orange)] font-bold text-[10px] uppercase tracking-wider">
+                          Mặc định
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                        Hệ thống tự động lưu trữ, lập chỉ mục và quản lý để bạn có thể đọc trực tiếp bất cứ lúc nào.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sẵn sàng badge - with shrink-0 and whitespace-nowrap to guarantee NO text wrapping */}
+                  <div className="shrink-0 self-start sm:self-center flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-bold text-xs whitespace-nowrap shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span>Sẵn sàng lưu trữ</span>
+                  </div>
+                </div>
+
+                {/* External Folder Backup Option */}
+                <div className="p-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl space-y-3.5">
+                  <label className="flex items-start sm:items-center space-x-3 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={saveToDisk}
                       onChange={(e) => setSaveToDisk(e.target.checked)}
-                      className="w-4 h-4 rounded text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] cursor-pointer"
+                      className="w-4 h-4 rounded text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] cursor-pointer mt-0.5 sm:mt-0"
                     />
-                    <span className="text-xs font-bold text-[var(--text-primary)]">
-                      Tải thêm một bản sao lưu ra thư mục ổ đĩa trên máy tính (Duplicate to external folder)
-                    </span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-[var(--text-primary)] block sm:inline">
+                        Tải thêm một bản sao lưu ra thư mục ổ đĩa trên máy tính
+                      </span>
+                      <span className="text-[11px] text-[var(--text-secondary)] ml-0 sm:ml-1.5 block sm:inline">
+                        (Duplicate to external folder)
+                      </span>
+                    </div>
                   </label>
-                </div>
 
-                {saveToDisk && (
-                  <div className="mt-3 pt-3 border-t border-[var(--border-primary)]/70 space-y-3 animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1">
-                        <FolderPlus size={14} />
-                        <span>Download Destination Path</span>
-                      </label>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
-                        Editable Base Path
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <input
-                        type="text"
-                        value={customPath}
-                        onChange={(e) => {
-                          handlePathChange(e.target.value);
-                          setVerifyResult(null);
-                        }}
-                        placeholder="e.g. C:\Downloads\Manga"
-                        className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[var(--brand-orange)]/30 focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none transition shadow-sm font-mono text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleVerifyPath}
-                        disabled={verifying || !customPath.trim()}
-                        className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
-                      >
-                        {verifying ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Check size={14} />
-                        )}
-                        <span>Verify Path</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsTitleModalOpen(true);
-                          setVerifyResult(null);
-                        }}
-                        title="Select and append manga title or alternative title as subfolder"
-                        className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-md hover:shadow-lg transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
-                      >
-                        <Plus size={14} className="stroke-[3]" />
-                        <span>Append Title</span>
-                      </button>
-                    </div>
-                    {verifyResult && (
-                      <div className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
-                        verifyResult.writable 
-                          ? (verifyResult.exists ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400")
-                          : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
-                      }`}>
-                        {verifyResult.writable ? (
-                          verifyResult.exists ? <Check size={14} className="shrink-0 mt-0.5" /> : <Info size={14} className="shrink-0 mt-0.5" />
-                        ) : (
-                          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                        )}
-                        <span className="leading-relaxed">{verifyResult.message}</span>
+                  {saveToDisk && (
+                    <div className="pt-3 border-t border-[var(--border-primary)] space-y-3 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1.5">
+                          <FolderPlus size={14} />
+                          <span>Download Destination Path</span>
+                        </label>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
+                          Editable Base Path
+                        </span>
                       </div>
-                    )}
-                    <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
-                      <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
-                      <span>
-                        Đường dẫn này được khởi tạo từ cấu hình mặc định. Bạn có thể chỉnh sửa trực tiếp. Nhấn <strong>Append Title</strong> để thêm tên manga vào thư mục con.
-                      </span>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="text"
+                          value={customPath}
+                          onChange={(e) => {
+                            handlePathChange(e.target.value);
+                            setVerifyResult(null);
+                          }}
+                          placeholder="e.g. C:\Downloads\Manga"
+                          className="flex-1 min-w-[220px] px-3.5 py-2.5 rounded-xl border border-[var(--border-primary)] focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]/30 transition shadow-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleVerifyPath}
+                          disabled={verifying || !customPath.trim()}
+                          className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                        >
+                          {verifying ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Check size={14} />
+                          )}
+                          <span>Verify Path</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsTitleModalOpen(true);
+                            setVerifyResult(null);
+                          }}
+                          title="Select and append manga title or alternative title as subfolder"
+                          className="px-4 py-2.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
+                        >
+                          <Plus size={14} className="stroke-[3]" />
+                          <span>Append Title</span>
+                        </button>
+                      </div>
+
+                      {verifyResult && (
+                        <div className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
+                          verifyResult.writable 
+                            ? (verifyResult.exists ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400")
+                            : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                        }`}>
+                          {verifyResult.writable ? (
+                            verifyResult.exists ? <Check size={14} className="shrink-0 mt-0.5" /> : <Info size={14} className="shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                          )}
+                          <span className="leading-relaxed">{verifyResult.message}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
+                        <Info size={14} className="text-[var(--brand-orange)] shrink-0 mt-0.5" />
+                        <span>
+                          Đường dẫn này được khởi tạo từ cấu hình mặc định. Bạn có thể chỉnh sửa trực tiếp. Nhấn <strong>Append Title</strong> để thêm tên manga vào thư mục con.
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* Chapters List */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider pb-1">
-                  <span>Available Chapters ({displayedChapters.length})</span>
-                  <button onClick={toggleAllChapters} className="text-[var(--brand-orange)] hover:underline">
-                    {displayedChapters.length > 0 && displayedChapters.every(c => selectedChapters.includes(c.id)) ? "Deselect All" : "Select All"}
-                  </button>
+              {/* Group 3: Chapters List */}
+              <div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+                    <BookOpen size={15} />
+                    <span>Danh sách chương ({displayedChapters.length})</span>
+                    {selectedChapters.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] text-[10px] font-bold">
+                        {selectedChapters.length} đã chọn
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Chapter Search Filter */}
+                    <div className="relative min-w-[170px] sm:min-w-[210px]">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={chapterSearch}
+                        onChange={(e) => setChapterSearch(e.target.value)}
+                        placeholder="Tìm số hoặc tên chương..."
+                        className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+                      />
+                      {chapterSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setChapterSearch("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-[var(--text-primary)] cursor-pointer"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Select All Toggle */}
+                    <button
+                      type="button"
+                      onClick={toggleAllChapters}
+                      className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)] text-xs font-bold text-[var(--brand-orange)] transition cursor-pointer whitespace-nowrap"
+                    >
+                      {filteredChapters.length > 0 && filteredChapters.every((c) => selectedChapters.includes(c.id))
+                        ? "Bỏ chọn tất cả"
+                        : "Chọn tất cả"}
+                    </button>
+                  </div>
                 </div>
 
+                {/* Chapter Cards Grid */}
                 {loadingChapters ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
+                  <div className="flex flex-col justify-center items-center py-16 space-y-3">
+                    <Loader2 size={32} className="animate-spin text-[var(--brand-orange)]" />
+                    <p className="text-xs text-[var(--text-secondary)] font-medium">Đang tải danh sách chương từ MangaDex...</p>
                   </div>
-                ) : displayedChapters.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border border-[var(--border-primary)] p-3 bg-[var(--bg-primary)] rounded-xl">
-                    {displayedChapters.map((chap) => {
+                ) : filteredChapters.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[320px] overflow-y-auto p-1 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]/50">
+                    {filteredChapters.map((chap) => {
                       const isSelected = selectedChapters.includes(chap.id);
                       return (
-                        <button
+                        <div
                           key={chap.id}
                           onClick={() => toggleChapterSelection(chap.id)}
-                          className={`p-2 rounded-lg text-left text-xs font-semibold border transition line-clamp-1 ${
+                          className={`p-3 rounded-xl border text-left transition-all duration-150 flex items-start gap-2.5 cursor-pointer select-none group relative ${
                             isSelected
-                              ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] text-[var(--brand-orange)]"
-                              : "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+                              ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] shadow-xs ring-1 ring-[var(--brand-orange)]/30"
+                              : "bg-[var(--bg-card)] border-[var(--border-primary)] hover:border-zinc-400/70 dark:hover:border-zinc-600 hover:bg-zinc-500/5"
                           }`}
                         >
-                          Ch. {chap.chapter} {chap.title ? `- ${chap.title}` : ""}
-                        </button>
+                          {/* Selection Checkbox */}
+                          <div
+                            className={`w-4 h-4 mt-0.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                              isSelected
+                                ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+                                : "border-zinc-400/50 dark:border-zinc-600 group-hover:border-[var(--brand-orange)]"
+                            }`}
+                          >
+                            {isSelected && <Check size={11} className="stroke-[3]" />}
+                          </div>
+
+                          {/* Chapter Details */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className={`text-xs font-bold ${isSelected ? "text-[var(--brand-orange)]" : "text-[var(--text-primary)]"}`}>
+                                Ch. {chap.chapter}
+                              </span>
+                              {chap.volume && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 shrink-0">
+                                  Vol. {chap.volume}
+                                </span>
+                              )}
+                            </div>
+                            {chap.title ? (
+                              <p className="text-xs font-medium text-[var(--text-secondary)] mt-0.5 line-clamp-1 leading-snug break-words" title={chap.title}>
+                                {chap.title}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] italic text-zinc-400 mt-0.5">Không có tiêu đề</p>
+                            )}
+                            {chap.group_name && chap.group_name !== "No Group" && (
+                              <p className="text-[10px] text-zinc-400 truncate mt-1">
+                                {chap.group_name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-xs text-[var(--text-secondary)]">
-                    No chapters available for this language/group.
+                  <div className="text-center py-14 space-y-2 border border-dashed border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]/40">
+                    <BookOpen size={24} className="mx-auto text-zinc-400" />
+                    <p className="text-xs text-[var(--text-secondary)] font-medium">
+                      {chapterSearch.trim()
+                        ? `Không tìm thấy chương nào khớp với "${chapterSearch}".`
+                        : "Không có chương nào khả dụng cho ngôn ngữ hoặc nhóm dịch này."}
+                    </p>
+                    {chapterSearch.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setChapterSearch("")}
+                        className="text-xs text-[var(--brand-orange)] hover:underline font-bold cursor-pointer"
+                      >
+                        Xóa bộ lọc tìm kiếm
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-[var(--border-primary)] flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setIsDownloadOpen(false)}
-                className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => triggerDownload(false)}
-                disabled={downloading || selectedChapters.length === 0}
-                className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
-              >
-                {downloading ? "Starting..." : `Download Selected (${selectedChapters.length})`}
-              </button>
+            <div className="px-6 py-4.5 border-t border-[var(--border-primary)] bg-[var(--bg-card)]/95 backdrop-blur flex flex-col sm:flex-row justify-between items-center gap-3 z-10 shrink-0">
+              <div className="flex items-center space-x-2 text-xs font-medium text-[var(--text-secondary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--brand-orange)]" />
+                <span>
+                  Đã chọn: <strong className="text-[var(--text-primary)] font-bold">{selectedChapters.length}</strong> / {displayedChapters.length} chương
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsDownloadOpen(false)}
+                  className="px-5 py-2.5 border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => triggerDownload(false)}
+                  disabled={downloading || selectedChapters.length === 0}
+                  className="px-6 py-2.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow-lg transition disabled:opacity-50 flex items-center space-x-2 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {downloading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Đang khởi tạo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={14} />
+                      <span>Tải xuống ({selectedChapters.length}) chương</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
