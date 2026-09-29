@@ -367,7 +367,6 @@ const renderMarkdown = (text: string): React.ReactNode => {
   if (!text) return <span className="text-zinc-400 italic">No synopsis available.</span>;
   
   // Pre-process: Remove empty lines between table rows.
-  // A table row starts with '|' and ends with '|'.
   const rawLines = text.split("\n");
   const lines: string[] = [];
   for (let i = 0; i < rawLines.length; i++) {
@@ -375,7 +374,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
     if (current === "" && i > 0 && i < rawLines.length - 1) {
       const prev = rawLines[i - 1].trim();
       const next = rawLines[i + 1].trim();
-      if (prev.startsWith("|") && prev.endsWith("|") && next.startsWith("|") && next.endsWith("|")) {
+      if (prev.includes("|") && next.includes("|") && !prev.startsWith("#") && !next.startsWith("#")) {
         // Sandwich empty line between table rows - skip it!
         continue;
       }
@@ -387,6 +386,76 @@ const renderMarkdown = (text: string): React.ReactNode => {
   let currentList: string[] = [];
   let currentNumberedList: string[] = [];
   let currentTableRows: string[][] = [];
+
+  const splitRowCells = (str: string): string[] => {
+    const cells: string[] = [];
+    let current = "";
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (char === "\\" && i + 1 < str.length && str[i + 1] === "|") {
+        current += "|";
+        i++;
+      } else if (char === "|") {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current.trim());
+    return cells;
+  };
+
+  const parseTableRow = (raw: string): string[] => {
+    let str = raw.trim();
+    if (str.startsWith("|")) str = str.slice(1);
+    if (str.endsWith("|") && !str.endsWith("\\|")) str = str.slice(0, -1);
+    return splitRowCells(str);
+  };
+
+  const isSeparatorRow = (cells: string[]): boolean => {
+    if (cells.length === 0) return false;
+    return cells.every((c) => /^:?-+:?$/.test(c.trim()));
+  };
+
+  const getAlignment = (cell: string): "left" | "center" | "right" => {
+    const c = cell.trim();
+    if (c.startsWith(":") && c.endsWith(":")) return "center";
+    if (c.endsWith(":")) return "right";
+    return "left";
+  };
+
+  const isTableLine = (
+    rawLine: string,
+    nextRawLine?: string,
+    inTable: boolean = false
+  ): boolean => {
+    const trimmed = rawLine.trim();
+    if (!trimmed) return false;
+
+    if (/^#{1,6}\s/.test(trimmed)) return false;
+    if (trimmed.startsWith("> ")) return false;
+    const cleanLine = trimmed.replace(/\s+/g, "");
+    if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3 && !trimmed.includes("|")) {
+      return false;
+    }
+    if (/^[-*]\s+/.test(trimmed) && !trimmed.startsWith("|")) return false;
+    if (/^\d+\.\s+/.test(trimmed) && !trimmed.startsWith("|")) return false;
+
+    if (!trimmed.includes("|")) return false;
+
+    if (inTable) return true;
+    if (trimmed.startsWith("|")) return true;
+
+    if (nextRawLine) {
+      const nextCells = parseTableRow(nextRawLine);
+      if (nextCells.length >= 2 && isSeparatorRow(nextCells)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
   
   const flushList = (key: string | number) => {
     if (currentList.length > 0) {
@@ -416,39 +485,95 @@ const renderMarkdown = (text: string): React.ReactNode => {
   };
 
   const flushTable = (key: string | number) => {
-    if (currentTableRows.length > 0) {
-      // Filter out separator rows like | :- | :- |
-      const validRows = currentTableRows.filter(row => {
-        const joined = row.join("").trim();
-        return !(/^[:\-\s]+$/.test(joined));
-      });
+    if (currentTableRows.length === 0) return;
 
-      if (validRows.length > 0) {
-        const headers = validRows[0];
-        const dataRows = validRows.slice(1);
-        
-        blocks.push(
-          <div key={`table-wrapper-${key}`} className="overflow-x-auto my-4 rounded-xl border border-[var(--border-primary)] shadow-sm bg-[var(--bg-card)]">
-            <table className="min-w-full divide-y divide-[var(--border-primary)] text-sm">
+    // Find delimiter/separator row (e.g. |:-|:-|)
+    const separatorIdx = currentTableRows.findIndex((row) => isSeparatorRow(row));
+
+    let headers: string[] = [];
+    let dataRows: string[][] = [];
+    let alignments: ("left" | "center" | "right")[] = [];
+
+    if (separatorIdx !== -1) {
+      headers = separatorIdx > 0 ? currentTableRows[0] : [];
+      alignments = currentTableRows[separatorIdx].map(getAlignment);
+      dataRows = currentTableRows.slice(separatorIdx + 1);
+    } else {
+      if (currentTableRows.length > 1) {
+        headers = currentTableRows[0];
+        dataRows = currentTableRows.slice(1);
+      } else {
+        dataRows = currentTableRows;
+      }
+      alignments = (headers.length > 0 ? headers : dataRows[0] || []).map(() => "left");
+    }
+
+    // Filter out separator rows and completely empty rows from dataRows
+    dataRows = dataRows.filter(
+      (row) => !isSeparatorRow(row) && row.some((cell) => cell.trim().length > 0)
+    );
+
+    const colCount = Math.max(
+      headers.length,
+      ...dataRows.map((r) => r.length),
+      alignments.length,
+      1
+    );
+
+    while (alignments.length < colCount) {
+      alignments.push("left");
+    }
+
+    if (headers.length > 0 || dataRows.length > 0) {
+      blocks.push(
+        <div
+          key={`table-wrapper-${key}`}
+          className="overflow-x-auto my-4 rounded-xl border border-[var(--border-primary)] shadow-sm bg-[var(--bg-card)]"
+        >
+          <table className="min-w-full divide-y divide-[var(--border-primary)] text-sm">
+            {headers.length > 0 && (
               <thead className="bg-zinc-100/70 dark:bg-zinc-800/40 border-b border-[var(--border-primary)]">
                 <tr>
-                  {headers.map((header, idx) => (
-                    <th
-                      key={idx}
-                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-[var(--border-primary)]"
-                    >
-                      {parseInlineMarkdown(header.trim())}
-                    </th>
-                  ))}
+                  {Array.from({ length: colCount }).map((_, idx) => {
+                    const header = headers[idx] || "";
+                    const align = alignments[idx] || "left";
+                    const alignClass =
+                      align === "center"
+                        ? "text-center"
+                        : align === "right"
+                        ? "text-right"
+                        : "text-left";
+                    return (
+                      <th
+                        key={idx}
+                        className={`px-4 py-2.5 ${alignClass} text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-[var(--border-primary)]`}
+                      >
+                        {parseInlineMarkdown(header.trim())}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-primary)] bg-[var(--bg-card)]">
-                {dataRows.map((row, rowIdx) => (
-                  <tr key={rowIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition duration-150">
-                    {row.map((cell, cellIdx) => (
+            )}
+            <tbody className="divide-y divide-[var(--border-primary)] bg-[var(--bg-card)]">
+              {dataRows.map((row, rowIdx) => (
+                <tr
+                  key={rowIdx}
+                  className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition duration-150"
+                >
+                  {Array.from({ length: colCount }).map((_, cellIdx) => {
+                    const cell = row[cellIdx] || "";
+                    const align = alignments[cellIdx] || "left";
+                    const alignClass =
+                      align === "center"
+                        ? "text-center"
+                        : align === "right"
+                        ? "text-right"
+                        : "text-left";
+                    return (
                       <td
                         key={cellIdx}
-                        className={`px-4 py-2.5 leading-relaxed text-sm ${
+                        className={`px-4 py-2.5 leading-relaxed text-sm ${alignClass} ${
                           cellIdx === 0
                             ? "text-[var(--text-primary)] font-bold"
                             : "text-[var(--text-secondary)] font-medium"
@@ -456,16 +581,16 @@ const renderMarkdown = (text: string): React.ReactNode => {
                       >
                         {parseInlineMarkdown(cell.trim())}
                       </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-      currentTableRows = [];
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
     }
+    currentTableRows = [];
   };
 
   const flushAll = (key: string | number) => {
@@ -474,24 +599,38 @@ const renderMarkdown = (text: string): React.ReactNode => {
   };
 
   const parseInlineMarkdown = (line: string): React.ReactNode[] => {
-    const tokenRegex = /(\*\*.*?\*\*|\*.*?\*|\[.*?\]\(.*?\))/g;
+    const tokenRegex = /(\*\*.*?\*\*|\*.*?\*|`.*?`|~~.*?~~|\[.*?\]\(.*?\))/g;
     const parts = line.split(tokenRegex);
     let keyIdx = 0;
 
     return parts.map((part) => {
-      if (part.startsWith("**") && part.endsWith("**")) {
+      if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
         const content = part.slice(2, -2);
         return (
           <strong key={`bold-${keyIdx++}`} className="font-bold text-[var(--text-primary)]">
             {content}
           </strong>
         );
-      } else if (part.startsWith("*") && part.endsWith("*")) {
+      } else if (part.startsWith("*") && part.endsWith("*") && part.length >= 2) {
         const content = part.slice(1, -1);
         return (
           <em key={`em-${keyIdx++}`} className="italic text-[var(--text-secondary)]">
             {content}
           </em>
+        );
+      } else if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
+        const content = part.slice(1, -1);
+        return (
+          <code key={`code-${keyIdx++}`} className="px-1.5 py-0.5 mx-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-xs font-mono text-[var(--brand-orange)]">
+            {content}
+          </code>
+        );
+      } else if (part.startsWith("~~") && part.endsWith("~~") && part.length >= 4) {
+        const content = part.slice(2, -2);
+        return (
+          <del key={`del-${keyIdx++}`} className="line-through text-zinc-400">
+            {content}
+          </del>
         );
       } else if (part.startsWith("[") && part.endsWith(")") && part.includes("](")) {
         const closeBracketIndex = part.indexOf("](");
@@ -515,78 +654,81 @@ const renderMarkdown = (text: string): React.ReactNode => {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+    const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : undefined;
     const cleanLine = line.replace(/\s+/g, "");
     
-    if (line.startsWith("|") && line.endsWith("|")) {
+    if (isTableLine(line, nextLine, currentTableRows.length > 0)) {
       flushList(i);
-      const cells = line.split("|").slice(1, -1);
-      currentTableRows.push(cells);
-    } else if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3) {
-      flushAll(i);
-      blocks.push(<hr key={`hr-${i}`} className="my-4 border-[var(--border-primary)]" />);
-    } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      if (currentNumberedList.length > 0) {
-        blocks.push(
-          <ol key={`ol-list-${i}`} className="list-decimal pl-5 my-2 space-y-1">
-            {currentNumberedList.map((item, idx) => (
-              <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                {parseInlineMarkdown(item)}
-              </li>
-            ))}
-          </ol>
-        );
-        currentNumberedList = [];
-      }
-      currentList.push(line.substring(2));
-    } else if (/^\d+\.\s+(.*)$/.test(line)) {
-      if (currentList.length > 0) {
-        blocks.push(
-          <ul key={`list-${i}`} className="list-disc pl-5 my-2 space-y-1">
-            {currentList.map((item, idx) => (
-              <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                {parseInlineMarkdown(item)}
-              </li>
-            ))}
-          </ul>
-        );
-        currentList = [];
-      }
-      const match = line.match(/^\d+\.\s+(.*)$/);
-      if (match) {
-        currentNumberedList.push(match[1]);
-      }
-    } else if (line.startsWith("> ")) {
-      flushAll(i);
-      blocks.push(
-        <blockquote key={`bq-${i}`} className="border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 py-1 italic text-zinc-500 my-2">
-          {parseInlineMarkdown(line.substring(2))}
-        </blockquote>
-      );
-    } else if (/^(#{1,6})\s+(.*)$/.test(line)) {
-      flushAll(i);
-      const match = line.match(/^(#{1,6})\s+(.*)$/);
-      if (match) {
-        const level = match[1].length;
-        const content = match[2];
-        let fontSize = "text-base font-bold my-3";
-        if (level === 1) fontSize = "text-xl font-bold my-4";
-        if (level === 2) fontSize = "text-lg font-bold my-3.5";
-        const headingElement = React.createElement(
-          `h${level}`,
-          { key: `h-${i}`, className: `${fontSize} text-[var(--text-primary)]` },
-          parseInlineMarkdown(content)
-        );
-        blocks.push(headingElement);
-      }
-    } else if (line === "") {
-      flushAll(i);
+      currentTableRows.push(parseTableRow(line));
     } else {
-      flushAll(i);
-      blocks.push(
-        <p key={`p-${i}`} className="text-sm leading-relaxed text-[var(--text-secondary)] mb-3">
-          {parseInlineMarkdown(lines[i])}
-        </p>
-      );
+      flushTable(i);
+      if (/^(?:-[ -]*|_[ _]*|\*[ *]*)$/.test(cleanLine) && cleanLine.length >= 3) {
+        flushList(i);
+        blocks.push(<hr key={`hr-${i}`} className="my-4 border-[var(--border-primary)]" />);
+      } else if (line.startsWith("- ") || line.startsWith("* ")) {
+        if (currentNumberedList.length > 0) {
+          blocks.push(
+            <ol key={`ol-list-${i}`} className="list-decimal pl-5 my-2 space-y-1">
+              {currentNumberedList.map((item, idx) => (
+                <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                  {parseInlineMarkdown(item)}
+                </li>
+              ))}
+            </ol>
+          );
+          currentNumberedList = [];
+        }
+        currentList.push(line.substring(2));
+      } else if (/^\d+\.\s+(.*)$/.test(line)) {
+        if (currentList.length > 0) {
+          blocks.push(
+            <ul key={`list-${i}`} className="list-disc pl-5 my-2 space-y-1">
+              {currentList.map((item, idx) => (
+                <li key={idx} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                  {parseInlineMarkdown(item)}
+                </li>
+              ))}
+            </ul>
+          );
+          currentList = [];
+        }
+        const match = line.match(/^\d+\.\s+(.*)$/);
+        if (match) {
+          currentNumberedList.push(match[1]);
+        }
+      } else if (line.startsWith("> ")) {
+        flushList(i);
+        blocks.push(
+          <blockquote key={`bq-${i}`} className="border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 py-1 italic text-zinc-500 my-2">
+            {parseInlineMarkdown(line.substring(2))}
+          </blockquote>
+        );
+      } else if (/^(#{1,6})\s+(.*)$/.test(line)) {
+        flushList(i);
+        const match = line.match(/^(#{1,6})\s+(.*)$/);
+        if (match) {
+          const level = match[1].length;
+          const content = match[2];
+          let fontSize = "text-base font-bold my-3";
+          if (level === 1) fontSize = "text-xl font-bold my-4";
+          if (level === 2) fontSize = "text-lg font-bold my-3.5";
+          const headingElement = React.createElement(
+            `h${level}`,
+            { key: `h-${i}`, className: `${fontSize} text-[var(--text-primary)]` },
+            parseInlineMarkdown(content)
+          );
+          blocks.push(headingElement);
+        }
+      } else if (line === "") {
+        flushList(i);
+      } else {
+        flushList(i);
+        blocks.push(
+          <p key={`p-${i}`} className="text-sm leading-relaxed text-[var(--text-secondary)] mb-3">
+            {parseInlineMarkdown(lines[i])}
+          </p>
+        );
+      }
     }
   }
   flushAll("end");
