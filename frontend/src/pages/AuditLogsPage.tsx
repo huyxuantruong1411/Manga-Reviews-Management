@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   History,
   Search,
-  Filter,
   RefreshCw,
   Download,
   ExternalLink,
@@ -20,14 +19,10 @@ import {
   ShieldCheck,
   Activity,
   Layers,
-  Sparkles,
   User,
   Cpu,
   Bot,
-  Info,
-  Calendar,
   Eye,
-  SlidersHorizontal,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";

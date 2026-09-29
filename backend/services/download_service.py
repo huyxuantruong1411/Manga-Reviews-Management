@@ -334,8 +334,8 @@ class DownloadService:
                             old_value=old_download_path,
                             new_value=abs_target_dir,
                             actor="system",
-                            note=f"Downloaded {len(chapters_data)} chapter(s) to disk",
-                            details={"download_path": abs_target_dir, "chapters_count": len(chapters_data)}
+                            note=f"Downloaded {len(chapters)} chapter(s) to disk",
+                            details={"download_path": abs_target_dir, "chapters_count": len(chapters)}
                         )
                     except Exception as db_err:
                         logger.error(f"Error saving download_path for manga {manga_id}: {db_err}")

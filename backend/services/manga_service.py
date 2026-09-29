@@ -755,9 +755,9 @@ class MangaService:
             entity_type="manga",
             entity_id=manga_id,
             action="delete",
-            entity_title=manga.get("title"),
-            note=f"Deleted manga: {manga.get('title')}",
-            details={"mangadex_id": manga.get("mangadex_id"), "author": manga.get("author")}
+            entity_title=existing.get("title"),
+            note=f"Deleted manga: {existing.get('title')}",
+            details={"mangadex_id": existing.get("mangadex_id"), "author": existing.get("author")}
         )
 
         # Delete manga
