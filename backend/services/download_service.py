@@ -3,6 +3,7 @@ import asyncio
 import logging
 import random
 import uuid
+import time
 import io
 import base64
 from datetime import datetime
@@ -249,8 +250,17 @@ class DownloadService:
             if target_dir:
                 os.makedirs(target_dir, exist_ok=True)
             completed_count = sum(1 for c in chapters if c.get("status") == "completed")
+            task_start_time = time.time()
+            shared_stats = {
+                "start_time": task_start_time,
+                "pages_done": 0,
+                "bytes_done": 0,
+                "total_chapters": total,
+                "current_chap_index": 1
+            }
             
-            for idx, chap in enumerate(chapters):
+            for idx, chap in enumerate(chapters, 1):
+                shared_stats["current_chap_index"] = idx
                 # Check cancellation
                 if active_cancellations.get(task_id) or (await self._check_db_cancelled(task_id)):
                     logger.info(f"Task {task_id} cancelled.")
@@ -290,7 +300,8 @@ class DownloadService:
                         task_id=task_id,
                         chap_num=chap_num,
                         manga_id=manga_id,
-                        chap_id=chap_id
+                        chap_id=chap_id,
+                        shared_stats=shared_stats
                     )
                     
                     if success:
@@ -433,22 +444,56 @@ class DownloadService:
             logger.error(f"Error generating thumbnail: {e}")
             return None
 
-    async def _update_page_progress(self, task_id: str, chap_num: str, page_num: int, page_total: int, bytes_data: bytes):
+    async def _update_page_progress(
+        self,
+        task_id: str,
+        chap_num: str,
+        page_num: int,
+        page_total: int,
+        bytes_data: bytes,
+        filename: Optional[str] = None,
+        file_size: Optional[int] = None,
+        speed_pages: Optional[float] = None,
+        speed_mb: Optional[float] = None,
+        elapsed_sec: Optional[float] = None,
+        eta_sec: Optional[float] = None,
+        total_pages_downloaded: Optional[int] = None,
+        total_bytes_downloaded: Optional[int] = None,
+        remaining_chapters: Optional[int] = None
+    ):
         try:
             # Generate thumbnail preview asynchronously
             preview_base64 = await asyncio.to_thread(self._generate_base64_thumbnail, bytes_data)
             
+            update_fields: Dict[str, Any] = {
+                "current_chapter_name": f"Chapter {chap_num}",
+                "current_page_number": page_num,
+                "current_page_total": page_total,
+                "current_page_preview": preview_base64,
+                "updated_at": datetime.utcnow()
+            }
+            if filename:
+                update_fields["current_filename"] = filename
+            if file_size is not None:
+                update_fields["current_file_size"] = file_size
+            if speed_pages is not None:
+                update_fields["speed_pages_per_sec"] = speed_pages
+            if speed_mb is not None:
+                update_fields["speed_mb_per_sec"] = speed_mb
+            if elapsed_sec is not None:
+                update_fields["elapsed_seconds"] = elapsed_sec
+            if eta_sec is not None:
+                update_fields["eta_seconds"] = eta_sec
+            if total_pages_downloaded is not None:
+                update_fields["total_pages_downloaded"] = total_pages_downloaded
+            if total_bytes_downloaded is not None:
+                update_fields["total_bytes_downloaded"] = total_bytes_downloaded
+            if remaining_chapters is not None:
+                update_fields["remaining_chapters"] = remaining_chapters
+
             await self._get_tasks_collection().update_one(
                 {"_id": task_id},
-                {
-                    "$set": {
-                        "current_chapter_name": f"Chapter {chap_num}",
-                        "current_page_number": page_num,
-                        "current_page_total": page_total,
-                        "current_page_preview": preview_base64,
-                        "updated_at": datetime.utcnow()
-                    }
-                }
+                {"$set": update_fields}
             )
         except Exception as e:
             logger.error(f"Failed to update page progress for task {task_id}: {e}")
@@ -461,6 +506,7 @@ class DownloadService:
         chap_num: str,
         manga_id: str,
         chap_id: str,
+        shared_stats: Optional[Dict[str, Any]] = None,
         max_sem: int = 4
     ) -> Tuple[bool, List[Dict[str, Any]]]:
         sem = asyncio.Semaphore(max_sem)
@@ -521,8 +567,49 @@ class DownloadService:
                     "md5_hash": md5_h
                 }
 
+                # Compute statistics
+                speed_p = None
+                speed_mb = None
+                elapsed_sec = None
+                eta_sec = None
+                total_p = None
+                total_b = None
+                rem_ch = None
+
+                if shared_stats:
+                    shared_stats["pages_done"] = shared_stats.get("pages_done", 0) + 1
+                    shared_stats["bytes_done"] = shared_stats.get("bytes_done", 0) + fsize
+                    elapsed_sec = max(0.1, round(time.time() - shared_stats.get("start_time", time.time()), 1))
+                    total_p = shared_stats["pages_done"]
+                    total_b = shared_stats["bytes_done"]
+                    speed_p = round(total_p / elapsed_sec, 1)
+                    speed_mb = round((total_b / (1024 * 1024)) / elapsed_sec, 2)
+                    
+                    cur_ch = shared_stats.get("current_chap_index", 1)
+                    tot_ch = shared_stats.get("total_chapters", 1)
+                    rem_ch = max(0, tot_ch - cur_ch)
+                    # estimate remaining pages
+                    avg_pages_per_ch = total_p / max(1, cur_ch)
+                    est_rem_pages = int(rem_ch * avg_pages_per_ch + max(0, len(urls) - (idx + 1)))
+                    eta_sec = round(est_rem_pages / max(0.1, speed_p), 1)
+
                 # Update progress preview
-                await self._update_page_progress(task_id, chap_num, idx + 1, len(urls), bytes_data)
+                await self._update_page_progress(
+                    task_id=task_id,
+                    chap_num=chap_num,
+                    page_num=idx + 1,
+                    page_total=len(urls),
+                    bytes_data=bytes_data,
+                    filename=file_name,
+                    file_size=fsize,
+                    speed_pages=speed_p,
+                    speed_mb=speed_mb,
+                    elapsed_sec=elapsed_sec,
+                    eta_sec=eta_sec,
+                    total_pages_downloaded=total_p,
+                    total_bytes_downloaded=total_b,
+                    remaining_chapters=rem_ch
+                )
                 return True
 
         tasks = [download_page(idx, url) for idx, url in enumerate(urls)]

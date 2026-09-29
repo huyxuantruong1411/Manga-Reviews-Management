@@ -24,6 +24,8 @@ import {
   Globe,
   Layers,
   Sparkles,
+  Zap,
+  Clock,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -2211,6 +2213,46 @@ export const MangaDetailPage: React.FC = () => {
                       style={{ width: `${(activeTask.current_page_number / activeTask.current_page_total) * 100}%` }}
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Rich Telemetry Chips */}
+              {!["completed", "failed", "cancelled"].includes(activeTask.status) && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {/* Speed */}
+                  <div className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <Zap size={12} className="text-amber-500 shrink-0" />
+                    <span>
+                      {activeTask.speed_pages_per_sec != null ? `${activeTask.speed_pages_per_sec} trang/s` : "Đang tính..."}
+                      {activeTask.speed_mb_per_sec != null && ` • ${activeTask.speed_mb_per_sec} MB/s`}
+                    </span>
+                  </div>
+
+                  {/* Time & ETA */}
+                  <div className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                    <Clock size={12} className="text-emerald-500 shrink-0" />
+                    <span>
+                      Đã chạy: {Math.floor((activeTask.elapsed_seconds || 0) / 60).toString().padStart(2, "0")}:{Math.floor((activeTask.elapsed_seconds || 0) % 60).toString().padStart(2, "0")}
+                      {activeTask.eta_seconds != null && activeTask.eta_seconds > 0 && (
+                        <> • ETA ~{Math.floor(activeTask.eta_seconds / 60).toString().padStart(2, "0")}:{Math.floor(activeTask.eta_seconds % 60).toString().padStart(2, "0")}</>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Remaining Chapters */}
+                  <div className="px-2.5 py-1 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                    <Layers size={12} className="text-indigo-500 shrink-0" />
+                    <span>
+                      Còn lại: {activeTask.remaining_chapters ?? Math.max(0, activeTask.total_chapters - activeTask.completed_chapters)} chapter
+                    </span>
+                  </div>
+
+                  {/* Current File */}
+                  {activeTask.current_filename && (
+                    <div className="px-2.5 py-1 rounded-xl bg-zinc-200/50 dark:bg-zinc-800/50 border border-[var(--border-primary)] text-zinc-500 dark:text-zinc-400 font-mono text-[10px]">
+                      {activeTask.current_filename}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

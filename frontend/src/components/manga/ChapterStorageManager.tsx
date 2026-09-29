@@ -16,7 +16,13 @@ import {
   ChevronRight,
   Layers,
   Check,
-  Loader2
+  Loader2,
+  Zap,
+  Clock,
+  Terminal,
+  CheckCircle2,
+  Activity,
+  Sparkles
 } from "lucide-react";
 import client from "../../api/client";
 import type {
@@ -26,6 +32,61 @@ import type {
   FolderScanResponse,
   StorageDuplicateGroup
 } from "../../types/chapter";
+
+interface ImportLogItem {
+  id: string;
+  time: string;
+  text: string;
+  type: "info" | "success" | "warn" | "error";
+}
+
+interface ImportStreamProgress {
+  status: "idle" | "running" | "completed" | "error";
+  totalChapters: number;
+  currentChapterNumber: string;
+  currentChapterTitle: string;
+  currentChapterIndex: number;
+  remainingChapters: number;
+  currentPageNumber: number;
+  currentChapterPageCount: number;
+  totalPagesDone: number;
+  totalPagesOverall: number;
+  remainingPages: number;
+  currentFilename: string;
+  currentFileSize: number;
+  totalBytesUploaded: number;
+  speedPagesPerSec: number;
+  speedMbPerSec: number;
+  elapsedSeconds: number;
+  etaSeconds: number;
+  overallPercent: number;
+  previewBase64: string | null;
+  logs: ImportLogItem[];
+  summary?: {
+    importedChapters: number;
+    totalPagesImported: number;
+    skippedChapters: number;
+    totalBytesUploaded: number;
+    elapsedSeconds: number;
+    errors: Array<{ folder: string; error: string }>;
+  };
+}
+
+const formatBytes = (bytes: number, decimals = 1) => {
+  if (!bytes || bytes === 0) return "0 B";
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+};
+
+const formatSeconds = (sec: number) => {
+  if (!sec || isNaN(sec) || sec <= 0) return "00:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+};
 
 interface ChapterStorageManagerProps {
   mangaId: string;
@@ -80,6 +141,14 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
   const [importLang, setImportLang] = useState("en");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportStreamProgress | null>(null);
+  const logsEndRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (importProgress?.logs && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [importProgress?.logs]);
 
   // Fetch chapters
   const fetchChapters = async () => {
@@ -355,29 +424,271 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     }
   };
 
+  const handleResetImportModal = () => {
+    setIsImportModalOpen(false);
+    setScanResult(null);
+    setImportFolderPath("");
+    setImportProgress(null);
+    setImportMessage(null);
+  };
+
   const handleExecuteImport = async () => {
     if (!scanResult || selectedImportFolders.length === 0) return;
     setImporting(true);
     setImportMessage(null);
+
+    const initialTotalPages = scanResult.detected_chapters
+      .filter((c) => selectedImportFolders.includes(c.folder_name))
+      .reduce((sum, c) => sum + c.page_count, 0);
+
+    const initialProgress: ImportStreamProgress = {
+      status: "running",
+      totalChapters: selectedImportFolders.length,
+      currentChapterNumber: "",
+      currentChapterTitle: "",
+      currentChapterIndex: 0,
+      remainingChapters: selectedImportFolders.length,
+      currentPageNumber: 0,
+      currentChapterPageCount: 0,
+      totalPagesDone: 0,
+      totalPagesOverall: initialTotalPages,
+      remainingPages: initialTotalPages,
+      currentFilename: "",
+      currentFileSize: 0,
+      totalBytesUploaded: 0,
+      speedPagesPerSec: 0,
+      speedMbPerSec: 0,
+      elapsedSeconds: 0,
+      etaSeconds: 0,
+      overallPercent: 0,
+      previewBase64: null,
+      logs: [
+        {
+          id: `init-${Date.now()}`,
+          time: new Date().toLocaleTimeString(),
+          text: `Khởi tạo tiến trình nhập ${selectedImportFolders.length} chapters (${initialTotalPages} trang) vào MinIO Storage...`,
+          type: "info"
+        }
+      ]
+    };
+    setImportProgress(initialProgress);
+
     try {
-      const res = await client.post(`/api/manga/${mangaId}/import-folder`, {
-        folder_path: importFolderPath.trim(),
-        conflict_strategy: conflictStrategy,
-        default_language: importLang,
-        selected_folders: selectedImportFolders
+      const response = await fetch(`/api/manga/${mangaId}/import-folder-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folder_path: importFolderPath.trim(),
+          conflict_strategy: conflictStrategy,
+          default_language: importLang,
+          selected_folders: selectedImportFolders
+        })
       });
-      setImportMessage(
-        `Thành công: Đã import ${res.data.imported_chapters} chapter (${res.data.total_pages_imported} trang)! Bỏ qua: ${res.data.skipped_chapters}.`
-      );
-      fetchChapters();
-      setTimeout(() => {
-        setIsImportModalOpen(false);
-        setScanResult(null);
-        setImportFolderPath("");
-      }, 2500);
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Server returned HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const block of lines) {
+          const trimmed = block.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, "");
+          try {
+            const ev = JSON.parse(jsonStr);
+            const nowTime = new Date().toLocaleTimeString();
+
+            if (ev.type === "init") {
+              setImportProgress((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      totalChapters: ev.total_chapters,
+                      totalPagesOverall: ev.total_pages,
+                      remainingPages: ev.total_pages
+                    }
+                  : null
+              );
+            } else if (ev.type === "chapter_start") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                const newLogs: ImportLogItem[] = [
+                  ...prev.logs,
+                  {
+                    id: `chap-start-${ev.chapter_number}-${Date.now()}`,
+                    time: nowTime,
+                    text: `Bắt đầu Chapter ${ev.chapter_number}${ev.chapter_title ? ` - ${ev.chapter_title}` : ""} (${ev.chapter_page_count} trang)...`,
+                    type: "info"
+                  }
+                ];
+                return {
+                  ...prev,
+                  currentChapterNumber: ev.chapter_number,
+                  currentChapterTitle: ev.chapter_title || "",
+                  currentChapterIndex: ev.chapter_index,
+                  currentChapterPageCount: ev.chapter_page_count,
+                  remainingChapters: Math.max(0, ev.total_chapters - ev.chapter_index),
+                  logs: newLogs.slice(-150)
+                };
+              });
+            } else if (ev.type === "page_progress") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  currentChapterNumber: ev.chapter_number,
+                  currentChapterTitle: ev.chapter_title || prev.currentChapterTitle,
+                  currentChapterIndex: ev.chapter_index,
+                  totalChapters: ev.total_chapters,
+                  remainingChapters: ev.remaining_chapters ?? Math.max(0, ev.total_chapters - ev.chapter_index),
+                  currentPageNumber: ev.page_number,
+                  currentChapterPageCount: ev.chapter_page_count,
+                  totalPagesDone: ev.total_pages_done,
+                  totalPagesOverall: ev.total_pages_overall,
+                  remainingPages: ev.remaining_pages ?? Math.max(0, ev.total_pages_overall - ev.total_pages_done),
+                  currentFilename: ev.filename,
+                  currentFileSize: ev.file_size,
+                  totalBytesUploaded: ev.total_bytes_uploaded ?? prev.totalBytesUploaded,
+                  speedPagesPerSec: ev.speed_pages_per_sec,
+                  speedMbPerSec: ev.speed_mb_per_sec,
+                  elapsedSeconds: ev.elapsed_seconds,
+                  etaSeconds: ev.eta_seconds,
+                  overallPercent: ev.percent,
+                  previewBase64: ev.preview_base64 || prev.previewBase64
+                };
+              });
+            } else if (ev.type === "chapter_done") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                const newLogs: ImportLogItem[] = [
+                  ...prev.logs,
+                  {
+                    id: `chap-done-${ev.chapter_number}-${Date.now()}`,
+                    time: nowTime,
+                    text: `✓ Hoàn thành Chapter ${ev.chapter_number} (${ev.page_count} trang đã lưu vào MinIO)`,
+                    type: "success"
+                  }
+                ];
+                return {
+                  ...prev,
+                  logs: newLogs.slice(-150)
+                };
+              });
+            } else if (ev.type === "chapter_skipped") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                const newLogs: ImportLogItem[] = [
+                  ...prev.logs,
+                  {
+                    id: `chap-skip-${ev.chapter_number}-${Date.now()}`,
+                    time: nowTime,
+                    text: `⏭️ Bỏ qua Chapter ${ev.chapter_number} (${ev.reason})`,
+                    type: "warn"
+                  }
+                ];
+                return {
+                  ...prev,
+                  logs: newLogs.slice(-150)
+                };
+              });
+            } else if (ev.type === "chapter_error") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                const newLogs: ImportLogItem[] = [
+                  ...prev.logs,
+                  {
+                    id: `chap-err-${ev.chapter_number}-${Date.now()}`,
+                    time: nowTime,
+                    text: `❌ Lỗi Chapter ${ev.chapter_number}: ${ev.error}`,
+                    type: "error"
+                  }
+                ];
+                return {
+                  ...prev,
+                  logs: newLogs.slice(-150)
+                };
+              });
+            } else if (ev.type === "complete") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                const newLogs: ImportLogItem[] = [
+                  ...prev.logs,
+                  {
+                    id: `complete-${Date.now()}`,
+                    time: nowTime,
+                    text: `🎉 Tất cả đã hoàn tất! Đã nhập ${ev.imported_chapters} chapter (${ev.total_pages_imported} trang) trong ${ev.elapsed_seconds}s.`,
+                    type: "success"
+                  }
+                ];
+                return {
+                  ...prev,
+                  status: "completed",
+                  overallPercent: 100,
+                  summary: {
+                    importedChapters: ev.imported_chapters,
+                    totalPagesImported: ev.total_pages_imported,
+                    skippedChapters: ev.skipped_chapters,
+                    totalBytesUploaded: ev.total_bytes_uploaded,
+                    elapsedSeconds: ev.elapsed_seconds,
+                    errors: ev.errors || []
+                  },
+                  logs: newLogs.slice(-150)
+                };
+              });
+              fetchChapters();
+            } else if (ev.type === "error") {
+              setImportProgress((prev) => {
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  status: "error",
+                  logs: [
+                    ...prev.logs,
+                    {
+                      id: `err-${Date.now()}`,
+                      time: nowTime,
+                      text: `Lỗi: ${ev.error}`,
+                      type: "error"
+                    }
+                  ]
+                };
+              });
+            }
+          } catch (pe) {
+            console.error("Error parsing SSE JSON event:", pe);
+          }
+        }
+      }
     } catch (err: any) {
-      console.error("Error executing folder import:", err);
-      alert(err.response?.data?.detail || "Lỗi khi import thư mục.");
+      console.error("Stream import failed:", err);
+      setImportProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "error",
+              logs: [
+                ...prev.logs,
+                {
+                  id: `fetch-err-${Date.now()}`,
+                  time: new Date().toLocaleTimeString(),
+                  text: `Lỗi kết nối stream: ${err.message}`,
+                  type: "error"
+                }
+              ]
+            }
+          : null
+      );
     } finally {
       setImporting(false);
     }
@@ -950,9 +1261,20 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {scanningDups ? (
-                <div className="py-20 flex flex-col items-center justify-center space-y-3">
-                  <Loader2 size={32} className="animate-spin text-amber-500" />
-                  <p className="text-xs text-[var(--text-secondary)]">Đang đối chiếu dữ liệu hash các trang ảnh...</p>
+                <div className="py-20 flex flex-col items-center justify-center space-y-4 max-w-md mx-auto text-center">
+                  <div className="relative">
+                    <Loader2 size={36} className="animate-spin text-amber-500" />
+                    <span className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-sm text-[var(--text-primary)]">Đang quét phân tích MD5 Hash toàn bộ Storage</h4>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Hệ thống đang truy xuất tất cả các trang ảnh, đối chiếu giá trị băm cryptographic MD5 và nhóm các ảnh có nội dung bit trùng lặp 100%...
+                    </p>
+                  </div>
+                  <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden shadow-inner">
+                    <div className="bg-gradient-to-r from-amber-500 to-orange-500 h-full w-2/3 animate-pulse rounded-full" />
+                  </div>
                 </div>
               ) : duplicateGroups.length === 0 ? (
                 <div className="py-16 text-center space-y-2">
@@ -1052,206 +1374,540 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 
       {/* Local Folder Import Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <Upload className="text-indigo-500" size={20} />
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div
+            className={`bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full flex flex-col shadow-2xl overflow-hidden transition-all duration-300 ${
+              importProgress ? "max-w-3xl max-h-[92vh]" : "max-w-2xl max-h-[85vh]"
+            } animate-in zoom-in-95`}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/30">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-2xl bg-indigo-500/10 text-indigo-500">
+                  <Upload size={20} />
+                </div>
                 <div>
                   <h3 className="text-base font-black text-[var(--text-primary)]">
-                    Import Manga từ Thư mục máy tính
+                    {importProgress ? "Tiến Trình Import Manga (System Storage)" : "Import Manga từ Thư mục máy tính"}
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Nhập dữ liệu các chapter đã tải về từ trước vào System Storage
+                    {importProgress
+                      ? `Đang lưu trữ dữ liệu vào MinIO System Storage cho "${mangaTitle}"`
+                      : "Nhập dữ liệu các chapter đã tải về từ trước vào System Storage"}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsImportModalOpen(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                onClick={() => {
+                  if (importProgress && importProgress.status === "running") {
+                    if (window.confirm("Tiến trình import đang chạy ngầm. Bạn có chắc muốn đóng cửa sổ này?")) {
+                      handleResetImportModal();
+                    }
+                  } else {
+                    handleResetImportModal();
+                  }
+                }}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                title="Đóng cửa sổ"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Folder Path Input */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                  Đường dẫn thư mục chứa Manga / Chapters
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={importFolderPath}
-                    onChange={(e) => setImportFolderPath(e.target.value)}
-                    placeholder="e.g. D:\Manga\Chainsaw Man"
-                    className="flex-1 px-3.5 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    onClick={handleScanFolder}
-                    disabled={scanningFolder || !importFolderPath.trim()}
-                    className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition flex items-center space-x-1.5 disabled:opacity-50"
-                  >
-                    {scanningFolder ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                    <span>Quét thư mục</span>
-                  </button>
-                </div>
-              </div>
+            {/* Modal Body */}
+            {importProgress ? (
+              /* LIVE STREAMING PROGRESS MISSION CONTROL */
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Header status bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
+                  <div className="flex items-center space-x-3">
+                    {importProgress.status === "running" && (
+                      <div className="relative flex items-center justify-center shrink-0">
+                        <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 animate-ping opacity-75 absolute" />
+                        <span className="w-3 h-3 rounded-full bg-indigo-500" />
+                      </div>
+                    )}
+                    {importProgress.status === "completed" && (
+                      <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+                    )}
+                    {importProgress.status === "error" && (
+                      <AlertTriangle className="text-rose-500 shrink-0" size={24} />
+                    )}
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-[var(--text-primary)]">
+                          {importProgress.status === "running" && "Đang Import Dữ Liệu vào System Storage"}
+                          {importProgress.status === "completed" && "Hoàn Tất Quá Trình Import!"}
+                          {importProgress.status === "error" && "Quá Trình Bị Gián Đoạn"}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-bold">
+                          MinIO S3
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-secondary)] font-medium mt-0.5">
+                        {importProgress.status === "running" && (
+                          <>
+                            Đang xử lý Chapter <strong className="text-[var(--text-primary)]">{importProgress.currentChapterNumber || "..."}</strong>
+                            {importProgress.currentChapterTitle ? ` (${importProgress.currentChapterTitle})` : ""}
+                            {" • "}Đang tải trang {importProgress.currentPageNumber}/{importProgress.currentChapterPageCount}
+                          </>
+                        )}
+                        {importProgress.status === "completed" && (
+                          <>Đã lưu trữ an toàn toàn bộ các chapter và trang ảnh vào bộ nhớ hệ thống.</>
+                        )}
+                        {importProgress.status === "error" && (
+                          <>Đã xảy ra lỗi trong khi truyền dữ liệu. Vui lòng xem log chi tiết bên dưới.</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
 
-              {/* Scan Results */}
-              {scanResult && (
-                <div className="space-y-4 pt-2 border-t border-[var(--border-primary)]">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
-                      <Check size={14} />
-                      <span>{scanResult.message}</span>
+                  <div className="flex items-baseline space-x-1.5 self-end sm:self-center shrink-0">
+                    <span className="text-3xl font-spartan font-black text-indigo-500">
+                      {importProgress.overallPercent.toFixed(1)}%
                     </span>
-                    <button
-                      onClick={() => {
-                        if (selectedImportFolders.length === scanResult.detected_chapters.length) {
-                          setSelectedImportFolders([]);
-                        } else {
-                          setSelectedImportFolders(scanResult.detected_chapters.map((c) => c.folder_name));
-                        }
-                      }}
-                      className="text-indigo-500 hover:underline font-semibold"
+                    <span className="text-xs font-bold text-[var(--text-secondary)]">Tổng thể</span>
+                  </div>
+                </div>
+
+                {/* Dual Progress Bars */}
+                <div className="space-y-2">
+                  {/* Master Bar */}
+                  <div className="relative w-full h-3.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden shadow-inner border border-indigo-500/10">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 rounded-full relative"
+                      style={{ width: `${Math.min(100, Math.max(0, importProgress.overallPercent))}%` }}
                     >
-                      {selectedImportFolders.length === scanResult.detected_chapters.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
-                    </button>
-                  </div>
-
-                  {/* Detected Chapters Table */}
-                  <div className="max-h-60 overflow-y-auto border border-[var(--border-primary)] rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-[var(--bg-primary)] font-bold text-[10px] uppercase text-[var(--text-secondary)] border-b border-[var(--border-primary)]">
-                        <tr>
-                          <th className="p-2.5 w-8">#</th>
-                          <th className="p-2.5">Folder</th>
-                          <th className="p-2.5">Chap</th>
-                          <th className="p-2.5">Title</th>
-                          <th className="p-2.5">Trang</th>
-                          <th className="p-2.5">Trạng thái</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-primary)]">
-                        {scanResult.detected_chapters.map((ch) => {
-                          const isChecked = selectedImportFolders.includes(ch.folder_name);
-                          return (
-                            <tr
-                              key={ch.folder_name}
-                              onClick={() => {
-                                setSelectedImportFolders((prev) =>
-                                  prev.includes(ch.folder_name)
-                                    ? prev.filter((f) => f !== ch.folder_name)
-                                    : [...prev, ch.folder_name]
-                                );
-                              }}
-                              className={`cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                                isChecked ? "bg-indigo-500/10" : ""
-                              }`}
-                            >
-                              <td className="p-2.5">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {}}
-                                  className="rounded text-indigo-500 focus:ring-0"
-                                />
-                              </td>
-                              <td className="p-2.5 font-mono text-[11px] truncate max-w-[140px]">
-                                {ch.folder_name}
-                              </td>
-                              <td className="p-2.5 font-bold text-[var(--text-primary)]">
-                                {ch.chapter_number}
-                              </td>
-                              <td className="p-2.5 truncate max-w-[120px] text-[var(--text-secondary)]">
-                                {ch.title || "-"}
-                              </td>
-                              <td className="p-2.5 font-bold">{ch.page_count}</td>
-                              <td className="p-2.5">
-                                {ch.is_duplicate ? (
-                                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px]">
-                                    Đã có sẵn
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
-                                    Mới
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Conflict handling options */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <label className="font-bold text-[var(--text-secondary)] block mb-1">
-                        Xử lý khi trùng chapter
-                      </label>
-                      <select
-                        value={conflictStrategy}
-                        onChange={(e: any) => setConflictStrategy(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] font-semibold text-[var(--text-primary)]"
-                      >
-                        <option value="skip">Bỏ qua chapter đã có (Skip)</option>
-                        <option value="overwrite">Ghi đè chapter cũ (Overwrite)</option>
-                        <option value="keep_both">Lưu cả hai bản (Keep Both)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="font-bold text-[var(--text-secondary)] block mb-1">
-                        Ngôn ngữ mặc định
-                      </label>
-                      <select
-                        value={importLang}
-                        onChange={(e) => setImportLang(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] font-semibold text-[var(--text-primary)] uppercase"
-                      >
-                        <option value="en">English (EN)</option>
-                        <option value="vi">Tiếng Việt (VI)</option>
-                        <option value="ja">Japanese (JA)</option>
-                        <option value="ru">Russian (RU)</option>
-                      </select>
+                      {importProgress.status === "running" && (
+                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                      )}
                     </div>
                   </div>
 
-                  {importMessage && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold animate-in fade-in">
-                      {importMessage}
+                  {/* Sub bar: Current chapter page progress */}
+                  {importProgress.status === "running" && importProgress.currentChapterPageCount > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <div className="flex justify-between text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                        <span>Tiến độ Chapter hiện tại</span>
+                        <span className="text-indigo-500 dark:text-indigo-400 font-bold">
+                          Trang {importProgress.currentPageNumber} / {importProgress.currentChapterPageCount}
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 transition-all duration-150 rounded-full"
+                          style={{
+                            width: `${(importProgress.currentPageNumber / Math.max(1, importProgress.currentChapterPageCount)) * 100}%`
+                          }}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {scanResult && scanResult.detected_chapters.length > 0 && (
+                {/* 4-Metric Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Card 1: Speed */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-100/70 dark:bg-zinc-850/60 border border-[var(--border-primary)] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[var(--text-secondary)]">
+                      <span>Tốc độ xử lý</span>
+                      <Zap size={14} className="text-amber-500" />
+                    </div>
+                    <div className="text-lg font-black text-[var(--text-primary)]">
+                      {importProgress.speedPagesPerSec} <span className="text-xs font-semibold text-[var(--text-secondary)]">trang/s</span>
+                    </div>
+                    <div className="text-[10px] font-mono font-semibold text-zinc-400">
+                      ~{importProgress.speedMbPerSec} MB/s
+                    </div>
+                  </div>
+
+                  {/* Card 2: Chapters Progress */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-100/70 dark:bg-zinc-850/60 border border-[var(--border-primary)] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[var(--text-secondary)]">
+                      <span>Chapters</span>
+                      <Layers size={14} className="text-indigo-500" />
+                    </div>
+                    <div className="text-lg font-black text-[var(--text-primary)]">
+                      {importProgress.currentChapterIndex} <span className="text-xs font-semibold text-[var(--text-secondary)]">/ {importProgress.totalChapters}</span>
+                    </div>
+                    <div className="text-[10px] font-semibold text-zinc-400">
+                      Còn lại: {importProgress.remainingChapters} chapter
+                    </div>
+                  </div>
+
+                  {/* Card 3: Pages Progress */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-100/70 dark:bg-zinc-850/60 border border-[var(--border-primary)] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[var(--text-secondary)]">
+                      <span>Trang ảnh</span>
+                      <ImageIcon size={14} className="text-purple-500" />
+                    </div>
+                    <div className="text-lg font-black text-[var(--text-primary)]">
+                      {importProgress.totalPagesDone} <span className="text-xs font-semibold text-[var(--text-secondary)]">/ {importProgress.totalPagesOverall}</span>
+                    </div>
+                    <div className="text-[10px] font-semibold text-zinc-400">
+                      Còn lại: {importProgress.remainingPages} trang
+                    </div>
+                  </div>
+
+                  {/* Card 4: Time & ETA */}
+                  <div className="p-3.5 rounded-2xl bg-zinc-100/70 dark:bg-zinc-850/60 border border-[var(--border-primary)] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[var(--text-secondary)]">
+                      <span>Thời gian & ETA</span>
+                      <Clock size={14} className="text-emerald-500" />
+                    </div>
+                    <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                      ~{formatSeconds(importProgress.etaSeconds)}
+                    </div>
+                    <div className="text-[10px] font-semibold text-zinc-400">
+                      Đã chạy: {formatSeconds(importProgress.elapsedSeconds)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Item Inspector & Thumbnail Preview */}
+                <div className="p-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] flex flex-col sm:flex-row gap-4 items-center">
+                  {/* Thumbnail Box */}
+                  <div className="relative w-24 h-32 rounded-xl overflow-hidden bg-zinc-900 border border-[var(--border-primary)] shadow-md flex-shrink-0 flex items-center justify-center group">
+                    {importProgress.previewBase64 ? (
+                      <>
+                        <img
+                          src={importProgress.previewBase64}
+                          alt="Live page preview"
+                          className="w-full h-full object-cover animate-in fade-in duration-200"
+                        />
+                        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-sm text-[9px] font-mono font-bold text-white px-1.5 py-0.5 rounded-full border border-white/10 whitespace-nowrap shadow">
+                          P.{importProgress.currentPageNumber}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center space-y-1.5 text-zinc-500 p-2 text-center">
+                        <Loader2 className="animate-spin text-indigo-400" size={20} />
+                        <span className="text-[9px] font-bold uppercase tracking-wider">Preview</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Item Details */}
+                  <div className="flex-1 min-w-0 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <Activity size={12} className="text-indigo-500" />
+                        Đang ghi dữ liệu vào MinIO Storage
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                        {formatBytes(importProgress.totalBytesUploaded)} đã tải lên
+                      </span>
+                    </div>
+
+                    <div className="font-spartan font-bold text-sm text-[var(--text-primary)] truncate">
+                      {importProgress.currentChapterNumber
+                        ? `Chapter ${importProgress.currentChapterNumber}${importProgress.currentChapterTitle ? ` - ${importProgress.currentChapterTitle}` : ""}`
+                        : "Đang nạp chapter..."}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-[var(--text-secondary)]">
+                      <div className="truncate">
+                        <span className="text-zinc-400">Tệp: </span>
+                        <span className="font-mono font-semibold text-[var(--text-primary)]">
+                          {importProgress.currentFilename || "..."}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400">Kích thước: </span>
+                        <span className="font-semibold text-[var(--text-primary)]">
+                          {formatBytes(importProgress.currentFileSize)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-zinc-400 font-mono truncate">
+                      Lưu trữ: manga-system/manga/{mangaId}/... (Hashing MD5 dedup)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Event Log Console (Micro-Terminal) */}
+                <div className="rounded-2xl border border-[var(--border-primary)] bg-zinc-950 text-zinc-200 overflow-hidden shadow-lg">
+                  <div className="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between text-[11px]">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                      </div>
+                      <span className="font-mono text-zinc-400 font-semibold flex items-center gap-1.5 ml-2">
+                        <Terminal size={12} className="text-indigo-400" />
+                        Nhật Ký Tiến Trình Thời Gian Thực ({importProgress.logs.length} sự kiện)
+                      </span>
+                    </div>
+                    {importProgress.status === "running" && (
+                      <span className="text-[10px] font-mono text-indigo-400 flex items-center gap-1 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        Live Stream
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-3 font-mono text-[11px] leading-relaxed max-h-36 overflow-y-auto space-y-1 select-text">
+                    {importProgress.logs.map((log) => {
+                      let colorClass = "text-zinc-300";
+                      if (log.type === "success") colorClass = "text-emerald-400 font-semibold";
+                      if (log.type === "warn") colorClass = "text-amber-400";
+                      if (log.type === "error") colorClass = "text-rose-400 font-bold";
+                      return (
+                        <div key={log.id} className="flex items-start space-x-2">
+                          <span className="text-zinc-500 text-[10px] shrink-0 font-normal">[{log.time}]</span>
+                          <span className={colorClass}>{log.text}</span>
+                        </div>
+                      );
+                    })}
+                    <div ref={logsEndRef} />
+                  </div>
+                </div>
+
+                {/* Completion Summary Card */}
+                {importProgress.status === "completed" && importProgress.summary && (
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 space-y-2 animate-in zoom-in-95">
+                    <div className="flex items-center space-x-2 font-bold text-sm">
+                      <Sparkles size={18} className="text-emerald-500" />
+                      <span>Hoàn tất nhập dữ liệu thành công!</span>
+                    </div>
+                    <div className="text-xs leading-relaxed text-[var(--text-secondary)]">
+                      Đã lưu thành công <strong>{importProgress.summary.importedChapters} chapters</strong> (tổng cộng{" "}
+                      <strong>{importProgress.summary.totalPagesImported} trang</strong>, dung lượng{" "}
+                      <strong>{formatBytes(importProgress.summary.totalBytesUploaded)}</strong>) trong thời gian{" "}
+                      <strong>{importProgress.summary.elapsedSeconds}s</strong>.
+                      {importProgress.summary.skippedChapters > 0 && (
+                        <span> Bỏ qua {importProgress.summary.skippedChapters} chapter đã có sẵn.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* SCAN & SELECTION FORM */
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* Folder Path Input */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Đường dẫn thư mục chứa Manga / Chapters
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={importFolderPath}
+                      onChange={(e) => setImportFolderPath(e.target.value)}
+                      placeholder="e.g. D:\Manga\Chainsaw Man"
+                      className="flex-1 px-3.5 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={handleScanFolder}
+                      disabled={scanningFolder || !importFolderPath.trim()}
+                      className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition flex items-center space-x-1.5 disabled:opacity-50"
+                    >
+                      {scanningFolder ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      <span>Quét thư mục</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scan Results */}
+                {scanResult && (
+                  <div className="space-y-4 pt-2 border-t border-[var(--border-primary)]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                        <Check size={14} />
+                        <span>{scanResult.message}</span>
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (selectedImportFolders.length === scanResult.detected_chapters.length) {
+                            setSelectedImportFolders([]);
+                          } else {
+                            setSelectedImportFolders(scanResult.detected_chapters.map((c) => c.folder_name));
+                          }
+                        }}
+                        className="text-indigo-500 hover:underline font-semibold"
+                      >
+                        {selectedImportFolders.length === scanResult.detected_chapters.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                      </button>
+                    </div>
+
+                    {/* Detected Chapters Table */}
+                    <div className="max-h-60 overflow-y-auto border border-[var(--border-primary)] rounded-xl">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[var(--bg-primary)] font-bold text-[10px] uppercase text-[var(--text-secondary)] border-b border-[var(--border-primary)]">
+                          <tr>
+                            <th className="p-2.5 w-8">#</th>
+                            <th className="p-2.5">Folder</th>
+                            <th className="p-2.5">Chap</th>
+                            <th className="p-2.5">Title</th>
+                            <th className="p-2.5">Trang</th>
+                            <th className="p-2.5">Trạng thái</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-primary)]">
+                          {scanResult.detected_chapters.map((ch) => {
+                            const isChecked = selectedImportFolders.includes(ch.folder_name);
+                            return (
+                              <tr
+                                key={ch.folder_name}
+                                onClick={() => {
+                                  setSelectedImportFolders((prev) =>
+                                    prev.includes(ch.folder_name)
+                                      ? prev.filter((f) => f !== ch.folder_name)
+                                      : [...prev, ch.folder_name]
+                                  );
+                                }}
+                                className={`cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                                  isChecked ? "bg-indigo-500/10" : ""
+                                }`}
+                              >
+                                <td className="p-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {}}
+                                    className="rounded text-indigo-500 focus:ring-0"
+                                  />
+                                </td>
+                                <td className="p-2.5 font-mono text-[11px] truncate max-w-[140px]">
+                                  {ch.folder_name}
+                                </td>
+                                <td className="p-2.5 font-bold text-[var(--text-primary)]">
+                                  {ch.chapter_number}
+                                </td>
+                                <td className="p-2.5 truncate max-w-[120px] text-[var(--text-secondary)]">
+                                  {ch.title || "-"}
+                                </td>
+                                <td className="p-2.5 font-bold">{ch.page_count}</td>
+                                <td className="p-2.5">
+                                  {ch.is_duplicate ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px]">
+                                      Đã có sẵn
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                                      Mới
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Conflict handling options */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="font-bold text-[var(--text-secondary)] block mb-1">
+                          Xử lý khi trùng chapter
+                        </label>
+                        <select
+                          value={conflictStrategy}
+                          onChange={(e: any) => setConflictStrategy(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] font-semibold text-[var(--text-primary)]"
+                        >
+                          <option value="skip">Bỏ qua chapter đã có (Skip)</option>
+                          <option value="overwrite">Ghi đè chapter cũ (Overwrite)</option>
+                          <option value="keep_both">Lưu cả hai bản (Keep Both)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-[var(--text-secondary)] block mb-1">
+                          Ngôn ngữ mặc định
+                        </label>
+                        <select
+                          value={importLang}
+                          onChange={(e) => setImportLang(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] font-semibold text-[var(--text-primary)] uppercase"
+                        >
+                          <option value="en">English (EN)</option>
+                          <option value="vi">Tiếng Việt (VI)</option>
+                          <option value="ja">Japanese (JA)</option>
+                          <option value="ru">Russian (RU)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {importMessage && (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold animate-in fade-in">
+                        {importMessage}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            {importProgress ? (
               <div className="p-4 border-t border-[var(--border-primary)] bg-[var(--bg-primary)] flex items-center justify-between">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  Đã chọn: <strong>{selectedImportFolders.length}</strong> chapter(s)
+                <span className="text-xs text-[var(--text-secondary)] font-medium">
+                  {importProgress.status === "running" && (
+                    <span className="flex items-center gap-1.5 text-indigo-500">
+                      <Loader2 size={13} className="animate-spin" />
+                      Vui lòng giữ cửa sổ để duy trì kết nối truyền tải dữ liệu.
+                    </span>
+                  )}
+                  {importProgress.status === "completed" && (
+                    <span className="text-emerald-500 font-bold flex items-center gap-1">
+                      <Check size={14} />
+                      Dữ liệu đã sẵn sàng trong thư viện Manga
+                    </span>
+                  )}
+                  {importProgress.status === "error" && (
+                    <span className="text-rose-500 font-bold">
+                      Đã dừng do phát sinh lỗi.
+                    </span>
+                  )}
                 </span>
                 <div className="space-x-3">
-                  <button
-                    onClick={() => setIsImportModalOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)]"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={handleExecuteImport}
-                    disabled={importing || selectedImportFolders.length === 0}
-                    className="px-5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition disabled:opacity-50 flex items-center space-x-1.5"
-                  >
-                    {importing && <Loader2 size={14} className="animate-spin" />}
-                    <span>Bắt đầu Import</span>
-                  </button>
+                  {importProgress.status === "running" ? (
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-zinc-400 cursor-not-allowed opacity-60"
+                    >
+                      Đang xử lý...
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleResetImportModal}
+                      className="px-5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <Check size={14} />
+                      <span>{importProgress.status === "completed" ? "Mở danh sách Chapters" : "Đóng cửa sổ"}</span>
+                    </button>
+                  )}
                 </div>
               </div>
+            ) : (
+              scanResult && scanResult.detected_chapters.length > 0 && (
+                <div className="p-4 border-t border-[var(--border-primary)] bg-[var(--bg-primary)] flex items-center justify-between">
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    Đã chọn: <strong>{selectedImportFolders.length}</strong> chapter(s)
+                  </span>
+                  <div className="space-x-3">
+                    <button
+                      onClick={() => setIsImportModalOpen(false)}
+                      className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleExecuteImport}
+                      disabled={importing || selectedImportFolders.length === 0}
+                      className="px-5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition disabled:opacity-50 flex items-center space-x-1.5"
+                    >
+                      {importing && <Loader2 size={14} className="animate-spin" />}
+                      <span>Bắt đầu Import</span>
+                    </button>
+                  </div>
+                </div>
+              )
             )}
           </div>
         </div>

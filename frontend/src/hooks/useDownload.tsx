@@ -17,6 +17,15 @@ export interface DownloadTask {
   current_page_number?: number;
   current_page_total?: number;
   current_page_preview?: string;
+  current_filename?: string;
+  current_file_size?: number;
+  speed_pages_per_sec?: number;
+  speed_mb_per_sec?: number;
+  elapsed_seconds?: number;
+  eta_seconds?: number;
+  total_pages_downloaded?: number;
+  total_bytes_downloaded?: number;
+  remaining_chapters?: number;
   created_at: string;
   updated_at: string;
 }

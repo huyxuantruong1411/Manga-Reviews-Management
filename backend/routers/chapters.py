@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Path, Query, Body, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.services.chapter_service import chapter_service
@@ -119,6 +120,26 @@ async def import_local_folder(
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         logger.error(f"Error importing folder for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/manga/{manga_id}/import-folder-stream")
+async def import_local_folder_stream(
+    manga_id: str = Path(...),
+    payload: FolderImportRequest = Body(...)
+):
+    """Import chapters and pages with granular, real-time SSE progress streaming."""
+    try:
+        generator = chapter_service.stream_import_local_folder(
+            manga_id=manga_id,
+            folder_path=payload.folder_path,
+            conflict_strategy=payload.conflict_strategy,
+            default_language=payload.default_language,
+            default_group=payload.default_group,
+            selected_folders=payload.selected_folders
+        )
+        return StreamingResponse(generator, media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Error starting import stream for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/manga/{manga_id}/storage-duplicates", response_model=List[StorageDuplicateGroup])

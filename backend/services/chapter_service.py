@@ -1,10 +1,15 @@
 import os
 import re
 import uuid
+import time
+import json
+import io
+import base64
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
+from PIL import Image
 
 from backend.database.connection import get_db
 from backend.services.minio_service import minio_service
@@ -529,6 +534,208 @@ class ChapterService:
             "total_pages_imported": total_pages_imported,
             "errors": errors
         }
+
+    async def stream_import_local_folder(
+        self,
+        manga_id: str,
+        folder_path: str,
+        conflict_strategy: str = "skip",
+        default_language: str = "en",
+        default_group: Optional[str] = None,
+        selected_folders: Optional[List[str]] = None
+    ):
+        """
+        Async generator yielding SSE events with real-time granular progress for folder import.
+        """
+        start_time = time.time()
+        scan_res = await self.scan_local_folder(folder_path, manga_id)
+        if not scan_res.is_valid:
+            yield f"data: {json.dumps({'type': 'error', 'error': scan_res.message})}\n\n"
+            return
+
+        target_chapters = scan_res.detected_chapters
+        if selected_folders is not None and len(selected_folders) > 0:
+            selected_set = set(selected_folders)
+            target_chapters = [c for c in target_chapters if c.folder_name in selected_set]
+
+        total_chapters = len(target_chapters)
+        total_pages_overall = sum(len(c.image_files) for c in target_chapters)
+
+        yield f"data: {json.dumps({'type': 'init', 'total_chapters': total_chapters, 'total_pages': total_pages_overall, 'manga_id': manga_id})}\n\n"
+
+        imported_count = 0
+        skipped_count = 0
+        total_pages_imported = 0
+        total_bytes_uploaded = 0
+        errors = []
+
+        for chap_idx, ch in enumerate(target_chapters, 1):
+            try:
+                # Check conflict
+                if ch.is_duplicate:
+                    if conflict_strategy == "skip":
+                        skipped_count += 1
+                        yield f"data: {json.dumps({'type': 'chapter_skipped', 'chapter_number': ch.chapter_number, 'chapter_title': ch.title, 'folder_name': ch.folder_name, 'reason': 'Đã có sẵn trong hệ thống (Skip)', 'chapter_index': chap_idx, 'total_chapters': total_chapters})}\n\n"
+                        continue
+                    elif conflict_strategy == "overwrite" and ch.existing_chapter_id:
+                        await self.delete_chapter(ch.existing_chapter_id)
+                    elif conflict_strategy == "keep_both":
+                        ch.title = f"{ch.title} (Imported)" if ch.title else "Imported"
+
+                chapter_id = str(uuid.uuid4())
+                page_items: List[PageItem] = []
+                chap_pages_count = len(ch.image_files)
+
+                yield f"data: {json.dumps({'type': 'chapter_start', 'chapter_number': ch.chapter_number, 'chapter_title': ch.title, 'folder_name': ch.folder_name, 'chapter_index': chap_idx, 'total_chapters': total_chapters, 'chapter_page_count': chap_pages_count})}\n\n"
+
+                for page_idx, img_file in enumerate(ch.image_files, 1):
+                    img_path = os.path.join(ch.folder_path, img_file)
+                    with open(img_path, "rb") as f:
+                        file_data = f.read()
+
+                    ext = os.path.splitext(img_file)[1].lower()
+                    target_filename = f"{page_idx:03d}{ext}"
+                    content_type = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
+
+                    obj_key, fsize, width, height, md5_h = minio_service.upload_chapter_page(
+                        manga_id=manga_id,
+                        chapter_id=chapter_id,
+                        filename=target_filename,
+                        data=file_data,
+                        content_type=content_type
+                    )
+
+                    page_items.append(PageItem(
+                        page_number=page_idx,
+                        filename=target_filename,
+                        object_key=obj_key,
+                        file_size=fsize,
+                        width=width,
+                        height=height,
+                        md5_hash=md5_h
+                    ))
+
+                    total_pages_imported += 1
+                    total_bytes_uploaded += fsize
+                    elapsed = max(0.05, time.time() - start_time)
+                    speed = total_pages_imported / elapsed
+                    remaining_pages = max(0, total_pages_overall - total_pages_imported)
+                    eta = remaining_pages / max(0.1, speed)
+                    overall_percent = (total_pages_imported / max(1, total_pages_overall)) * 100
+
+                    preview_base64 = None
+                    if page_idx == 1 or page_idx % 3 == 0:
+                        try:
+                            with Image.open(io.BytesIO(file_data)) as thumb_img:
+                                thumb_img.thumbnail((140, 190), Image.Resampling.LANCZOS)
+                                if thumb_img.mode in ("RGBA", "P"):
+                                    thumb_img = thumb_img.convert("RGB")
+                                buf = io.BytesIO()
+                                thumb_img.save(buf, format="JPEG", quality=70)
+                                preview_base64 = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+                        except Exception:
+                            pass
+
+                    yield f"data: {json.dumps({
+                        'type': 'page_progress',
+                        'chapter_number': ch.chapter_number,
+                        'chapter_title': ch.title,
+                        'chapter_index': chap_idx,
+                        'total_chapters': total_chapters,
+                        'remaining_chapters': max(0, total_chapters - chap_idx),
+                        'page_number': page_idx,
+                        'chapter_page_count': chap_pages_count,
+                        'total_pages_done': total_pages_imported,
+                        'total_pages_overall': total_pages_overall,
+                        'remaining_pages': remaining_pages,
+                        'filename': img_file,
+                        'file_size': fsize,
+                        'total_bytes_uploaded': total_bytes_uploaded,
+                        'speed_pages_per_sec': round(speed, 1),
+                        'speed_mb_per_sec': round((total_bytes_uploaded / (1024 * 1024)) / elapsed, 2),
+                        'elapsed_seconds': round(elapsed, 1),
+                        'eta_seconds': round(eta, 1),
+                        'percent': round(overall_percent, 1),
+                        'preview_base64': preview_base64
+                    })}\n\n"
+
+                # Insert Chapter to DB
+                now = datetime.utcnow()
+                group_val = ch.scanlation_group or default_group or None
+                chapter_doc = {
+                    "_id": ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id,
+                    "manga_id": manga_id,
+                    "chapter_number": ch.chapter_number,
+                    "chapter_numeric": ch.chapter_numeric,
+                    "volume": ch.volume,
+                    "title": ch.title,
+                    "language": default_language,
+                    "scanlation_group": group_val,
+                    "source": "local_import",
+                    "pages": [p.dict() for p in page_items],
+                    "page_count": len(page_items),
+                    "created_at": now,
+                    "updated_at": now
+                }
+
+                await self._get_chapters_col().insert_one(chapter_doc)
+                imported_count += 1
+
+                yield f"data: {json.dumps({
+                    'type': 'chapter_done',
+                    'chapter_number': ch.chapter_number,
+                    'chapter_title': ch.title,
+                    'chapter_index': chap_idx,
+                    'total_chapters': total_chapters,
+                    'page_count': len(page_items),
+                    'message': f'Hoàn thành Chapter {ch.chapter_number} ({len(page_items)} trang)'
+                })}\n\n"
+
+            except Exception as e:
+                logger.error(f"Error importing chapter '{ch.folder_name}': {e}")
+                errors.append({"folder": ch.folder_name, "error": str(e)})
+                yield f"data: {json.dumps({
+                    'type': 'chapter_error',
+                    'chapter_number': ch.chapter_number,
+                    'folder_name': ch.folder_name,
+                    'error': str(e)
+                })}\n\n"
+
+        # Log audit event
+        try:
+            manga_doc = await self._get_mangas_col().find_one({"_id": ObjectId(manga_id)})
+            manga_title = manga_doc.get("title") if manga_doc else None
+            await audit_service.log_event(
+                entity_type="manga",
+                entity_id=manga_id,
+                entity_title=manga_title,
+                action="import_chapters",
+                field="chapters",
+                old_value=None,
+                new_value=f"Imported {imported_count} chapter(s)",
+                actor="user",
+                note=f"Imported {imported_count} chapters ({total_pages_imported} pages) from {folder_path}",
+                details={
+                    "folder_path": folder_path,
+                    "imported_count": imported_count,
+                    "total_pages": total_pages_imported,
+                    "skipped_count": skipped_count
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error logging import audit: {e}")
+
+        total_elapsed = round(time.time() - start_time, 1)
+        yield f"data: {json.dumps({
+            'type': 'complete',
+            'imported_chapters': imported_count,
+            'total_pages_imported': total_pages_imported,
+            'skipped_chapters': skipped_count,
+            'total_bytes_uploaded': total_bytes_uploaded,
+            'elapsed_seconds': total_elapsed,
+            'errors': errors
+        })}\n\n"
+
 
     async def scan_storage_duplicates(self, manga_id: str, chapter_id: Optional[str] = None) -> List[StorageDuplicateGroup]:
         """

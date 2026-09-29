@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDownload } from "../../hooks/useDownload";
 import type { DownloadTask } from "../../hooks/useDownload";
-import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks, Play, RotateCcw, Trash2 } from "lucide-react";
+import { Download, AlertTriangle, Loader2, StopCircle, ChevronDown, ListChecks, Play, RotateCcw, Trash2, Zap, Clock } from "lucide-react";
 
 export const DownloadWidget: React.FC = () => {
   const navigate = useNavigate();
@@ -81,6 +81,12 @@ export const DownloadWidget: React.FC = () => {
             <div className="space-y-1">
               <div className="flex justify-between text-[9px] font-extrabold text-[var(--brand-orange)] uppercase tracking-wider">
                 <span>Page {task.current_page_number} / {task.current_page_total}</span>
+                {task.speed_pages_per_sec != null && (
+                  <span className="text-amber-500 font-bold lowercase flex items-center gap-0.5">
+                    <Zap size={9} />
+                    {task.speed_pages_per_sec} trang/s
+                  </span>
+                )}
               </div>
               <div className="w-full bg-zinc-200 dark:bg-zinc-850 h-1 rounded-full overflow-hidden shadow-inner">
                 <div
@@ -88,6 +94,15 @@ export const DownloadWidget: React.FC = () => {
                   style={{ width: `${(task.current_page_number / task.current_page_total) * 100}%` }}
                 />
               </div>
+              {(task.eta_seconds != null && task.eta_seconds > 0) && (
+                <div className="flex justify-between text-[8px] font-medium text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <Clock size={9} className="text-emerald-500" />
+                    ETA ~{Math.floor(task.eta_seconds / 60)}:{Math.floor(task.eta_seconds % 60).toString().padStart(2, "0")}
+                  </span>
+                  {task.current_filename && <span className="truncate max-w-[90px] font-mono">{task.current_filename}</span>}
+                </div>
+              )}
             </div>
           ) : (
             <span className="text-[10px] text-zinc-400 italic">Connecting to source...</span>
