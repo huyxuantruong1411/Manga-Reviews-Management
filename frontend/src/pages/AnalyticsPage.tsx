@@ -1258,7 +1258,9 @@ export const AnalyticsPage: React.FC = () => {
                     { code: "ja", label: "Japanese (ja)" },
                     { code: "ko", label: "Korean (ko)" },
                     { code: "zh", label: "Chinese (zh)" },
-                    { code: "en", label: "English (en)" }
+                    { code: "en", label: "English (en)" },
+                    { code: "vi", label: "Vietnamese (vi)" },
+                    { code: "ru", label: "Russian (ru)" }
                   ].map((lang) => {
                     const isSel = originalLanguages.includes(lang.code);
                     return (

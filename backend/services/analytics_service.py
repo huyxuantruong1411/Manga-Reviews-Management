@@ -656,7 +656,18 @@ class AnalyticsService:
         lang_dist = {l["_id"] or "Unknown": l["count"] for l in lang_res}
 
         # Pretty language names
-        lang_names = {"ja": "Japanese", "ko": "Korean", "zh": "Chinese", "en": "English", "Unknown": "Unknown"}
+        lang_names = {
+            "ja": "Japanese",
+            "ko": "Korean",
+            "zh": "Chinese",
+            "en": "English",
+            "vi": "Vietnamese",
+            "ru": "Russian",
+            "fr": "French",
+            "de": "German",
+            "es": "Spanish",
+            "Unknown": "Unknown"
+        }
         
         # Content Rating
         content_rating_pipeline = [

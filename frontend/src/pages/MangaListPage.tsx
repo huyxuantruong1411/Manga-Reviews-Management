@@ -1018,7 +1018,9 @@ export const MangaListPage: React.FC = () => {
                     { code: "ja", label: "Japanese (ja)" },
                     { code: "ko", label: "Korean (ko)" },
                     { code: "zh", label: "Chinese (zh)" },
-                    { code: "en", label: "English (en)" }
+                    { code: "en", label: "English (en)" },
+                    { code: "vi", label: "Vietnamese (vi)" },
+                    { code: "ru", label: "Russian (ru)" }
                   ].map((lang) => {
                     const isSel = originalLanguages.includes(lang.code);
                     return (
@@ -2321,6 +2323,7 @@ export const MangaListPage: React.FC = () => {
                         <option value="zh">Chinese (zh)</option>
                         <option value="en">English (en)</option>
                         <option value="vi">Vietnamese (vi)</option>
+                        <option value="ru">Russian (ru)</option>
                       </select>
                     </div>
 

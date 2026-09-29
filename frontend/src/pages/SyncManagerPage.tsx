@@ -1995,7 +1995,7 @@ export const SyncManagerPage: React.FC = () => {
                   <div>
                     <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Original Languages</label>
                     <div className="flex flex-wrap gap-1.5">
-                      {["ja", "ko", "zh", "en", "vi"].map((lang) => {
+                      {["ja", "ko", "zh", "en", "vi", "ru"].map((lang) => {
                         const active = poolLanguages.includes(lang);
                         return (
                           <button
