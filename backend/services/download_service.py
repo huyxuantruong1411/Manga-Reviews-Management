@@ -12,6 +12,7 @@ from PIL import Image
 from backend.database.connection import get_db
 from backend.services.mangadex_service import mangadex_service
 from backend.utils.file_utils import clean_filename, normalize_windows_path
+from backend.services.audit_service import audit_service
 from backend.config import settings
 
 
@@ -324,16 +325,18 @@ class DownloadService:
                         )
                         
                         # Add audit log entry
-                        await get_db().audit_logs.insert_one({
-                            "entity_type": "manga",
-                            "entity_id": manga_id,
-                            "action": "update_metadata",
-                            "field": "download_path",
-                            "old_value": old_download_path,
-                            "new_value": abs_target_dir,
-                            "timestamp": datetime.utcnow(),
-                            "note": "Updated download path on successful download"
-                        })
+                        await audit_service.log_event(
+                            entity_type="manga",
+                            entity_id=manga_id,
+                            entity_title=manga_doc.get("title") if manga_doc else None,
+                            action="download_completed",
+                            field="download_path",
+                            old_value=old_download_path,
+                            new_value=abs_target_dir,
+                            actor="system",
+                            note=f"Downloaded {len(chapters_data)} chapter(s) to disk",
+                            details={"download_path": abs_target_dir, "chapters_count": len(chapters_data)}
+                        )
                     except Exception as db_err:
                         logger.error(f"Error saving download_path for manga {manga_id}: {db_err}")
                 

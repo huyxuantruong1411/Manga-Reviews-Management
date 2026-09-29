@@ -12,6 +12,7 @@ import mimetypes
 from backend.database.connection import get_db
 from backend.models.review import ReviewResponse, ReviewCreate, ReviewUpdate
 from backend.services.minio_service import minio_service
+from backend.services.audit_service import audit_service
 from backend.config import settings
 import uuid as uuid_lib
 import httpx
@@ -91,15 +92,16 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
     review_doc["_id"] = str(res.inserted_id)
     
     # Audit log
-    await get_db().audit_logs.insert_one({
-        "entity_type": "manga",
-        "entity_id": manga_id,
-        "action": "create_review",
-        "field": "reviews",
-        "new_value": str(res.inserted_id),
-        "timestamp": datetime.utcnow(),
-        "note": f"Created review: {data.title}"
-    })
+    await audit_service.log_event(
+        entity_type="manga",
+        entity_id=manga_id,
+        entity_title=manga.get("title") if manga else None,
+        action="create_review",
+        field="reviews",
+        new_value=data.title,
+        note=f"Created review: {data.title}",
+        details={"review_id": str(res.inserted_id), "title": data.title}
+    )
     
     return review_doc
 
@@ -124,6 +126,25 @@ async def update_review(manga_id: str = Path(...), review_id: str = Path(...), d
         update_dict["updated_at"] = datetime.utcnow()
         await coll.update_one({"_id": ObjectId(review_id)}, {"$set": update_dict})
         
+        # Audit log for review modification
+        changes = []
+        if data.title is not None and data.title != existing.get("title"):
+            changes.append(f"title changed to '{data.title}'")
+        if data.content_json is not None:
+            changes.append("content updated")
+        review_title = data.title or existing.get("title", "Review")
+        note_str = f"Updated review '{review_title}': {', '.join(changes) if changes else 'saved changes'}"
+        await audit_service.log_event(
+            entity_type="manga",
+            entity_id=manga_id,
+            action="update_review",
+            field="reviews",
+            old_value=existing.get("title"),
+            new_value=data.title or existing.get("title"),
+            note=note_str,
+            details={"review_id": review_id, "title": review_title}
+        )
+        
     updated = await coll.find_one({"_id": ObjectId(review_id)})
     if updated and "_id" in updated:
         updated["_id"] = str(updated["_id"])
@@ -136,6 +157,10 @@ async def delete_review(manga_id: str = Path(...), review_id: str = Path(...)):
         raise HTTPException(status_code=400, detail="Invalid review ID")
         
     coll = get_db().reviews
+    existing = await coll.find_one({"_id": ObjectId(review_id), "manga_id": manga_id, "is_deleted": {"$ne": True}})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Review not found")
+
     res = await coll.update_one(
         {"_id": ObjectId(review_id), "manga_id": manga_id},
         {"$set": {"is_deleted": True, "updated_at": datetime.utcnow()}}
@@ -144,15 +169,16 @@ async def delete_review(manga_id: str = Path(...), review_id: str = Path(...)):
         raise HTTPException(status_code=404, detail="Review not found")
         
     # Audit log
-    await get_db().audit_logs.insert_one({
-        "entity_type": "manga",
-        "entity_id": manga_id,
-        "action": "delete_review",
-        "field": "reviews",
-        "old_value": review_id,
-        "timestamp": datetime.utcnow(),
-        "note": "Deleted review"
-    })
+    review_title = existing.get("title", "Review")
+    await audit_service.log_event(
+        entity_type="manga",
+        entity_id=manga_id,
+        action="delete_review",
+        field="reviews",
+        old_value=review_title,
+        note=f"Deleted review: {review_title}",
+        details={"review_id": review_id, "title": review_title}
+    )
     return None
 
 @router.post("/{manga_id}/reviews/{review_id}/cleanup", response_model=ReviewResponse)

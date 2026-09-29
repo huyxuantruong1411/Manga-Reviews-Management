@@ -8,6 +8,7 @@ from backend.models.manga import MangaCreate, MangaCreateDex, MangaUpdate, ReadS
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
 from backend.services.tracker_service import fetch_tracker_metadata
+from backend.services.audit_service import audit_service
 
 
 logger = logging.getLogger(__name__)
@@ -57,29 +58,22 @@ class MangaService:
         return get_db().audit_logs
 
     async def log_action(self, manga_id: str, action: str, field: Optional[str] = None, 
-                         old_val: Any = None, new_val: Any = None, note: Optional[str] = None):
-        """Helper to create an audit log entry."""
-        def get_val_str(val):
-            if val is None:
-                return None
-            if hasattr(val, "value"):
-                return str(val.value)
-            val_str = str(val)
-            if val_str.startswith("ReadStatus."):
-                return val_str.split(".", 1)[1].lower()
-            return val_str
-
-        log_doc = {
-            "entity_type": "manga",
-            "entity_id": manga_id,
-            "action": action,
-            "field": field,
-            "old_value": get_val_str(old_val),
-            "new_value": get_val_str(new_val),
-            "timestamp": datetime.utcnow(),
-            "note": note
-        }
-        await self._get_audit_collection().insert_one(log_doc)
+                         old_val: Any = None, new_val: Any = None, note: Optional[str] = None,
+                         entity_title: Optional[str] = None, actor: str = "user",
+                         details: Optional[Dict[str, Any]] = None):
+        """Helper to create an audit log entry via audit_service."""
+        await audit_service.log_event(
+            entity_type="manga",
+            entity_id=manga_id,
+            action=action,
+            entity_title=entity_title,
+            field=field,
+            old_value=old_val,
+            new_value=new_val,
+            note=note,
+            actor=actor,
+            details=details
+        )
 
     async def get_mangas(self, search: Optional[str] = None, read_status: Optional[str] = None,
                          read_statuses: Optional[List[str]] = None, exclude_read_statuses: Optional[List[str]] = None,
@@ -91,6 +85,7 @@ class MangaService:
                          artists: Optional[List[str]] = None, rating_min: Optional[float] = None,
                          rating_max: Optional[float] = None, year: Optional[str] = None,
                          year_start: Optional[str] = None, year_end: Optional[str] = None,
+                         is_manual: Optional[bool] = None,
                          sort_by: str = "added_at", sort_order: str = "desc",
                          skip: int = 0, limit: int = 20) -> Dict[str, Any]:
         
@@ -136,6 +131,12 @@ class MangaService:
             
         if exclude_read_statuses:
             clauses.append({"read_status": {"$nin": exclude_read_statuses}})
+            
+        # Filter manual manga vs MangaDex imported manga
+        if is_manual is True:
+            clauses.append({"$or": [{"mangadex_id": None}, {"mangadex_id": ""}]})
+        elif is_manual is False:
+            clauses.append({"mangadex_id": {"$nin": [None, ""]}})
             
         # Tag inclusion and exclusion
         tag_clause = {}
@@ -425,11 +426,12 @@ class MangaService:
         await self._get_mangas_collection().insert_one(manga_doc)
         
         # Audit Log
-        await self.log_action(str(manga_id), "create", note="Added from MangaDex UUID")
+        title = details.get('title')
+        await self.log_action(str(manga_id), "create", entity_title=title, note="Added from MangaDex UUID")
         if dex_data.read_status != ReadStatus.UNREAD:
-            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, dex_data.read_status)
+            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, dex_data.read_status, entity_title=title, note=f"Set initial status to {dex_data.read_status}")
         if dex_data.personal_rating is not None:
-            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating))
+            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating), entity_title=title, note=f"Set initial rating to {dex_data.personal_rating}")
             
         # Proactively sync cover art gallery and recommendations
         try:
@@ -574,11 +576,12 @@ class MangaService:
 
         await self._get_mangas_collection().insert_one(manga_doc)
         
-        await self.log_action(str(manga_id), "create", note="Added from MangaDex UUID")
+        title = dex_data.title if hasattr(dex_data, "title") else details.get("title")
+        await self.log_action(str(manga_id), "create", entity_title=title, note="Imported via MangaDex URL/Search")
         if dex_data.read_status != ReadStatus.UNREAD:
-            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, dex_data.read_status)
+            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, dex_data.read_status, entity_title=title, note=f"Set initial status to {dex_data.read_status}")
         if dex_data.personal_rating is not None:
-            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating))
+            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(dex_data.personal_rating), entity_title=title, note=f"Set initial rating to {dex_data.personal_rating}")
             
         # Step 6: Sync cover art, recommendations & tracker metadata
         yield {"step": "sync_assets", "message": "Fetching alternative covers, recommendations & tracker metadata...", "progress": 95}
@@ -660,11 +663,11 @@ class MangaService:
         await self._get_mangas_collection().insert_one(manga_doc)
         
         # Audit Log
-        await self.log_action(str(manga_id), "create", note="Added manually")
+        await self.log_action(str(manga_id), "create", entity_title=manual_data.title, note="Added manually")
         if manual_data.read_status != ReadStatus.UNREAD:
-            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, manual_data.read_status)
+            await self.log_action(str(manga_id), "update_status", "read_status", ReadStatus.UNREAD, manual_data.read_status, entity_title=manual_data.title, note=f"Set initial status to {manual_data.read_status}")
         if manual_data.personal_rating is not None:
-            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(manual_data.personal_rating))
+            await self.log_action(str(manga_id), "update_rating", "personal_rating", None, str(manual_data.personal_rating), entity_title=manual_data.title, note=f"Set initial rating to {manual_data.personal_rating}")
 
         manga_doc["cover_url"] = minio_service.get_presigned_url(minio_cover_key) if minio_cover_key else None
         return serialize_doc(manga_doc)
@@ -678,6 +681,7 @@ class MangaService:
         if not existing:
             return None
 
+        manga_title = existing.get("title")
         update_dict = {}
         data = update_data.dict(exclude_unset=True)
         
@@ -689,23 +693,24 @@ class MangaService:
                 
                 # Create audit log entries for key updates
                 if field == "read_status":
-                    await self.log_action(manga_id, "update_status", "read_status", str(old_val), str(new_val))
+                    await self.log_action(manga_id, "update_status", "read_status", str(old_val), str(new_val), entity_title=manga_title, note=f"Changed status from {old_val} to {new_val}")
                     new_status_str = str(new_val).lower()
                     if new_status_str.startswith("readstatus."):
                         new_status_str = new_status_str.split(".", 1)[1]
                     status_field = f"{new_status_str}_at"
                     update_dict[status_field] = datetime.utcnow()
                 elif field == "personal_rating":
-                    await self.log_action(manga_id, "update_rating", "personal_rating", str(old_val), str(new_val))
+                    old_rating_str = str(old_val) if old_val is not None else "Not rated"
+                    await self.log_action(manga_id, "update_rating", "personal_rating", str(old_val), str(new_val), entity_title=manga_title, note=f"Changed rating from {old_rating_str} to {new_val}")
                 else:
-                    await self.log_action(manga_id, "update_metadata", field, str(old_val), str(new_val))
+                    await self.log_action(manga_id, "update_metadata", field, str(old_val), str(new_val), entity_title=manga_title, note=f"Updated {field}")
 
         # Handle cover file upload
         if new_cover_file:
             minio_cover_key = existing.get("minio_cover_key") or f"covers/{manga_id}.jpg"
             minio_service.upload_cover(minio_cover_key, new_cover_file)
             update_dict["minio_cover_key"] = minio_cover_key
-            await self.log_action(manga_id, "update_cover", "minio_cover_key", existing.get("minio_cover_key"), minio_cover_key)
+            await self.log_action(manga_id, "update_cover", "minio_cover_key", existing.get("minio_cover_key"), minio_cover_key, entity_title=manga_title, note="Updated cover art image")
 
         if not update_dict and not new_cover_file:
             return existing
@@ -745,12 +750,20 @@ class MangaService:
         # Delete reviews (or soft delete)
         await get_db().reviews.update_many({"manga_id": manga_id}, {"$set": {"is_deleted": True, "updated_at": datetime.utcnow()}})
         
+        # Record deletion in audit log before removing
+        await audit_service.log_event(
+            entity_type="manga",
+            entity_id=manga_id,
+            action="delete",
+            entity_title=manga.get("title"),
+            note=f"Deleted manga: {manga.get('title')}",
+            details={"mangadex_id": manga.get("mangadex_id"), "author": manga.get("author")}
+        )
+
         # Delete manga
         await coll.delete_one({"_id": ObjectId(manga_id)})
         
-        # Clean up audit logs
-        await self._get_audit_collection().delete_many({"entity_id": manga_id})
-        
+        # Note: We preserve audit logs so historical operations remain trackable.
         return True
 
     async def sync_manga_metadata(self, manga_id: str) -> Optional[Dict[str, Any]]:
@@ -925,13 +938,6 @@ class MangaService:
         return serialize_doc(manga)
 
     async def get_manga_history(self, manga_id: str) -> List[Dict[str, Any]]:
-
-        cursor = self._get_audit_collection().find({"entity_id": manga_id}).sort("timestamp", -1)
-        history = []
-        async for doc in cursor:
-            # Convert _id
-            doc["_id"] = str(doc["_id"])
-            history.append(doc)
-        return history
+        return await audit_service.get_entity_history(manga_id)
 
 manga_service = MangaService()

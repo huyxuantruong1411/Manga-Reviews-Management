@@ -21,7 +21,8 @@ def parse_list_param(param: Optional[Any]) -> Optional[List[str]]:
         return res
     return None
 
-@router.get("/", response_model=MangaPaginationResponse)
+@router.get("", response_model=MangaPaginationResponse)
+@router.get("/", response_model=MangaPaginationResponse, include_in_schema=False)
 async def list_mangas(
     search: Optional[str] = Query(None, description="Search by title, author, artist"),
     read_status: Optional[str] = Query(None, description="Filter by read status"),
@@ -43,6 +44,7 @@ async def list_mangas(
     year: Optional[str] = Query(None, description="Filter by year"),
     year_start: Optional[str] = Query(None, description="Filter by start year range"),
     year_end: Optional[str] = Query(None, description="Filter by end year range"),
+    is_manual: Optional[bool] = Query(None, description="Filter for manually added mangas (True=manual only, False=MangaDex only)"),
     sort_by: str = Query("added_at", description="Field to sort by"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     skip: int = Query(0, ge=0),
@@ -73,6 +75,7 @@ async def list_mangas(
         year=year,
         year_start=year_start,
         year_end=year_end,
+        is_manual=is_manual,
         sort_by=sort_by,
         sort_order=sort_order,
         skip=skip,

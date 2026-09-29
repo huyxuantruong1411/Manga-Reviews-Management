@@ -106,6 +106,10 @@ async def init_db_indexes():
 
         # audit_logs
         await db.audit_logs.create_index([("entity_id", 1), ("timestamp", -1)])
+        await db.audit_logs.create_index([("timestamp", -1)])
+        await db.audit_logs.create_index([("entity_type", 1), ("timestamp", -1)])
+        await db.audit_logs.create_index([("action", 1), ("timestamp", -1)])
+        await db.audit_logs.create_index([("actor", 1), ("timestamp", -1)])
 
         # tags
         await db.tags.create_index("mangadex_id", sparse=True)
