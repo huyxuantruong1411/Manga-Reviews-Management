@@ -713,7 +713,9 @@ class MangaService:
             await self.log_action(manga_id, "update_cover", "minio_cover_key", existing.get("minio_cover_key"), minio_cover_key, entity_title=manga_title, note="Updated cover art image")
 
         if not update_dict and not new_cover_file:
-            return existing
+            if existing.get("minio_cover_key"):
+                existing["cover_url"] = minio_service.get_presigned_url(existing["minio_cover_key"])
+            return serialize_doc(existing)
 
         update_dict["updated_at"] = datetime.utcnow()
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_dict})

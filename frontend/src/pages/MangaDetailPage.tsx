@@ -1166,7 +1166,11 @@ export const MangaDetailPage: React.FC = () => {
         headers: { "Content-Type": "multipart/form-data" },
       });
       
-      setManga(res.data);
+      setManga((prev) => ({
+        ...prev,
+        ...res.data,
+        cover_url: res.data.cover_url || prev?.cover_url || null,
+      }));
       // Refresh history
       const historyRes = await client.get(`/api/manga/${id}/history`);
       setHistory(historyRes.data);
@@ -1211,7 +1215,11 @@ export const MangaDetailPage: React.FC = () => {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      setManga(res.data);
+      setManga((prev) => ({
+        ...prev,
+        ...res.data,
+        cover_url: res.data.cover_url || prev?.cover_url || null,
+      }));
       setIsEditOpen(false);
       setEditCoverFile(null);
       setEditCoverPreview(null);
