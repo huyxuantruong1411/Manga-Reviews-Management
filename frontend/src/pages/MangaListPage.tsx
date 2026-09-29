@@ -1647,7 +1647,7 @@ export const MangaListPage: React.FC = () => {
                             {manga.title}
                           </a>
                           {!manga.mangadex_id && (
-                            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            <span className="inline-flex items-center ml-2.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 align-middle">
                               Manual
                             </span>
                           )}
