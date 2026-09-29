@@ -85,61 +85,16 @@ class RecommendationService:
 
     async def cleanup_duplicate_mangas(self) -> None:
         """
-        Identify and merge/delete duplicate mangas in the database (by mangadex_id).
-        Also cleans up any legacy recommendations that contain duplicate entries or the source itself.
+        Deprecated: Never delete user manga or reassign reviews automatically.
+        Unique constraints are enforced at the database index and API levels.
         """
-        db = get_db()
-        pipeline = [
-            {"$match": {"mangadex_id": {"$ne": None, "$ne": ""}}},
-            {"$group": {
-                "_id": "$mangadex_id",
-                "ids": {"$push": "$_id"},
-                "count": {"$sum": 1}
-            }},
-            {"$match": {"count": {"$gt": 1}}}
-        ]
-        
-        duplicates = []
-        cursor = db.mangas.aggregate(pipeline)
-        async for doc in cursor:
-            duplicates.append(doc)
-            
-        for dup in duplicates:
-            mangadex_id = dup["_id"]
-            all_ids = dup["ids"]
-            # Keep the first document, delete the duplicates
-            keep_id = all_ids[0]
-            delete_ids = all_ids[1:]
-            
-            logger.info(f"Deduplicating mangas for mangadex_id {mangadex_id}. Keeping {keep_id}, deleting {delete_ids}")
-            
-            # Delete duplicate mangas
-            await db.mangas.delete_many({"_id": {"$in": delete_ids}})
-            
-            # Re-associate reviews to the kept manga ID
-            await db.reviews.update_many(
-                {"manga_id": {"$in": [str(d) for d in delete_ids]}},
-                {"$set": {"manga_id": str(keep_id)}}
-            )
-            
-            # Re-associate audit logs
-            await db.audit_logs.update_many(
-                {"entity_id": {"$in": [str(d) for d in delete_ids]}},
-                {"$set": {"entity_id": str(keep_id)}}
-            )
-            
-            # Clean up cover arts and recommendations for deleted manga IDs
-            await db.cover_arts.delete_many({"manga_id": {"$in": [str(d) for d in delete_ids]}})
-            await db.manga_recommendations.delete_many({"manga_id": {"$in": [str(d) for d in delete_ids]}})
+        logger.info("cleanup_duplicate_mangas called - no-op for data safety.")
+        return
 
     async def sync_recommendations(self, manga_id: str) -> Dict[str, Any]:
         """
         Fetch recommendations from MangaDex, cache them in DB.
-        Automatically cleans up duplicate manga and recommendation errors first.
         """
-        # Run cleanup first to fix any corrupted/duplicate library data
-        await self.cleanup_duplicate_mangas()
-
         db = get_db()
         if not ObjectId.is_valid(manga_id):
             raise ValueError(f"Invalid manga ID format: {manga_id}")

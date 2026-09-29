@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -814,6 +814,7 @@ export const MangaDetailPage: React.FC = () => {
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [reviewTitle, setReviewTitle] = useState("");
   const [isCreatingReview, setIsCreatingReview] = useState(false);
+  const isSavingReviewRef = useRef(false);
 
   // Stepper sync states
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -1463,6 +1464,8 @@ export const MangaDetailPage: React.FC = () => {
             showToast("Review title is required.", "warning");
             return;
           }
+          if (isSavingReviewRef.current) return;
+          isSavingReviewRef.current = true;
           try {
             if (selectedReview) {
               const res = await client.put(`/api/manga/${manga._id}/reviews/${selectedReview._id}`, {
@@ -1477,13 +1480,15 @@ export const MangaDetailPage: React.FC = () => {
                 title: reviewTitle,
                 content_json: contentJson,
               });
-              setReviews((prev) => [res.data, ...prev]);
+              setReviews((prev) => [res.data, ...prev.filter((r) => r._id !== res.data._id)]);
               setSelectedReview(res.data);
               setIsCreatingReview(false);
               showToast("Review saved successfully!", "success");
             }
           } catch (err) {
             showToast("Failed to save review.", "error");
+          } finally {
+            isSavingReviewRef.current = false;
           }
         }}
         onBack={() => {

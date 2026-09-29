@@ -1210,29 +1210,34 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
     onSaveRef.current = onSave;
   }, [onSave]);
 
+  const isSavingRef = useRef(false);
   const handleSave = useCallback(async () => {
-    if (!editor) return;
+    if (!editor || isSavingRef.current || isSaving || uploadingMedia) return;
+    isSavingRef.current = true;
     setIsSaving(true);
     try {
       await onSaveRef.current(editor.getJSON());
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [editor]);
+  }, [editor, isSaving, uploadingMedia]);
 
   // Keyboard shortcut Ctrl+S / Cmd+S to save
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        handleSave();
+        if (!isSavingRef.current && !isSaving && !uploadingMedia) {
+          handleSave();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleSave]);
+  }, [handleSave, isSaving, uploadingMedia]);
 
   // Finalize (cleanup orphaned media) on unmount to preserve Ctrl+Z during editing session
   const reviewIdRef = useRef(reviewId);

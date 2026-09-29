@@ -2,7 +2,7 @@ from fastapi import APIRouter, Path, HTTPException, status, UploadFile, File, Re
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from bson import ObjectId
 import re
 import io
@@ -64,6 +64,19 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
     manga = await get_db().mangas.find_one({"_id": ObjectId(manga_id)})
     if not manga:
         raise HTTPException(status_code=404, detail="Manga not found")
+
+    # Anti-duplicate / idempotency check: if review with same title created within 5 seconds, return it
+    five_seconds_ago = datetime.utcnow() - timedelta(seconds=5)
+    existing_recent = await get_db().reviews.find_one({
+        "manga_id": manga_id,
+        "title": data.title,
+        "is_deleted": {"$ne": True},
+        "created_at": {"$gte": five_seconds_ago}
+    })
+    if existing_recent:
+        logger.warning(f"Duplicate review create prevented for manga {manga_id}: returning existing review {existing_recent['_id']}")
+        existing_recent["_id"] = str(existing_recent["_id"])
+        return existing_recent
 
     review_doc = {
         "manga_id": manga_id,
