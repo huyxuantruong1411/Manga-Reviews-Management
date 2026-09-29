@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowRight,
   Calendar,
   User,
   Star,
@@ -563,6 +564,9 @@ interface AuditLog {
   new_value?: string;
   timestamp: string;
   note?: string;
+  entity_title?: string;
+  actor?: string;
+  details?: any;
 }
 
 // DownloadTask interface is imported from useDownload.tsx
@@ -1523,20 +1527,115 @@ export const MangaDetailPage: React.FC = () => {
     !trackerTitles.includes(link.title.toLowerCase())
   );
 
-  const formatHistoryValue = (field: string | undefined, val: string | undefined) => {
-    if (!val) return val;
+  const formatLogTimestamp = (ts: string) => {
+    if (!ts) return "";
+    let dateStr = ts;
+    if (!dateStr.endsWith("Z") && !dateStr.includes("+") && !dateStr.includes("-", 10)) {
+      dateStr += "Z";
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime())
+      ? ts
+      : d.toLocaleString(undefined, {
+          year: "numeric",
+          month: "numeric",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        });
+  };
+
+  const formatHistoryValue = (field: string | undefined, val: any): string => {
+    if (val === null || val === undefined) return "";
+    let strVal = typeof val === "string" ? val : JSON.stringify(val);
+    if (!strVal || strVal === '""' || strVal === "null" || strVal === "[]" || strVal === "{}") {
+      return "(empty)";
+    }
+
     if (field === "tag_ids") {
       const hex24Regex = /[0-9a-fA-F]{24}/g;
-      const ids = val.match(hex24Regex);
+      const ids = strVal.match(hex24Regex);
       if (ids && ids.length > 0) {
-        const names = ids.map(id => {
-          const tag = allTags.find(t => t._id === id);
-          return tag ? tag.name.en : `Unknown (${id.slice(-4)})`;
+        const names = ids.map((id) => {
+          const tag = allTags.find((t) => t._id === id);
+          return tag ? tag.name.en : `Tag(${id.slice(-4)})`;
         });
-        return `[${names.map(name => `'${name}'`).join(", ")}]`;
+        return names.join(", ");
       }
     }
-    return val;
+
+    if (field === "alt_titles") {
+      try {
+        const cleaned = strVal.replace(/'/g, '"');
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item: string) => {
+              if (typeof item === "string" && item.includes("|")) {
+                const [lang, ...rest] = item.split("|");
+                return `[${lang.toUpperCase()}] ${rest.join("|")}`;
+              }
+              return item;
+            })
+            .join(", ");
+        }
+      } catch {
+        const items = strVal.match(/'([^']+)'/g);
+        if (items) {
+          return items
+            .map((s) => s.replace(/'/g, ""))
+            .map((item) => {
+              if (item.includes("|")) {
+                const [lang, ...rest] = item.split("|");
+                return `[${lang.toUpperCase()}] ${rest.join("|")}`;
+              }
+              return item;
+            })
+            .join(", ");
+        }
+      }
+    }
+
+    if (field === "read_status") {
+      return strVal.replace(/_/g, " ").toUpperCase();
+    }
+
+    if (field === "personal_rating") {
+      return strVal ? `${strVal} / 10 ★` : "None";
+    }
+
+    return strVal;
+  };
+
+  const getActionBadge = (action: string) => {
+    const norm = (action || "").toLowerCase();
+    if (norm.includes("create") && norm.includes("review")) {
+      return { label: "Review Added", bg: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" };
+    }
+    if (norm.includes("update") && norm.includes("review")) {
+      return { label: "Review Updated", bg: "bg-blue-500/10 text-blue-500 border-blue-500/20" };
+    }
+    if (norm.includes("delete") && norm.includes("review")) {
+      return { label: "Review Deleted", bg: "bg-red-500/10 text-red-500 border-red-500/20" };
+    }
+    if (norm === "create") {
+      return { label: "Manga Created", bg: "bg-green-500/10 text-green-500 border-green-500/20" };
+    }
+    if (norm.includes("status")) {
+      return { label: "Status Updated", bg: "bg-purple-500/10 text-purple-500 border-purple-500/20" };
+    }
+    if (norm.includes("rating")) {
+      return { label: "Rating Updated", bg: "bg-amber-500/10 text-amber-500 border-amber-500/20" };
+    }
+    if (norm.includes("metadata")) {
+      return { label: "Metadata Updated", bg: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" };
+    }
+    if (norm.includes("download")) {
+      return { label: "Download Completed", bg: "bg-teal-500/10 text-teal-500 border-teal-500/20" };
+    }
+    return { label: action.replace(/_/g, " "), bg: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" };
   };
 
   return (
@@ -2304,36 +2403,63 @@ export const MangaDetailPage: React.FC = () => {
               </h3>
 
               {history.length > 0 ? (
-                <div className="relative border-l border-zinc-200 dark:border-zinc-800 pl-4 space-y-6 ml-2">
-                  {history.map((log) => (
-                    <div key={log._id} className="relative">
-                      {/* Circle marker */}
-                      <div className="absolute -left-[21px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)]" />
-                      
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-[var(--text-secondary)] font-semibold block">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </span>
-                        <p className="text-xs text-[var(--text-primary)]">
-                          <strong className="capitalize">{log.action.replace("_", " ")}</strong>
-                          {log.field && (
-                            <span>
-                              {" "}
-                              on <code className="px-1 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded">{log.field}</code>
+                <div className="relative border-l-2 border-zinc-200 dark:border-zinc-800/80 pl-4 space-y-5 ml-2.5">
+                  {history.map((log) => {
+                    const badge = getActionBadge(log.action);
+                    const formattedOld = formatHistoryValue(log.field, log.old_value);
+                    const formattedNew = formatHistoryValue(log.field, log.new_value);
+                    const hasDiff =
+                      (log.old_value !== null && log.old_value !== undefined && log.old_value !== "") ||
+                      (log.new_value !== null && log.new_value !== undefined && log.new_value !== "");
+                    const isDiffMeaningful = hasDiff && formattedOld !== formattedNew;
+
+                    return (
+                      <div key={log._id} className="relative group">
+                        {/* Circle marker */}
+                        <div className="absolute -left-[23px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)] shadow-sm group-hover:scale-110 transition-transform" />
+
+                        <div className="space-y-1.5 bg-zinc-500/5 dark:bg-zinc-800/20 p-3 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60">
+                          {/* Header: Action badge & Timestamp */}
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-md border ${badge.bg}`}>
+                                {badge.label}
+                              </span>
+                              {log.field && (
+                                <span className="text-[11px] text-[var(--text-secondary)]">
+                                  on <code className="px-1.5 py-0.5 bg-zinc-200/70 dark:bg-zinc-800 text-[var(--text-primary)] rounded font-mono text-[10px]">{log.field}</code>
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-[var(--text-secondary)] font-medium">
+                              {formatLogTimestamp(log.timestamp)}
                             </span>
+                          </div>
+
+                          {/* Diff changes if meaningful */}
+                          {isDiffMeaningful && (
+                            <div className="mt-1 p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[11px] font-mono flex items-center gap-2 flex-wrap">
+                              <span className="text-rose-400 line-through max-w-[200px] truncate" title={formattedOld}>
+                                {formattedOld || "(empty)"}
+                              </span>
+                              <ArrowRight size={12} className="text-zinc-400 shrink-0" />
+                              <span className="text-emerald-400 font-semibold max-w-[240px] truncate" title={formattedNew}>
+                                {formattedNew || "(empty)"}
+                              </span>
+                            </div>
                           )}
-                          {log.old_value !== undefined && log.new_value !== undefined && (
-                            <span className="text-[var(--text-secondary)] block text-[11px] pt-0.5">
-                              Changed from "{formatHistoryValue(log.field, log.old_value)}" to "{formatHistoryValue(log.field, log.new_value)}"
-                            </span>
+
+                          {/* Note / Details */}
+                          {log.note && (
+                            <p className="text-[11px] text-[var(--text-secondary)] pt-0.5 leading-relaxed">
+                              <span className="font-semibold text-[var(--text-primary)]">Details: </span>
+                              {log.note}
+                            </p>
                           )}
-                        </p>
-                        {log.note && (
-                          <p className="text-[11px] text-[var(--text-secondary)] italic">Note: {log.note}</p>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-6 text-xs text-[var(--text-secondary)]">

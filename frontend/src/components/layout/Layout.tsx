@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw } from "lucide-react";
+import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
@@ -179,6 +179,20 @@ export const Layout: React.FC = () => {
           >
             <RefreshCw size={20} />
             <span>Sync Manager</span>
+          </NavLink>
+
+          <NavLink
+            to="/audit-logs"
+            className={({ isActive }) =>
+              `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                isActive
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`
+            }
+          >
+            <History size={20} />
+            <span>Audit Logs</span>
           </NavLink>
         </nav>
         

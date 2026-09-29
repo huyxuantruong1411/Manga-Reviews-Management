@@ -9,6 +9,7 @@ import AuthorDetailPage from "./pages/AuthorDetailPage";
 import ImageToolsPage from "./pages/ImageToolsPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import SyncManagerPage from "./pages/SyncManagerPage";
+import AuditLogsPage from "./pages/AuditLogsPage";
 import { AlertProvider } from "./hooks/useAlert";
 import { DownloadProvider } from "./hooks/useDownload";
 
@@ -27,6 +28,8 @@ export const App: React.FC = () => {
               <Route path="tools" element={<ImageToolsPage />} />
               <Route path="downloads" element={<DownloadsPage />} />
               <Route path="sync" element={<SyncManagerPage />} />
+              <Route path="audit-logs" element={<AuditLogsPage />} />
+              <Route path="audit" element={<AuditLogsPage />} />
             </Route>
           </Routes>
         </DownloadProvider>

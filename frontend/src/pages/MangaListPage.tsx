@@ -101,6 +101,11 @@ export const MangaListPage: React.FC = () => {
     const val = searchParams.get("ratingMax");
     return val ? Number(val) : "";
   });
+  const [sourceFilter, setSourceFilter] = useState<"all" | "manual" | "mangadex">(() => {
+    const s = searchParams.get("source");
+    if (s === "manual" || s === "mangadex") return s;
+    return "all";
+  });
   const [sortBy, setSortBy] = useState(() => searchParams.get("sortBy") || "added_at");
   const [sortOrder, setSortOrder] = useState(() => searchParams.get("sortOrder") || "desc");
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
@@ -184,6 +189,7 @@ export const MangaListPage: React.FC = () => {
     if (year) params.set("year", year);
     if (ratingMin !== "") params.set("ratingMin", String(ratingMin));
     if (ratingMax !== "") params.set("ratingMax", String(ratingMax));
+    if (sourceFilter !== "all") params.set("source", sourceFilter);
     if (sortBy !== "added_at") params.set("sortBy", sortBy);
     if (sortOrder !== "desc") params.set("sortOrder", sortOrder);
     if (page !== 1) params.set("page", String(page));
@@ -210,6 +216,7 @@ export const MangaListPage: React.FC = () => {
     year,
     ratingMin,
     ratingMax,
+    sourceFilter,
     sortBy,
     sortOrder,
     page,
@@ -288,6 +295,11 @@ export const MangaListPage: React.FC = () => {
       if (originalLanguages.length > 0) {
         params.original_languages = originalLanguages;
       }
+      if (sourceFilter === "manual") {
+        params.is_manual = true;
+      } else if (sourceFilter === "mangadex") {
+        params.is_manual = false;
+      }
 
       const res = await client.get("/api/manga/", { params });
       setMangas(res.data.items);
@@ -318,6 +330,7 @@ export const MangaListPage: React.FC = () => {
     excludeReadStatuses,
     ratingMin,
     ratingMax,
+    sourceFilter,
     sortBy,
     sortOrder,
     selectedTags,
@@ -778,7 +791,47 @@ export const MangaListPage: React.FC = () => {
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Source Filter Segmented Buttons */}
+            <div className="flex rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => { setSourceFilter("all"); setPage(1); }}
+                className={`px-3 py-2 rounded-lg transition ${
+                  sourceFilter === "all"
+                    ? "bg-[var(--brand-orange)] text-white shadow-sm"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                All Sources
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSourceFilter("manual"); setPage(1); }}
+                className={`px-3 py-2 rounded-lg transition flex items-center space-x-1.5 ${
+                  sourceFilter === "manual"
+                    ? "bg-amber-600 text-white shadow-sm font-bold"
+                    : "text-[var(--text-secondary)] hover:text-amber-600 dark:hover:text-amber-400"
+                }`}
+                title="Only show manually added manga"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                <span>Manual Only</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSourceFilter("mangadex"); setPage(1); }}
+                className={`px-3 py-2 rounded-lg transition ${
+                  sourceFilter === "mangadex"
+                    ? "bg-[var(--brand-orange)] text-white shadow-sm font-bold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+                title="Only show MangaDex imported manga"
+              >
+                <span>MangaDex</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => {
@@ -1213,6 +1266,17 @@ export const MangaListPage: React.FC = () => {
           <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
             <span>Active filters:</span>
             {debouncedSearch && <span className="bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)] px-2 py-0.5 rounded-md">Search: "{debouncedSearch}"</span>}
+            {sourceFilter === "manual" && (
+              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md font-semibold flex items-center space-x-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>Source: Manual Only</span>
+              </span>
+            )}
+            {sourceFilter === "mangadex" && (
+              <span className="bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-md font-semibold">
+                Source: MangaDex
+              </span>
+            )}
             {selectedReadStatuses.map(status => (
               <span key={status} className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">Status: {status}</span>
             ))}
@@ -1224,7 +1288,7 @@ export const MangaListPage: React.FC = () => {
             {(selectedAuthors.length > 0 || selectedArtists.length > 0 || year || contentRatings.length > 0 || demographics.length > 0 || statuses.length > 0 || originalLanguages.length > 0 || ratingMin || ratingMax) && (
               <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md">Advanced active</span>
             )}
-            {!search && selectedReadStatuses.length === 0 && excludeReadStatuses.length === 0 && selectedTags.length === 0 && excludeTags.length === 0 && selectedAuthors.length === 0 && selectedArtists.length === 0 && !year && contentRatings.length === 0 && demographics.length === 0 && statuses.length === 0 && originalLanguages.length === 0 && !ratingMin && !ratingMax && (
+            {!search && sourceFilter === "all" && selectedReadStatuses.length === 0 && excludeReadStatuses.length === 0 && selectedTags.length === 0 && excludeTags.length === 0 && selectedAuthors.length === 0 && selectedArtists.length === 0 && !year && contentRatings.length === 0 && demographics.length === 0 && statuses.length === 0 && originalLanguages.length === 0 && !ratingMin && !ratingMax && (
               <span className="text-zinc-400 font-medium">None</span>
             )}
           </div>
@@ -1232,6 +1296,7 @@ export const MangaListPage: React.FC = () => {
           <button
             onClick={() => {
               setSearch("");
+              setSourceFilter("all");
               setSelectedReadStatuses([]);
               setExcludeReadStatuses([]);
               setSelectedTags([]);
@@ -1461,9 +1526,16 @@ export const MangaListPage: React.FC = () => {
                   {/* Details */}
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
                     <div className="space-y-1">
-                      <h3 className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2" title={manga.title}>
-                        {manga.title}
-                      </h3>
+                      <div className="flex items-start justify-between gap-1.5">
+                        <h3 className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2 flex-1" title={manga.title}>
+                          {manga.title}
+                        </h3>
+                        {!manga.mangadex_id && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            Manual
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
                         By {renderCreatorLinks(manga.author)}
                       </p>
@@ -1572,6 +1644,11 @@ export const MangaListPage: React.FC = () => {
                           >
                             {manga.title}
                           </a>
+                          {!manga.mangadex_id && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              Manual
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
@@ -1786,9 +1863,16 @@ export const MangaListPage: React.FC = () => {
                         )}
                       </div>
 
-                      <h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
-                        {manga.title}
-                      </h3>
+                      <div className="flex items-center gap-2.5">
+                        <h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
+                          {manga.title}
+                        </h3>
+                        {!manga.mangadex_id && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            Manual
+                          </span>
+                        )}
+                      </div>
 
                       <div className="text-xs text-[var(--text-secondary)] font-medium flex flex-wrap gap-x-4 gap-y-1">
                         <span>

@@ -240,21 +240,36 @@ class AuditService:
                 if doc["_id"]:
                     by_entity[str(doc["_id"])] = doc["count"]
 
-            # Breakdown by action (top 10)
+            # Breakdown by action (top 15)
             action_pipeline = [
                 {"$group": {"_id": "$action", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
-                {"$limit": 10}
+                {"$limit": 15}
             ]
             by_action = {}
             async for doc in coll.aggregate(action_pipeline):
                 if doc["_id"]:
                     by_action[str(doc["_id"])] = doc["count"]
 
+            manga_logs = by_entity.get("manga", 0)
+            review_logs = (
+                by_action.get("create_review", 0)
+                + by_action.get("update_review", 0)
+                + by_action.get("delete_review", 0)
+            )
+            system_logs = (
+                by_action.get("sync_metadata", 0)
+                + by_action.get("enrich_trackers", 0)
+            )
+
             return {
                 "total_logs": total_logs,
                 "logs_today": logs_today,
                 "logs_24h": logs_24h,
+                "last_24h_count": logs_24h,
+                "manga_logs": manga_logs,
+                "review_logs": review_logs,
+                "system_logs": system_logs,
                 "by_entity_type": by_entity,
                 "by_action": by_action
             }
@@ -264,6 +279,10 @@ class AuditService:
                 "total_logs": 0,
                 "logs_today": 0,
                 "logs_24h": 0,
+                "last_24h_count": 0,
+                "manga_logs": 0,
+                "review_logs": 0,
+                "system_logs": 0,
                 "by_entity_type": {},
                 "by_action": {}
             }
