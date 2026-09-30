@@ -14,7 +14,10 @@ import {
   Globe,
   AlertTriangle,
   Download,
-  Sparkles
+  Sparkles,
+  Plus,
+  Minus,
+  RotateCcw
 } from "lucide-react";
 import client from "../api/client";
 import type { Chapter, PageItem } from "../types/chapter";
@@ -40,6 +43,11 @@ export const MangaReaderPage: React.FC = () => {
   const [fitMode, setFitMode] = useState<"width" | "height" | "original">(
     () => (localStorage.getItem("manga_fit_mode") as any) || "width"
   );
+  // Zoom level percentage (30% to 300%, default 100%)
+  const [zoomLevel, setZoomLevel] = useState<number>(() => {
+    const saved = localStorage.getItem("manga_zoom_level");
+    return saved ? Math.min(300, Math.max(30, Number(saved))) : 100;
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -55,6 +63,10 @@ export const MangaReaderPage: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("manga_fit_mode", fitMode);
   }, [fitMode]);
+
+  useEffect(() => {
+    localStorage.setItem("manga_zoom_level", String(zoomLevel));
+  }, [zoomLevel]);
 
   // Load Manga Info
   useEffect(() => {
@@ -145,6 +157,43 @@ export const MangaReaderPage: React.FC = () => {
     const list = filtered.length > 0 ? filtered : chapters;
     return [...list].sort((a, b) => a.chapter_numeric - b.chapter_numeric);
   }, [chapters, activeLanguage]);
+
+  // Volume grouping for active language chapters
+  const volumeGroupedChapters = useMemo(() => {
+    const groups: { volume: string | null; label: string; chapters: Chapter[] }[] = [];
+    const map = new Map<string, Chapter[]>();
+    const order: string[] = [];
+
+    activeLanguageChapters.forEach((chap) => {
+      const volKey = chap.volume ? `Volume ${chap.volume}` : "Khác / Chưa phân Vol";
+      if (!map.has(volKey)) {
+        map.set(volKey, []);
+        order.push(volKey);
+      }
+      map.get(volKey)!.push(chap);
+    });
+
+    order.forEach((volKey) => {
+      const list = map.get(volKey)!;
+      groups.push({
+        volume: volKey.startsWith("Volume ") ? volKey.replace("Volume ", "") : null,
+        label: volKey,
+        chapters: list
+      });
+    });
+
+    return groups;
+  }, [activeLanguageChapters]);
+
+  // Double page pairing helper: pairs (1,2), (3,4)..., or single page if 1-page chapter / odd end
+  const getDoublePagePair = useCallback((currentPg: number, total: number) => {
+    if (total <= 1) {
+      return { firstPageNum: 1, secondPageNum: null };
+    }
+    const first = currentPg % 2 === 0 ? currentPg - 1 : currentPg;
+    const second = first + 1 <= total ? first + 1 : null;
+    return { firstPageNum: first, secondPageNum: second };
+  }, []);
 
   // Current chapter index in the active language sequence
   const currentChapterIndex = activeLanguageChapters.findIndex((c) => c.id === currentChapter?.id);
@@ -321,31 +370,31 @@ export const MangaReaderPage: React.FC = () => {
         handleRequestNextChapter();
       }
     } else if (readingMode === "double_rtl" || readingMode === "double_ltr") {
-      const step = currentPage === 1 ? 1 : 2;
-      if (currentPage + step <= pages.length) {
-        setCurrentPage((prev) => prev + step);
+      const { firstPageNum } = getDoublePagePair(currentPage, pages.length);
+      if (firstPageNum + 2 <= pages.length) {
+        setCurrentPage(firstPageNum + 2);
       } else {
         handleRequestNextChapter();
       }
     }
-  }, [readingMode, currentPage, pages.length, nextChapter, nextAltLanguageChapter]);
+  }, [readingMode, currentPage, pages.length, getDoublePagePair, nextChapter, nextAltLanguageChapter]);
 
   const handleTurnPrev = useCallback(() => {
     if (readingMode === "single") {
       if (currentPage > 1) {
         setCurrentPage((prev) => prev - 1);
       } else if (prevChapter) {
-        goToChapter(prevChapter.id, 1);
+        handleSafeGoToChapter(prevChapter);
       }
     } else if (readingMode === "double_rtl" || readingMode === "double_ltr") {
-      const step = 2;
-      if (currentPage - step >= 1) {
-        setCurrentPage((prev) => prev - step);
-      } else {
-        setCurrentPage(1);
+      const { firstPageNum } = getDoublePagePair(currentPage, pages.length);
+      if (firstPageNum - 2 >= 1) {
+        setCurrentPage(firstPageNum - 2);
+      } else if (prevChapter) {
+        handleSafeGoToChapter(prevChapter);
       }
     }
-  }, [readingMode, currentPage, prevChapter]);
+  }, [readingMode, currentPage, pages.length, getDoublePagePair, prevChapter]);
 
   // Fullscreen toggle
   const toggleFullscreen = () => {
@@ -389,6 +438,12 @@ export const MangaReaderPage: React.FC = () => {
         toggleFullscreen();
       } else if (e.key === "m" || e.key === "M") {
         setShowControls((prev) => !prev);
+      } else if (e.key === "+" || e.key === "=") {
+        setZoomLevel((prev) => Math.min(300, prev + 10));
+      } else if (e.key === "-" || e.key === "_") {
+        setZoomLevel((prev) => Math.max(30, prev - 10));
+      } else if (e.key === "0") {
+        setZoomLevel(100);
       } else if (e.key === "Escape") {
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(() => {});
@@ -495,13 +550,23 @@ export const MangaReaderPage: React.FC = () => {
               const target = activeLanguageChapters.find((c) => c.id === e.target.value);
               if (target) handleSafeGoToChapter(target);
             }}
-            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-zinc-200 focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer max-w-[200px] truncate"
+            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-zinc-200 focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer max-w-[210px] truncate"
           >
-            {activeLanguageChapters.map((chap) => (
-              <option key={chap.id} value={chap.id} className="bg-zinc-900 text-white">
-                Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""} ({chap.page_count} trang)
-              </option>
-            ))}
+            {volumeGroupedChapters.length > 1
+              ? volumeGroupedChapters.map((grp) => (
+                  <optgroup key={grp.label} label={grp.label} className="bg-zinc-900 text-zinc-400 font-bold">
+                    {grp.chapters.map((chap) => (
+                      <option key={chap.id} value={chap.id} className="bg-zinc-900 text-white font-normal">
+                        Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""} ({chap.page_count}p)
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              : activeLanguageChapters.map((chap) => (
+                  <option key={chap.id} value={chap.id} className="bg-zinc-900 text-white">
+                    Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""} ({chap.page_count} trang)
+                  </option>
+                ))}
           </select>
 
           {/* Next Chapter */}
@@ -542,6 +607,31 @@ export const MangaReaderPage: React.FC = () => {
 
         {/* Right: Mode & Config Toggles */}
         <div className="flex items-center space-x-2 shrink-0">
+          {/* Zoom Level Control in Header */}
+          <div className="hidden md:flex items-center bg-zinc-900/90 border border-zinc-800 rounded-xl p-0.5 text-xs font-bold">
+            <button
+              onClick={() => setZoomLevel((prev) => Math.max(30, prev - 10))}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              title="Thu nhỏ (-10%) (Phím -)"
+            >
+              <Minus size={13} />
+            </button>
+            <button
+              onClick={() => setZoomLevel(100)}
+              className="px-2 py-0.5 text-zinc-200 hover:text-[var(--brand-orange)] font-mono text-[11px] font-bold cursor-pointer"
+              title="Đặt lại 100% (Phím 0)"
+            >
+              {zoomLevel}%
+            </button>
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(300, prev + 10))}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              title="Phóng to (+10%) (Phím +)"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
+
           {/* Quick Reading Mode toggle */}
           <div className="hidden lg:flex items-center bg-zinc-900/90 border border-zinc-800 rounded-xl p-0.5 text-xs font-bold">
             <button
@@ -670,6 +760,10 @@ export const MangaReaderPage: React.FC = () => {
                       alt={`Page ${page.page_number}`}
                       loading={idx < 3 ? "eager" : "lazy"}
                       className={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
+                      style={{
+                        width: `${(896 * zoomLevel) / 100}px`,
+                        maxWidth: zoomLevel <= 100 ? `${zoomLevel}%` : "none"
+                      }}
                     />
                     <span className="absolute bottom-2 right-4 px-2 py-0.5 rounded-md bg-black/60 text-zinc-300 text-[10px] font-mono pointer-events-none">
                       {page.page_number}
@@ -748,7 +842,7 @@ export const MangaReaderPage: React.FC = () => {
 
             {/* Mode 2: Single Page */}
             {readingMode === "single" && (
-              <div className="relative min-h-[85vh] flex items-center justify-center px-4 w-full">
+              <div className="relative min-h-[85vh] flex items-center justify-center px-4 w-full pb-20">
                 {/* Left Click Area */}
                 <div
                   onClick={handleTurnPrev}
@@ -769,11 +863,12 @@ export const MangaReaderPage: React.FC = () => {
                     <img
                       src={pages[currentPage - 1]?.url || ""}
                       alt={`Page ${currentPage}`}
-                      className={`${getImageFitClass()} shadow-2xl rounded-sm`}
+                      className={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
+                      style={{
+                        maxHeight: `calc(88vh * ${zoomLevel / 100})`,
+                        maxWidth: `calc(90vw * ${zoomLevel / 100})`
+                      }}
                     />
-                    <div className="mt-3 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-400">
-                      Trang {currentPage} / {pages.length}
-                    </div>
                   </div>
                 )}
               </div>
@@ -781,67 +876,90 @@ export const MangaReaderPage: React.FC = () => {
 
             {/* Mode 3: Double Page (RTL Manga or LTR) */}
             {(readingMode === "double_rtl" || readingMode === "double_ltr") && (
-              <div className="relative min-h-[85vh] flex items-center justify-center px-4 w-full">
+              <div className="relative min-h-[85vh] flex items-center justify-center px-4 w-full pb-20">
                 {/* Left Click Area */}
                 <div
                   onClick={readingMode === "double_rtl" ? handleTurnNext : handleTurnPrev}
                   className="absolute left-0 inset-y-0 w-1/3 cursor-pointer z-20 hover:bg-white/[0.02] transition"
+                  title={readingMode === "double_rtl" ? "Trang tiếp (← / A)" : "Trang trước (← / A)"}
                 />
 
                 {/* Right Click Area */}
                 <div
                   onClick={readingMode === "double_rtl" ? handleTurnPrev : handleTurnNext}
                   className="absolute right-0 inset-y-0 w-1/3 cursor-pointer z-20 hover:bg-white/[0.02] transition"
+                  title={readingMode === "double_rtl" ? "Trang trước (→ / D)" : "Trang tiếp (→ / D)"}
                 />
 
                 {/* Double Pages View */}
                 <div className="relative z-10 flex items-center justify-center gap-1 max-w-full">
                   {(() => {
-                    if (currentPage === 1) {
-                      // Cover is single page
+                    const { firstPageNum, secondPageNum } = getDoublePagePair(currentPage, pages.length);
+                    const firstPage = pages[firstPageNum - 1];
+                    const secondPage = secondPageNum ? pages[secondPageNum - 1] : null;
+
+                    // In RTL (Manga), right slot is the earlier page (firstPage), left slot is the subsequent page (secondPage)
+                    const leftPage = readingMode === "double_rtl" ? secondPage : firstPage;
+                    const rightPage = readingMode === "double_rtl" ? firstPage : secondPage;
+
+                    const renderPageSlot = (pageItem: PageItem | null) => {
+                      if (!pageItem) {
+                        return (
+                          <div
+                            className="h-[85vh] w-[42vw] max-w-[550px] rounded-sm border border-dashed border-zinc-800/80 bg-zinc-950/40 flex flex-col items-center justify-center p-6 text-center select-none shadow-inner"
+                            style={{
+                              maxHeight: `calc(85vh * ${zoomLevel / 100})`,
+                              maxWidth: `calc(44vw * ${zoomLevel / 100})`
+                            }}
+                          >
+                            <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 mb-2">
+                              <BookOpen size={20} />
+                            </div>
+                            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Trang kết thúc</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                              Chap lẻ ({pages.length} trang). Lật tiếp để qua chap mới.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <img
+                          src={pageItem.url || ""}
+                          alt={`Page ${pageItem.page_number}`}
+                          className="h-[85vh] w-auto max-w-[45vw] object-contain shadow-2xl rounded-sm select-none"
+                          style={{
+                            maxHeight: `calc(85vh * ${zoomLevel / 100})`,
+                            maxWidth: `calc(45vw * ${zoomLevel / 100})`
+                          }}
+                        />
+                      );
+                    };
+
+                    if (pages.length <= 1) {
                       return (
                         <div className="flex flex-col items-center">
-                          <img
-                            src={pages[0]?.url || ""}
-                            alt="Cover"
-                            className={`${getImageFitClass()} shadow-2xl`}
-                          />
-                          <div className="mt-3 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-400">
-                            Trang 1 (Bìa)
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const pageAIndex = currentPage - 1;
-                    const pageBIndex = currentPage;
-                    const pageA = pages[pageAIndex];
-                    const pageB = pages[pageBIndex];
-
-                    const firstPage = readingMode === "double_rtl" ? pageB : pageA;
-                    const secondPage = readingMode === "double_rtl" ? pageA : pageB;
-
-                    return (
-                      <div className="flex flex-col items-center">
-                        <div className="flex items-center justify-center gap-1">
                           {firstPage && (
                             <img
                               src={firstPage.url || ""}
                               alt={`Page ${firstPage.page_number}`}
-                              className="h-[85vh] w-auto max-w-[48vw] object-contain shadow-2xl"
-                            />
-                          )}
-                          {secondPage && (
-                            <img
-                              src={secondPage.url || ""}
-                              alt={`Page ${secondPage.page_number}`}
-                              className="h-[85vh] w-auto max-w-[48vw] object-contain shadow-2xl"
+                              className={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
+                              style={{
+                                maxHeight: `calc(88vh * ${zoomLevel / 100})`,
+                                maxWidth: `calc(90vw * ${zoomLevel / 100})`
+                              }}
                             />
                           )}
                         </div>
-                        <div className="mt-3 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-400">
-                          Trang {currentPage} - {Math.min(currentPage + 1, pages.length)} / {pages.length}
-                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="flex items-center justify-center gap-1 max-w-full">
+                        {renderPageSlot(leftPage)}
+                        {/* Book Spine / Center Crease */}
+                        <div className="w-[1px] h-[80vh] bg-zinc-800/60 shadow-[0_0_12px_rgba(0,0,0,0.8)] shrink-0 hidden sm:block" />
+                        {renderPageSlot(rightPage)}
                       </div>
                     );
                   })()}
@@ -958,6 +1076,47 @@ export const MangaReaderPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Zoom Level Section in Sidebar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Phóng to / Thu nhỏ (Zoom {zoomLevel}%)
+                </label>
+                <button
+                  onClick={() => setZoomLevel(100)}
+                  className="text-[10px] text-zinc-400 hover:text-[var(--brand-orange)] flex items-center space-x-1 cursor-pointer"
+                  title="Đặt lại 100%"
+                >
+                  <RotateCcw size={10} />
+                  <span>100%</span>
+                </button>
+              </div>
+              <input
+                type="range"
+                min={30}
+                max={250}
+                step={5}
+                value={zoomLevel}
+                onChange={(e) => setZoomLevel(Number(e.target.value))}
+                className="w-full accent-[var(--brand-orange)] cursor-pointer"
+              />
+              <div className="grid grid-cols-5 gap-1 pt-1">
+                {[50, 75, 100, 125, 150].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setZoomLevel(pct)}
+                    className={`py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border ${
+                      zoomLevel === pct
+                        ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-xs"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Fit Mode */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
@@ -965,8 +1124,11 @@ export const MangaReaderPage: React.FC = () => {
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={() => setFitMode("width")}
-                  className={`p-2 rounded-xl border font-bold text-center transition ${
+                  onClick={() => {
+                    setFitMode("width");
+                    setZoomLevel(100);
+                  }}
+                  className={`p-2 rounded-xl border font-bold text-center transition cursor-pointer ${
                     fitMode === "width"
                       ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
@@ -975,8 +1137,11 @@ export const MangaReaderPage: React.FC = () => {
                   Vừa ngang
                 </button>
                 <button
-                  onClick={() => setFitMode("height")}
-                  className={`p-2 rounded-xl border font-bold text-center transition ${
+                  onClick={() => {
+                    setFitMode("height");
+                    setZoomLevel(100);
+                  }}
+                  className={`p-2 rounded-xl border font-bold text-center transition cursor-pointer ${
                     fitMode === "height"
                       ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
@@ -985,8 +1150,11 @@ export const MangaReaderPage: React.FC = () => {
                   Vừa dọc
                 </button>
                 <button
-                  onClick={() => setFitMode("original")}
-                  className={`p-2 rounded-xl border font-bold text-center transition ${
+                  onClick={() => {
+                    setFitMode("original");
+                    setZoomLevel(100);
+                  }}
+                  className={`p-2 rounded-xl border font-bold text-center transition cursor-pointer ${
                     fitMode === "original"
                       ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
@@ -997,32 +1165,42 @@ export const MangaReaderPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Chapter Jump List */}
+            {/* Chapter Jump List with Volume Grouping */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
                 Danh sách chương [{activeLanguage.toUpperCase()}] ({activeLanguageChapters.length})
               </label>
-              <div className="max-h-52 overflow-y-auto space-y-1 pr-1 bg-zinc-900/60 p-2 rounded-xl border border-zinc-800">
-                {activeLanguageChapters.map((chap) => {
-                  const isCurrent = chap.id === currentChapter?.id;
-                  return (
-                    <button
-                      key={chap.id}
-                      onClick={() => {
-                        handleSafeGoToChapter(chap);
-                        setShowSidebar(false);
-                      }}
-                      className={`w-full p-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer ${
-                        isCurrent
-                          ? "bg-[var(--brand-orange)] text-white shadow-sm"
-                          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                      }`}
-                    >
-                      <span className="truncate">Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""}</span>
-                      <span className="text-[10px] opacity-70 shrink-0 ml-2">{chap.page_count}p</span>
-                    </button>
-                  );
-                })}
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1 bg-zinc-900/60 p-2 rounded-xl border border-zinc-800">
+                {volumeGroupedChapters.map((grp) => (
+                  <div key={grp.label} className="space-y-1">
+                    {volumeGroupedChapters.length > 1 && (
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1 bg-zinc-800/60 rounded-lg flex items-center justify-between">
+                        <span>{grp.label}</span>
+                        <span className="text-[9px] text-zinc-500 font-normal">{grp.chapters.length} chap</span>
+                      </div>
+                    )}
+                    {grp.chapters.map((chap) => {
+                      const isCurrent = chap.id === currentChapter?.id;
+                      return (
+                        <button
+                          key={chap.id}
+                          onClick={() => {
+                            handleSafeGoToChapter(chap);
+                            setShowSidebar(false);
+                          }}
+                          className={`w-full p-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer ${
+                            isCurrent
+                              ? "bg-[var(--brand-orange)] text-white shadow-sm"
+                              : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                          }`}
+                        >
+                          <span className="truncate">Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""}</span>
+                          <span className="text-[10px] opacity-70 shrink-0 ml-2">{chap.page_count}p</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1032,9 +1210,10 @@ export const MangaReaderPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-400">
                 <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">←</kbd> / <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">A</kbd> Trang trước</div>
                 <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">→</kbd> / <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">D</kbd> Trang sau</div>
+                <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">+</kbd> / <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">-</kbd> Phóng to / Thu nhỏ</div>
+                <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">0</kbd> Đặt lại zoom 100%</div>
                 <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">F</kbd> Toàn màn hình</div>
                 <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">M</kbd> Ẩn/Hiện thanh bar</div>
-                <div><kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200">Esc</kbd> Quay lại</div>
               </div>
             </div>
           </div>
@@ -1043,7 +1222,7 @@ export const MangaReaderPage: React.FC = () => {
           <div className="p-4 border-t border-zinc-800">
             <button
               onClick={handleExit}
-              className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center justify-center space-x-2 transition"
+              className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <ArrowLeft size={14} />
               <span>Về trang Manga</span>
@@ -1058,17 +1237,25 @@ export const MangaReaderPage: React.FC = () => {
           <div className="bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 px-4 py-2 rounded-full shadow-2xl flex items-center space-x-4 pointer-events-auto">
             <button
               onClick={readingMode === "double_rtl" ? handleTurnNext : handleTurnPrev}
-              className="p-1 rounded-full text-zinc-400 hover:text-white transition"
+              className="p-1 rounded-full text-zinc-400 hover:text-white transition cursor-pointer"
               title="Trang trước"
             >
               <ChevronLeft size={18} />
             </button>
             <span className="text-xs font-mono font-bold text-zinc-200">
-              {currentPage} / {pages.length}
+              {readingMode === "single"
+                ? `${currentPage} / ${pages.length}`
+                : (() => {
+                    const { firstPageNum, secondPageNum } = getDoublePagePair(currentPage, pages.length);
+                    return secondPageNum
+                      ? `${firstPageNum} - ${secondPageNum} / ${pages.length}`
+                      : `${firstPageNum} / ${pages.length}`;
+                  })()
+              }
             </span>
             <button
               onClick={readingMode === "double_rtl" ? handleTurnPrev : handleTurnNext}
-              className="p-1 rounded-full text-zinc-400 hover:text-white transition"
+              className="p-1 rounded-full text-zinc-400 hover:text-white transition cursor-pointer"
               title="Trang sau"
             >
               <ChevronRight size={18} />

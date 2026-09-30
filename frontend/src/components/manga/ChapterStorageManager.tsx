@@ -22,7 +22,14 @@ import {
   CheckCircle2,
   Activity,
   Sparkles,
-  Globe
+  Globe,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Plus,
+  Minus
 } from "lucide-react";
 import client from "../../api/client";
 import type {
@@ -121,6 +128,45 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
   const [lastSelectedChapterId, setLastSelectedChapterId] = useState<string | null>(null);
   const [selectedPageNumbers, setSelectedPageNumbers] = useState<number[]>([]);
   const [lastSelectedPageNumber, setLastSelectedPageNumber] = useState<number | null>(null);
+
+  // Lightbox Preview states (Issue 4)
+  const [previewPageIndex, setPreviewPageIndex] = useState<number | null>(null);
+  const [previewZoom, setPreviewZoom] = useState<number>(100);
+
+  // Volume grouping (Issue 6)
+  const [groupByVolume, setGroupByVolume] = useState<boolean>(true);
+  const [collapsedVolumes, setCollapsedVolumes] = useState<Record<string, boolean>>({});
+
+  const toggleVolumeCollapse = (volKey: string) => {
+    setCollapsedVolumes((prev) => ({
+      ...prev,
+      [volKey]: !prev[volKey]
+    }));
+  };
+
+  // Keyboard navigation for Lightbox Preview
+  useEffect(() => {
+    if (previewPageIndex === null) return;
+    const handleLightboxKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        setPreviewPageIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+      } else if (e.key === "ArrowRight") {
+        setPreviewPageIndex((prev) =>
+          prev !== null && prev < activeChapterPages.length - 1 ? prev + 1 : prev
+        );
+      } else if (e.key === "Escape") {
+        setPreviewPageIndex(null);
+      } else if (e.key === "+" || e.key === "=") {
+        setPreviewZoom((prev) => Math.min(300, prev + 15));
+      } else if (e.key === "-" || e.key === "_") {
+        setPreviewZoom((prev) => Math.max(30, prev - 15));
+      } else if (e.key === "0") {
+        setPreviewZoom(100);
+      }
+    };
+    window.addEventListener("keydown", handleLightboxKey);
+    return () => window.removeEventListener("keydown", handleLightboxKey);
+  }, [previewPageIndex, activeChapterPages.length]);
 
   // Delete Confirm Modal
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -277,6 +323,22 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     }
   };
 
+  const handleDeselectAllChapters = () => {
+    setSelectedChapterIds([]);
+    setLastSelectedChapterId(null);
+  };
+
+  const handleSelectVolume = (volChapters: Chapter[]) => {
+    const volIds = volChapters.map((c) => c.id);
+    const allSelected = volIds.every((id) => selectedChapterIds.includes(id));
+    if (allSelected) {
+      setSelectedChapterIds((prev) => prev.filter((id) => !volIds.includes(id)));
+    } else {
+      const newSet = new Set([...selectedChapterIds, ...volIds]);
+      setSelectedChapterIds(Array.from(newSet));
+    }
+  };
+
   // Multi-selection for Pages (Ctrl+Click, Shift+Click)
   const handlePageSelect = (
     pageNum: number,
@@ -320,6 +382,51 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
       setSelectedPageNumbers(activeChapterPages.map((p) => p.page_number));
     }
   };
+
+  const handleDeselectAllPages = () => {
+    setSelectedPageNumbers([]);
+    setLastSelectedPageNumber(null);
+  };
+
+  // Group chapters by Volume (Issue 6 - MangaDex style)
+  interface VolumeGroup {
+    volume: string | null;
+    label: string;
+    chapters: Chapter[];
+    minChapter: string;
+    maxChapter: string;
+  }
+
+  const volumeGroups = useMemo<VolumeGroup[]>(() => {
+    const map = new Map<string, Chapter[]>();
+    const order: string[] = [];
+
+    filteredChapters.forEach((c) => {
+      const volKey = c.volume ? `Volume ${c.volume}` : "Khác / Chưa phân Vol";
+      if (!map.has(volKey)) {
+        map.set(volKey, []);
+        order.push(volKey);
+      }
+      map.get(volKey)!.push(c);
+    });
+
+    return order.map((volKey) => {
+      const chaps = map.get(volKey)!;
+      const minChap = chaps[0]?.chapter_number || "";
+      const maxChap = chaps[chaps.length - 1]?.chapter_number || "";
+      return {
+        volume: volKey.startsWith("Volume ") ? volKey.replace("Volume ", "") : null,
+        label: volKey,
+        chapters: chaps,
+        minChapter: minChap,
+        maxChapter: maxChap
+      };
+    });
+  }, [filteredChapters]);
+
+  const hasAnyVolume = useMemo(() => {
+    return chapters.some((c) => c.volume !== null && c.volume !== undefined && c.volume !== "");
+  }, [chapters]);
 
   // Deletion execution
   const handleDeleteConfirm = async () => {
@@ -848,10 +955,10 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
             </div>
 
             {/* Selection actions & View Switcher */}
-            <div className="flex items-center space-x-2.5">
+            <div className="flex items-center flex-wrap gap-2">
               <button
                 onClick={handleSelectAllChapters}
-                className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5 transition"
+                className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5 transition cursor-pointer"
               >
                 {selectedChapterIds.length > 0 && selectedChapterIds.length === filteredChapters.length ? (
                   <CheckSquare size={14} className="text-[var(--brand-orange)]" />
@@ -862,19 +969,46 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
               </button>
 
               {selectedChapterIds.length > 0 && (
+                <>
+                  <button
+                    onClick={handleDeselectAllChapters}
+                    className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 flex items-center space-x-1.5 transition cursor-pointer"
+                    title="Bỏ chọn toàn bộ chapters đang chọn"
+                  >
+                    <X size={14} />
+                    <span>Bỏ chọn ({selectedChapterIds.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsDeleteModalOpen(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center space-x-1.5 transition shadow-sm animate-in fade-in cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    <span>Xóa đã chọn ({selectedChapterIds.length})</span>
+                  </button>
+                </>
+              )}
+
+              {hasAnyVolume && (
                 <button
-                  onClick={() => setIsDeleteModalOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center space-x-1.5 transition shadow-sm animate-in fade-in"
+                  type="button"
+                  onClick={() => setGroupByVolume(!groupByVolume)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                    groupByVolume
+                      ? "bg-[var(--brand-orange)]/15 border-[var(--brand-orange)] text-[var(--brand-orange)]"
+                      : "border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                  title="Bật/Tắt phân nhóm theo Volume như MangaDex"
                 >
-                  <Trash2 size={14} />
-                  <span>Xóa đã chọn ({selectedChapterIds.length})</span>
+                  <Layers size={14} />
+                  <span>Nhóm Vol: {groupByVolume ? "BẬT" : "TẮT"}</span>
                 </button>
               )}
 
               <div className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden p-0.5 bg-[var(--bg-primary)]">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                     viewMode === "grid"
                       ? "bg-[var(--brand-orange)] text-white shadow-sm"
                       : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -884,7 +1018,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                     viewMode === "list"
                       ? "bg-[var(--brand-orange)] text-white shadow-sm"
                       : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -903,221 +1037,320 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
           </div>
 
           {/* Chapter Content */}
-          {loading ? (
-            <div className="py-20 flex flex-col items-center justify-center space-y-3">
-              <Loader2 size={32} className="animate-spin text-[var(--brand-orange)]" />
-              <p className="text-xs text-[var(--text-secondary)]">Đang tải danh sách chương từ Storage...</p>
-            </div>
-          ) : filteredChapters.length === 0 ? (
-            <div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
-              <FolderOpen size={40} className="mx-auto text-zinc-400/60" />
-              <div className="text-sm font-bold text-[var(--text-primary)]">Chưa có chapter nào trong Storage</div>
-              <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-                Tải xuống các chương qua MangaDex API hoặc import trực tiếp từ thư mục trên máy tính của bạn để đọc và quản lý.
-              </p>
-            </div>
-          ) : viewMode === "grid" ? (
-            /* Grid View */
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {filteredChapters.map((chap) => {
-                const isSelected = selectedChapterIds.includes(chap.id);
-                return (
-                  <div
-                    key={chap.id}
-                    onClick={(e) => handleChapterSelect(chap.id, e)}
-                    onDoubleClick={() => handleOpenChapter(chap)}
-                    className={`group relative p-4 rounded-2xl border transition duration-200 cursor-pointer select-none flex flex-col justify-between ${
-                      isSelected
-                        ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] ring-2 ring-[var(--brand-orange)]/30"
-                        : "bg-[var(--bg-primary)] border-[var(--border-primary)] hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm hover:shadow-md"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                          <div className={`p-2.5 rounded-xl shrink-0 ${
-                            isSelected ? "bg-[var(--brand-orange)] text-white" : "bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]"
-                          }`}>
-                            <Folder size={18} />
+          {(() => {
+            const renderChapterGrid = (chapList: Chapter[]) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
+                {chapList.map((chap) => {
+                  const isSelected = selectedChapterIds.includes(chap.id);
+                  return (
+                    <div
+                      key={chap.id}
+                      onClick={(e) => handleChapterSelect(chap.id, e)}
+                      onDoubleClick={() => handleOpenChapter(chap)}
+                      className={`group relative p-4 rounded-2xl border transition duration-200 cursor-pointer select-none flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] ring-2 ring-[var(--brand-orange)]/30"
+                          : "bg-[var(--bg-primary)] border-[var(--border-primary)] hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm hover:shadow-md"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                            <div className={`p-2.5 rounded-xl shrink-0 ${
+                              isSelected ? "bg-[var(--brand-orange)] text-white" : "bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]"
+                            }`}>
+                              <Folder size={18} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-black text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition truncate">
+                                Chapter {chap.chapter_number}
+                              </h4>
+                              {chap.title && (
+                                <p className="text-xs text-[var(--text-secondary)] truncate" title={chap.title}>
+                                  {chap.title}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-black text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition truncate">
-                              Chapter {chap.chapter_number}
-                            </h4>
-                            {chap.title && (
-                              <p className="text-xs text-[var(--text-secondary)] truncate" title={chap.title}>
-                                {chap.title}
-                              </p>
-                            )}
+
+                          {/* Selection Checkbox */}
+                          <div
+                            onClick={(e) => handleChapterSelect(chap.id, e)}
+                            className={`p-1 rounded-md transition shrink-0 ${
+                              isSelected ? "text-[var(--brand-orange)]" : "text-zinc-300 dark:text-zinc-600 hover:text-zinc-500"
+                            }`}
+                          >
+                            {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
                           </div>
                         </div>
 
-                        {/* Selection Checkbox */}
-                        <div
+                        {/* Badges */}
+                        <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-secondary)] whitespace-nowrap">
+                            {chap.page_count} trang
+                          </span>
+                          {chap.volume && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                              Vol. {chap.volume}
+                            </span>
+                          )}
+                          {chap.language && (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">
+                              {chap.language}
+                            </span>
+                          )}
+                          {chap.scanlation_group && (
+                            <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 truncate max-w-[120px]" title={chap.scanlation_group}>
+                              {chap.scanlation_group}
+                            </span>
+                          )}
+                          {chap.source === "local_import" && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              Imported
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom Actions */}
+                      <div className="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-[var(--border-primary)]/40">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenChapter(chap);
+                          }}
+                          className="py-1.5 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition flex items-center justify-center space-x-1.5 whitespace-nowrap overflow-hidden"
+                          title="Xem và quản lý các trang ảnh bên trong chapter"
+                        >
+                          <FolderOpen size={13} className="shrink-0 text-zinc-400 group-hover:text-[var(--brand-orange)]" />
+                          <span className="truncate">Xem ảnh</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenReader(chap.id, 1);
+                          }}
+                          className="py-1.5 px-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-1.5 whitespace-nowrap"
+                          title="Đọc chapter này trong trình đọc toàn màn hình"
+                        >
+                          <Eye size={13} className="shrink-0" />
+                          <span>Đọc ngay</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+
+            const renderChapterTable = (chapList: Chapter[]) => (
+              <div className="overflow-x-auto border border-[var(--border-primary)] rounded-2xl">
+                <table className="w-full text-left text-xs text-[var(--text-secondary)]">
+                  <thead className="bg-[var(--bg-primary)] uppercase text-[10px] tracking-wider border-b border-[var(--border-primary)] font-bold">
+                    <tr>
+                      <th className="p-3 w-10">
+                        <button onClick={() => handleSelectVolume(chapList)}>
+                          {chapList.length > 0 && chapList.every((c) => selectedChapterIds.includes(c.id)) ? (
+                            <CheckSquare size={16} className="text-[var(--brand-orange)]" />
+                          ) : (
+                            <Square size={16} />
+                          )}
+                        </button>
+                      </th>
+                      <th className="p-3">Chapter</th>
+                      <th className="p-3">Title</th>
+                      <th className="p-3">Volume</th>
+                      <th className="p-3">Language</th>
+                      <th className="p-3">Scanlation Group</th>
+                      <th className="p-3">Trang</th>
+                      <th className="p-3 text-right">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-primary)]">
+                    {chapList.map((chap) => {
+                      const isSelected = selectedChapterIds.includes(chap.id);
+                      return (
+                        <tr
+                          key={chap.id}
                           onClick={(e) => handleChapterSelect(chap.id, e)}
-                          className={`p-1 rounded-md transition shrink-0 ${
-                            isSelected ? "text-[var(--brand-orange)]" : "text-zinc-300 dark:text-zinc-600 hover:text-zinc-500"
+                          onDoubleClick={() => handleOpenChapter(chap)}
+                          className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer transition select-none ${
+                            isSelected ? "bg-[var(--brand-orange)]/10" : ""
                           }`}
                         >
-                          {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
-                        </div>
-                      </div>
-
-                      {/* Badges */}
-                      <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold">
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-secondary)] whitespace-nowrap">
-                          {chap.page_count} trang
-                        </span>
-                        {chap.language && (
-                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">
-                            {chap.language}
-                          </span>
-                        )}
-                        {chap.scanlation_group && (
-                          <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 truncate max-w-[120px]" title={chap.scanlation_group}>
-                            {chap.scanlation_group}
-                          </span>
-                        )}
-                        {chap.source === "local_import" && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                            Imported
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Bottom Actions */}
-                    <div className="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-[var(--border-primary)]/40">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenChapter(chap);
-                        }}
-                        className="py-1.5 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition flex items-center justify-center space-x-1.5 whitespace-nowrap overflow-hidden"
-                        title="Xem và quản lý các trang ảnh bên trong chapter"
-                      >
-                        <FolderOpen size={13} className="shrink-0 text-zinc-400 group-hover:text-[var(--brand-orange)]" />
-                        <span className="truncate">Xem ảnh</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenReader(chap.id, 1);
-                        }}
-                        className="py-1.5 px-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-1.5 whitespace-nowrap"
-                        title="Đọc chapter này trong trình đọc toàn màn hình"
-                      >
-                        <Eye size={13} className="shrink-0" />
-                        <span>Đọc ngay</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* List / Table View */
-            <div className="overflow-x-auto border border-[var(--border-primary)] rounded-2xl">
-              <table className="w-full text-left text-xs text-[var(--text-secondary)]">
-                <thead className="bg-[var(--bg-primary)] uppercase text-[10px] tracking-wider border-b border-[var(--border-primary)] font-bold">
-                  <tr>
-                    <th className="p-3 w-10">
-                      <button onClick={handleSelectAllChapters}>
-                        {selectedChapterIds.length > 0 && selectedChapterIds.length === filteredChapters.length ? (
-                          <CheckSquare size={16} className="text-[var(--brand-orange)]" />
-                        ) : (
-                          <Square size={16} />
-                        )}
-                      </button>
-                    </th>
-                    <th className="p-3">Chapter</th>
-                    <th className="p-3">Title</th>
-                    <th className="p-3">Language</th>
-                    <th className="p-3">Scanlation Group</th>
-                    <th className="p-3">Trang</th>
-                    <th className="p-3 text-right">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-primary)]">
-                  {filteredChapters.map((chap) => {
-                    const isSelected = selectedChapterIds.includes(chap.id);
-                    return (
-                      <tr
-                        key={chap.id}
-                        onClick={(e) => handleChapterSelect(chap.id, e)}
-                        onDoubleClick={() => handleOpenChapter(chap)}
-                        className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer transition select-none ${
-                          isSelected ? "bg-[var(--brand-orange)]/10" : ""
-                        }`}
-                      >
-                        <td className="p-3">
-                          <div onClick={(e) => handleChapterSelect(chap.id, e)}>
-                            {isSelected ? (
-                              <CheckSquare size={16} className="text-[var(--brand-orange)]" />
+                          <td className="p-3">
+                            <div onClick={(e) => handleChapterSelect(chap.id, e)}>
+                              {isSelected ? (
+                                <CheckSquare size={16} className="text-[var(--brand-orange)]" />
+                              ) : (
+                                <Square size={16} />
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 font-bold text-[var(--text-primary)]">
+                            Ch. {chap.chapter_number}
+                          </td>
+                          <td className="p-3">{chap.title || "-"}</td>
+                          <td className="p-3">
+                            {chap.volume ? (
+                              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold">
+                                Vol. {chap.volume}
+                              </span>
                             ) : (
-                              <Square size={16} />
+                              "-"
                             )}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold uppercase">
+                              {chap.language}
+                            </span>
+                          </td>
+                          <td className="p-3">{chap.scanlation_group || "No Group"}</td>
+                          <td className="p-3 font-bold">{chap.page_count}</td>
+                          <td className="p-3 text-right space-x-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenChapter(chap);
+                              }}
+                              className="px-2.5 py-1 rounded-lg border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-primary)] transition"
+                            >
+                              Xem ảnh
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenReader(chap.id, 1);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition inline-flex items-center space-x-1"
+                            >
+                              <Eye size={12} />
+                              <span>Đọc ngay</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+
+            const renderChapters = (chapList: Chapter[]) =>
+              viewMode === "grid" ? renderChapterGrid(chapList) : renderChapterTable(chapList);
+
+            if (loading) {
+              return (
+                <div className="py-20 flex flex-col items-center justify-center space-y-3">
+                  <Loader2 size={32} className="animate-spin text-[var(--brand-orange)]" />
+                  <p className="text-xs text-[var(--text-secondary)]">Đang tải danh sách chương từ Storage...</p>
+                </div>
+              );
+            }
+
+            if (filteredChapters.length === 0) {
+              return (
+                <div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
+                  <FolderOpen size={40} className="mx-auto text-zinc-400/60" />
+                  <div className="text-sm font-bold text-[var(--text-primary)]">Chưa có chapter nào trong Storage</div>
+                  <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
+                    Tải xuống các chương qua MangaDex API hoặc import trực tiếp từ thư mục trên máy tính của bạn để đọc và quản lý.
+                  </p>
+                </div>
+              );
+            }
+
+            // MangaDex Volume Grouping view
+            if (groupByVolume && hasAnyVolume && volumeGroups.length > 1) {
+              return (
+                <div className="space-y-4">
+                  {volumeGroups.map((volGroup) => {
+                    const isCollapsed = !!collapsedVolumes[volGroup.label];
+                    const volIds = volGroup.chapters.map((c) => c.id);
+                    const allVolSelected =
+                      volIds.length > 0 && volIds.every((id) => selectedChapterIds.includes(id));
+                    const someVolSelected = volIds.some((id) => selectedChapterIds.includes(id));
+
+                    return (
+                      <div
+                        key={volGroup.label}
+                        className="border border-[var(--border-primary)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40 shadow-xs transition"
+                      >
+                        {/* Volume Accordion Header */}
+                        <div
+                          onClick={() => toggleVolumeCollapse(volGroup.label)}
+                          className="flex items-center justify-between p-3.5 bg-[var(--bg-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800/60 border-b border-[var(--border-primary)] cursor-pointer select-none transition"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectVolume(volGroup.chapters);
+                              }}
+                              className="text-zinc-400 hover:text-[var(--brand-orange)] transition cursor-pointer"
+                              title="Chọn / Bỏ chọn toàn bộ volume này"
+                            >
+                              {allVolSelected ? (
+                                <CheckSquare size={16} className="text-[var(--brand-orange)]" />
+                              ) : someVolSelected ? (
+                                <CheckSquare size={16} className="text-zinc-400" />
+                              ) : (
+                                <Square size={16} />
+                              )}
+                            </button>
+                            <div className="flex items-center space-x-2.5 flex-wrap">
+                              <span className="font-black text-sm text-[var(--text-primary)]">
+                                {volGroup.label}
+                              </span>
+                              <span className="text-xs text-[var(--text-secondary)] font-medium bg-zinc-500/10 px-2.5 py-0.5 rounded-full">
+                                {volGroup.chapters.length} chương {volGroup.minChapter ? `(Ch. ${volGroup.minChapter} - Ch. ${volGroup.maxChapter})` : ""}
+                              </span>
+                            </div>
                           </div>
-                        </td>
-                        <td className="p-3 font-bold text-[var(--text-primary)]">
-                          Ch. {chap.chapter_number}
-                        </td>
-                        <td className="p-3">{chap.title || "-"}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold uppercase">
-                            {chap.language}
-                          </span>
-                        </td>
-                        <td className="p-3">{chap.scanlation_group || "No Group"}</td>
-                        <td className="p-3 font-bold">{chap.page_count}</td>
-                        <td className="p-3 text-right space-x-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenChapter(chap);
-                            }}
-                            className="px-2.5 py-1 rounded-lg border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-primary)] transition"
-                          >
-                            Xem ảnh
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenReader(chap.id, 1);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition inline-flex items-center space-x-1"
-                          >
-                            <Eye size={12} />
-                            <span>Đọc ngay</span>
-                          </button>
-                        </td>
-                      </tr>
+
+                          <div className="flex items-center space-x-2 text-xs font-semibold text-[var(--text-secondary)]">
+                            <span>{isCollapsed ? "Mở rộng" : "Thu gọn"}</span>
+                            {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                          </div>
+                        </div>
+
+                        {/* Volume Chapters content */}
+                        {!isCollapsed && (
+                          <div className="p-4">
+                            {renderChapters(volGroup.chapters)}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                </div>
+              );
+            }
+
+            // Flat chapters
+            return renderChapters(filteredChapters);
+          })()}
         </div>
       ) : (
         /* Inside Chapter: Pages Explorer */
         <div className="space-y-4 animate-in fade-in duration-200">
           {/* Sub Header for Chapter Pages */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--bg-primary)] p-4 rounded-2xl border border-[var(--border-primary)]">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 flex-wrap">
               <button
                 onClick={handleBackToChapters}
-                className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold text-[var(--text-secondary)] transition"
+                className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-bold text-[var(--text-secondary)] transition cursor-pointer"
               >
                 ← Quay lại danh sách chương
               </button>
-              <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700" />
+              <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 hidden sm:block" />
               <button
                 onClick={handleSelectAllPages}
-                className="text-xs font-semibold text-[var(--brand-orange)] hover:underline flex items-center space-x-1"
+                className="text-xs font-semibold text-[var(--brand-orange)] hover:underline flex items-center space-x-1 cursor-pointer"
               >
                 {selectedPageNumbers.length > 0 && selectedPageNumbers.length === activeChapterPages.length ? (
                   <CheckSquare size={14} />
@@ -1126,6 +1359,17 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                 )}
                 <span>Chọn tất cả trang ({selectedPageNumbers.length}/{activeChapterPages.length})</span>
               </button>
+
+              {selectedPageNumbers.length > 0 && (
+                <button
+                  onClick={handleDeselectAllPages}
+                  className="px-2.5 py-1 rounded-lg border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 flex items-center space-x-1 transition cursor-pointer"
+                  title="Bỏ chọn toàn bộ trang đang chọn"
+                >
+                  <X size={12} />
+                  <span>Bỏ chọn ({selectedPageNumbers.length})</span>
+                </button>
+              )}
             </div>
 
             <div className="flex items-center space-x-2.5">
@@ -1161,12 +1405,15 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {activeChapterPages.map((page) => {
+              {activeChapterPages.map((page, idx) => {
                 const isSelected = selectedPageNumbers.includes(page.page_number);
                 return (
                   <div
                     key={page.page_number}
-                    onClick={(e) => handlePageSelect(page.page_number, e)}
+                    onClick={() => {
+                      setPreviewPageIndex(idx);
+                      setPreviewZoom(100);
+                    }}
                     onDoubleClick={() => onOpenReader(activeChapter.id, page.page_number)}
                     className={`group relative rounded-xl border overflow-hidden cursor-pointer select-none transition ${
                       isSelected
@@ -1188,29 +1435,46 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                       )}
 
                       {/* Page number badge */}
-                      <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-white text-[10px] font-black">
+                      <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-white text-[10px] font-black z-20 pointer-events-none">
                         #{page.page_number}
                       </span>
 
-                      {/* Selection checkbox */}
-                      <div className="absolute top-2 right-2 p-1 rounded-md bg-black/60 backdrop-blur-sm">
+                      {/* Selection checkbox - Unblocked and z-30 */}
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePageSelect(page.page_number, e);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/70 backdrop-blur-sm z-30 hover:scale-110 transition cursor-pointer"
+                        title="Chọn trang (Shift+Click để chọn nhiều trang)"
+                      >
                         {isSelected ? (
                           <CheckSquare size={16} className="text-[var(--brand-orange)]" />
                         ) : (
-                          <Square size={16} className="text-white/70" />
+                          <Square size={16} className="text-white/80 hover:text-white" />
                         )}
                       </div>
 
-                      {/* Quick Read Button overlay */}
+                      {/* Hover Hint: Preview */}
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-10">
+                        <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-[11px] font-semibold shadow">
+                          <Maximize2 size={12} className="text-[var(--brand-orange)]" />
+                          <span>Xem lớn</span>
+                        </div>
+                      </div>
+
+                      {/* Dedicated Read Button */}
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onOpenReader(activeChapter.id, page.page_number);
                         }}
-                        title="Đọc từ trang này"
-                        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                        title="Đọc từ trang này trong trình đọc"
+                        className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 hover:bg-[var(--brand-orange)] text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-all z-20 shadow cursor-pointer flex items-center space-x-1"
                       >
-                        <Eye size={22} className="drop-shadow" />
+                        <Eye size={11} />
+                        <span>Đọc</span>
                       </button>
                     </div>
 
@@ -1944,6 +2208,129 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                 </div>
               )
             )}
+          </div>
+        </div>
+      )}
+      {/* Lightbox Preview Modal for Chapter Pages (Issue 4) */}
+      {previewPageIndex !== null && activeChapterPages[previewPageIndex] && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col animate-in fade-in duration-150 select-none">
+          {/* Top Bar */}
+          <div className="px-4 py-3 bg-black/70 border-b border-zinc-800 flex items-center justify-between text-white shrink-0">
+            <div className="flex items-center space-x-3 min-w-0">
+              <span className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] text-white text-xs font-bold shrink-0">
+                Trang {activeChapterPages[previewPageIndex].page_number} / {activeChapterPages.length}
+              </span>
+              <span className="text-xs text-zinc-300 font-mono truncate max-w-xs sm:max-w-md">
+                {activeChapterPages[previewPageIndex].filename}
+              </span>
+              <span className="text-[11px] text-zinc-500 hidden sm:inline shrink-0">
+                ({(activeChapterPages[previewPageIndex].file_size / 1024).toFixed(0)} KB)
+              </span>
+            </div>
+
+            {/* Controls: Zoom, Read from this page, Close */}
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-0.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.max(30, prev - 15))}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                  title="Thu nhỏ (-15%) (Phím -)"
+                >
+                  <Minus size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom(100)}
+                  className="px-2 py-0.5 text-zinc-200 hover:text-[var(--brand-orange)] font-mono text-[11px] font-bold cursor-pointer"
+                  title="Đặt lại 100% (Phím 0)"
+                >
+                  {previewZoom}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoom((prev) => Math.min(300, prev + 15))}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                  title="Phóng to (+15%) (Phím +)"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+
+              {activeChapter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pg = activeChapterPages[previewPageIndex].page_number;
+                    setPreviewPageIndex(null);
+                    onOpenReader(activeChapter.id, pg);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold flex items-center space-x-1.5 transition shadow cursor-pointer"
+                  title="Mở chế độ đọc truyện toàn màn hình từ trang này"
+                >
+                  <Eye size={13} />
+                  <span className="hidden sm:inline">Đọc từ trang này</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setPreviewPageIndex(null)}
+                className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+                title="Đóng xem trước (Phím Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Canvas with Navigation Buttons */}
+          <div className="flex-1 relative flex items-center justify-center overflow-auto p-4">
+            {/* Prev Page Button */}
+            <button
+              type="button"
+              disabled={previewPageIndex <= 0}
+              onClick={() => {
+                setPreviewPageIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+              }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-black/90 border border-zinc-800 text-white transition z-20 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shadow-lg"
+              title="Trang trước (←)"
+            >
+              <ChevronLeft size={24} />
+            </button>
+
+            {/* Preview Image */}
+            <div className="max-w-full max-h-full flex items-center justify-center transition-transform duration-150">
+              <img
+                src={activeChapterPages[previewPageIndex].url || ""}
+                alt={`Trang ${activeChapterPages[previewPageIndex].page_number}`}
+                className="max-h-[82vh] max-w-[85vw] object-contain shadow-2xl rounded-sm transition-transform duration-100"
+                style={{
+                  transform: previewZoom === 100 ? undefined : `scale(${previewZoom / 100})`,
+                  transformOrigin: "center center"
+                }}
+              />
+            </div>
+
+            {/* Next Page Button */}
+            <button
+              type="button"
+              disabled={previewPageIndex >= activeChapterPages.length - 1}
+              onClick={() => {
+                setPreviewPageIndex((prev) =>
+                  prev !== null && prev < activeChapterPages.length - 1 ? prev + 1 : prev
+                );
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-black/90 border border-zinc-800 text-white transition z-20 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shadow-lg"
+              title="Trang sau (→)"
+            >
+              <ChevronRight size={24} />
+            </button>
+          </div>
+
+          {/* Footer Shortcuts hint */}
+          <div className="px-4 py-2 bg-black/70 border-t border-zinc-800 text-center text-[11px] text-zinc-400">
+            Dùng phím mũi tên <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">←</kbd> / <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">→</kbd> để đổi trang, <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">+</kbd>/<kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">-</kbd> để phóng to/thu nhỏ, <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">0</kbd> để đặt lại 100%, <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300">Esc</kbd> để đóng.
           </div>
         </div>
       )}

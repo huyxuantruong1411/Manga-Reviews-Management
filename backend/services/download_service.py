@@ -316,6 +316,7 @@ class DownloadService:
                             "manga_id": manga_id,
                             "chapter_number": chap_num,
                             "title": chap_title,
+                            "volume": chap.get("volume"),
                             "language": lang,
                             "scanlation_group": chap.get("group_name"),
                             "source": "mangadex",
