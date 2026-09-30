@@ -44,6 +44,7 @@ import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput"
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
 import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
+import { PanelLexisTab } from "../components/manga/PanelLexisTab";
 
 interface Tag {
   _id: string;
@@ -783,14 +784,14 @@ export const MangaDetailPage: React.FC = () => {
 
   // Parallel Tab States & URL sync
   const tabParam = searchParams.get("tab");
-  const activeTab = useMemo<"details" | "chapters" | "reviews" | "art" | "recommendations" | "logs">(() => {
-    if (tabParam && ["details", "chapters", "reviews", "art", "recommendations", "logs"].includes(tabParam)) {
+  const activeTab = useMemo<"details" | "chapters" | "panels" | "reviews" | "art" | "recommendations" | "logs">(() => {
+    if (tabParam && ["details", "chapters", "panels", "reviews", "art", "recommendations", "logs"].includes(tabParam)) {
       return tabParam as any;
     }
     return "details";
   }, [tabParam]);
 
-  const setActiveTab = (newTab: "details" | "chapters" | "reviews" | "art" | "recommendations" | "logs") => {
+  const setActiveTab = (newTab: "details" | "chapters" | "panels" | "reviews" | "art" | "recommendations" | "logs") => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (newTab === "details") {
@@ -2914,6 +2915,20 @@ export const MangaDetailPage: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTab("panels")}
+          className={`pb-3 px-3.5 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "panels"
+              ? "border-b-2 border-amber-500 text-amber-500 font-bold"
+              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+          title="Nhận diện đặc trưng hình ảnh & tra cứu hội thoại truyện"
+        >
+          <Sparkles size={16} className={activeTab === "panels" ? "text-amber-500" : "text-zinc-400"} />
+          <span>Panel & Hội thoại</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("reviews")}
           className={`pb-3 px-3.5 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === "reviews"
@@ -3245,6 +3260,13 @@ export const MangaDetailPage: React.FC = () => {
             }}
             onChaptersCountChange={setStorageChaptersCount}
           />
+        </div>
+      )}
+
+      {/* Visual Dialogue & Panel Lexis Tab */}
+      {activeTab === "panels" && (
+        <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+          <PanelLexisTab mangaId={manga._id} mangaTitle={manga.title} />
         </div>
       )}
 

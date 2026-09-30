@@ -42,9 +42,9 @@ class DictionaryService:
         except Exception as e:
             logger.warning(f"Error checking dictionary cache for '{clean_word}': {e}")
 
-        # 2. Query Free Dictionary API
+        # 2. Query Free Dictionary API with short timeout and fallback
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=2.5) as client:
                 url = DICTIONARY_API_URL.format(word=clean_word)
                 resp = await client.get(url, headers=self.headers)
 
@@ -60,8 +60,8 @@ class DictionaryService:
                         "audio_url": "",
                         "meanings": [
                             {
-                                "part_of_speech": "unknown",
-                                "definition": f"No definition found for '{clean_word}' in Free Dictionary API.",
+                                "part_of_speech": "dialogue token",
+                                "definition": f"Thuật ngữ '{clean_word}' trích xuất từ hội thoại truyện tranh.",
                                 "example": "",
                             }
                         ],
@@ -69,7 +69,7 @@ class DictionaryService:
                     await self._save_to_cache(clean_word, fallback)
                     return fallback
         except Exception as e:
-            logger.warning(f"Error querying dictionary API for '{clean_word}': {e}")
+            logger.debug(f"Dictionary API unavailable for '{clean_word}': {e}")
 
         # 3. Offline / network fallback
         return {
