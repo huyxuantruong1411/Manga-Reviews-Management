@@ -52,6 +52,7 @@ class DownloadService:
                 "id": c["id"],
                 "chapter": c["chapter"],
                 "title": c.get("title", ""),
+                "group_name": c.get("group_name", ""),
                 "status": "pending",
                 "error": None
             })
@@ -152,22 +153,26 @@ class DownloadService:
         return True
 
     async def auto_resume_tasks(self):
+        """
+        On server startup, mark stale/interrupted tasks as 'cancelled' instead of blindly
+        resuming them, preventing unexpected background downloads of other mangas.
+        """
         try:
-            cursor = self._get_tasks_collection().find({"status": {"$in": ["downloading", "pending"]}})
-            async for task in cursor:
-                task_id = task["_id"]
-                if task_id not in self.running_tasks:
-                    logger.info(f"Auto-resuming task {task_id} on startup...")
-                    # Reset cancellations tracker
-                    active_cancellations[task_id] = False
-                    asyncio.create_task(
-                        self.start_download_background(
-                            task_id=task_id,
-                            download_path=task.get("download_path")
-                        )
-                    )
+            now = datetime.utcnow()
+            result = await self._get_tasks_collection().update_many(
+                {"status": {"$in": ["downloading", "pending"]}},
+                {
+                    "$set": {
+                        "status": "cancelled",
+                        "error_message": "Tác vụ bị gián đoạn do khởi động lại dịch vụ hoặc ứng dụng.",
+                        "updated_at": now
+                    }
+                }
+            )
+            if result.modified_count > 0:
+                logger.info(f"Cleaned up {result.modified_count} interrupted download task(s) on startup.")
         except Exception as e:
-            logger.error(f"Error during auto-resuming tasks on startup: {e}")
+            logger.error(f"Error cleaning up interrupted tasks on startup: {e}")
 
     async def start_download_background(self, task_id: str, download_path: Optional[str] = None):
         """
@@ -274,11 +279,12 @@ class DownloadService:
                 if chap_status == "completed":
                     continue
                     
-                # Determine folder name based on chapter title existence
+                # Determine folder name based on chapter title existence and language
+                lang_tag = f" [{lang.upper()}]" if lang and lang.lower() != "en" else ""
                 if chap_title:
-                    folder_name = clean_filename(f"Chapter {chap_num} - {chap_title}")
+                    folder_name = clean_filename(f"Chapter {chap_num}{lang_tag} - {chap_title}")
                 else:
-                    folder_name = clean_filename(f"Chapter {chap_num}")
+                    folder_name = clean_filename(f"Chapter {chap_num}{lang_tag}")
                     
                 chap_path = os.path.join(target_dir, folder_name) if target_dir else None
                 if chap_path:
@@ -311,6 +317,7 @@ class DownloadService:
                             "chapter_number": chap_num,
                             "title": chap_title,
                             "language": lang,
+                            "scanlation_group": chap.get("group_name"),
                             "source": "mangadex",
                             "source_id": chap_id,
                             "pages": page_items,
@@ -319,6 +326,19 @@ class DownloadService:
                         await self._update_chapter_status(task_id, chap_id, "completed")
                         completed_count += 1
                     else:
+                        # Clean up partial uploaded pages from MinIO
+                        try:
+                            from backend.services.minio_service import minio_service
+                            minio_service.delete_chapter_folder(manga_id, chap_id)
+                        except Exception:
+                            pass
+                        # Clean up partial folder on disk if created
+                        if chap_path and os.path.exists(chap_path):
+                            try:
+                                import shutil
+                                shutil.rmtree(chap_path, ignore_errors=True)
+                            except Exception:
+                                pass
                         raise RuntimeError("Failed to download one or more pages.")
                         
                 except Exception as e:
@@ -513,7 +533,11 @@ class DownloadService:
         page_results: List[Optional[Dict[str, Any]]] = [None] * len(urls)
 
         async def download_page(idx: int, url: str) -> bool:
+            if active_cancellations.get(task_id):
+                return False
             async with sem:
+                if active_cancellations.get(task_id):
+                    return False
                 ext = ".jpg"
                 if "." in url[-5:]:
                     ext = os.path.splitext(url.split("?")[0])[1].lower()

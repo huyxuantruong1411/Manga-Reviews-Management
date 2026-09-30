@@ -30,6 +30,8 @@ import {
   Database,
   Image as ImageIcon,
   Filter,
+  CheckCircle2,
+  DownloadCloud,
 } from "lucide-react";
 import client from "../api/client";
 import { useAlert } from "../hooks/useAlert";
@@ -897,9 +899,13 @@ export const MangaDetailPage: React.FC = () => {
   const [chapters, setChapters] = useState<any[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(["all"]);
   const [onlyShowDuplicates, setOnlyShowDuplicates] = useState(false);
+  const [onlyShowMissing, setOnlyShowMissing] = useState(false);
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [customPath, setCustomPath] = useState("");
   const [chapterSearch, setChapterSearch] = useState("");
+  const [existingStorageChapters, setExistingStorageChapters] = useState<any[]>([]);
+  const [loadingStorageChapters, setLoadingStorageChapters] = useState(false);
+  const [cleaningLatest, setCleaningLatest] = useState(false);
 
   // Reader & Storage States
   const [lastReadProgress, setLastReadProgress] = useState<any>(null);
@@ -940,6 +946,54 @@ export const MangaDetailPage: React.FC = () => {
     });
   }, [chapters, selectedGroups]);
 
+  // Filter stored chapters by the currently selected language in Download Modal
+  const currentLangStorageChapters = useMemo(() => {
+    return existingStorageChapters.filter(
+      (sc: any) => (sc.language || "en").toLowerCase() === selectedLang.toLowerCase()
+    );
+  }, [existingStorageChapters, selectedLang]);
+
+  // Map of already downloaded/stored chapters in MinIO or MongoDB for current language
+  const storageChapterMap = useMemo(() => {
+    const map = new Map<string, any>();
+    currentLangStorageChapters.forEach((sc: any) => {
+      const key = String(sc.chapter_number ?? "").trim().toLowerCase();
+      map.set(key, sc);
+    });
+    return map;
+  }, [currentLangStorageChapters]);
+
+  // Find the highest numeric chapter stored in local storage for current language
+  const latestStoredChapter = useMemo(() => {
+    if (currentLangStorageChapters.length === 0) return null;
+    return [...currentLangStorageChapters].sort((a: any, b: any) => {
+      const numA = typeof a.chapter_numeric === "number" ? a.chapter_numeric : parseChapterNum(a.chapter_number);
+      const numB = typeof b.chapter_numeric === "number" ? b.chapter_numeric : parseChapterNum(b.chapter_number);
+      return numB - numA;
+    })[0];
+  }, [currentLangStorageChapters]);
+
+  // Calculate missing chapters statistics compared to MangaDex displayed chapters
+  const missingStats = useMemo(() => {
+    const allKeys = new Set<string>();
+    const missingKeys = new Set<string>();
+
+    displayedChapters.forEach((c: any) => {
+      const key = String(c.chapter ?? "").trim().toLowerCase();
+      allKeys.add(key);
+      if (!storageChapterMap.has(key)) {
+        missingKeys.add(key);
+      }
+    });
+
+    return {
+      totalUnique: allKeys.size,
+      storedUnique: allKeys.size - missingKeys.size,
+      missingUnique: missingKeys.size,
+      missingKeys,
+    };
+  }, [displayedChapters, storageChapterMap]);
+
   const duplicatesInfo = useMemo(() => {
     const chapMap = new Map<string, any[]>();
     displayedChapters.forEach((c: any) => {
@@ -976,6 +1030,13 @@ export const MangaDetailPage: React.FC = () => {
       });
     }
 
+    if (onlyShowMissing) {
+      list = list.filter((c: any) => {
+        const key = String(c.chapter ?? "").trim().toLowerCase();
+        return !storageChapterMap.has(key);
+      });
+    }
+
     if (chapterSearch.trim()) {
       const q = chapterSearch.trim().toLowerCase();
       list = list.filter((c: any) =>
@@ -985,7 +1046,7 @@ export const MangaDetailPage: React.FC = () => {
       );
     }
     return list;
-  }, [displayedChapters, onlyShowDuplicates, duplicatesInfo.duplicateKeys, chapterSearch]);
+  }, [displayedChapters, onlyShowDuplicates, onlyShowMissing, duplicatesInfo.duplicateKeys, storageChapterMap, chapterSearch]);
 
   const selectedDuplicatesInfo = useMemo(() => {
     const selectedList = chapters.filter((c: any) => selectedChapters.includes(c.id));
@@ -1104,6 +1165,136 @@ export const MangaDetailPage: React.FC = () => {
       message: `Đã giữ lại ${deduplicatedIds.length} chương độc nhất trong danh sách bạn đã chọn.`,
       type: "success",
     });
+  };
+
+  const handleSelectMissingChapters = () => {
+    const missingList = displayedChapters.filter((c: any) => {
+      const key = String(c.chapter ?? "").trim().toLowerCase();
+      return !storageChapterMap.has(key);
+    });
+
+    if (missingList.length === 0) {
+      showAlert({
+        title: "Đã đủ các chương",
+        message: "Toàn bộ các chương của bộ truyện này đã được tải về lưu trữ!",
+        type: "info",
+      });
+      return;
+    }
+
+    // Auto deduplicate among missing chapters so we select 1 best version for each missing chapter
+    const groupCounts = new Map<string, number>();
+    chapters.forEach((c: any) => {
+      const gid = c.group_id || "no-group";
+      groupCounts.set(gid, (groupCounts.get(gid) || 0) + 1);
+    });
+
+    const chapMap = new Map<string, any[]>();
+    missingList.forEach((c: any) => {
+      const key = String(c.chapter ?? "").trim().toLowerCase();
+      if (!chapMap.has(key)) chapMap.set(key, []);
+      chapMap.get(key)!.push(c);
+    });
+
+    const chosenIds: string[] = [];
+    chapMap.forEach((variants) => {
+      if (variants.length === 1) {
+        chosenIds.push(variants[0].id);
+      } else {
+        const sorted = [...variants].sort((a: any, b: any) => {
+          const countA = groupCounts.get(a.group_id || "no-group") || 0;
+          const countB = groupCounts.get(b.group_id || "no-group") || 0;
+          if (countB !== countA) return countB - countA;
+          if (Boolean(b.title) !== Boolean(a.title)) return b.title ? 1 : -1;
+          if (Boolean(b.volume) !== Boolean(a.volume)) return b.volume ? 1 : -1;
+          return 0;
+        });
+        chosenIds.push(sorted[0].id);
+      }
+    });
+
+    setSelectedChapters(chosenIds);
+    showAlert({
+      title: "Đã chọn các chap còn thiếu",
+      message: `Đã tự động chọn ${chosenIds.length} chương còn thiếu trong kho lưu trữ (đã loại bỏ trùng lặp).`,
+      type: "success",
+    });
+  };
+
+  const handleCleanupAndRedownloadFromLatest = async () => {
+    if (!manga?._id) return;
+    try {
+      setCleaningLatest(true);
+      const res = await client.post(`/api/manga/${manga._id}/cleanup-latest-chapter`, null, {
+        params: { lang: selectedLang }
+      });
+      const deleted = res.data?.deleted_chapter;
+
+      // Refresh existing storage chapters
+      const storageRes = await client.get(`/api/manga/${manga._id}/chapters`);
+      const updatedStorage = storageRes.data?.chapters || [];
+      setExistingStorageChapters(updatedStorage);
+      setStorageChaptersCount(updatedStorage.length);
+
+      if (deleted) {
+        const deletedNum = parseChapterNum(deleted.chapter_number);
+        // Find all displayed chapters with numeric >= deletedNum
+        const eligible = displayedChapters.filter((c: any) => parseChapterNum(c.chapter) >= deletedNum);
+
+        // Deduplicate eligible chapters
+        const groupCounts = new Map<string, number>();
+        chapters.forEach((c: any) => {
+          const gid = c.group_id || "no-group";
+          groupCounts.set(gid, (groupCounts.get(gid) || 0) + 1);
+        });
+
+        const chapMap = new Map<string, any[]>();
+        eligible.forEach((c: any) => {
+          const key = String(c.chapter ?? "").trim().toLowerCase();
+          if (!chapMap.has(key)) chapMap.set(key, []);
+          chapMap.get(key)!.push(c);
+        });
+
+        const chosenIds: string[] = [];
+        chapMap.forEach((variants) => {
+          if (variants.length === 1) {
+            chosenIds.push(variants[0].id);
+          } else {
+            const sorted = [...variants].sort((a: any, b: any) => {
+              const countA = groupCounts.get(a.group_id || "no-group") || 0;
+              const countB = groupCounts.get(b.group_id || "no-group") || 0;
+              if (countB !== countA) return countB - countA;
+              if (Boolean(b.title) !== Boolean(a.title)) return b.title ? 1 : -1;
+              if (Boolean(b.volume) !== Boolean(a.volume)) return b.volume ? 1 : -1;
+              return 0;
+            });
+            chosenIds.push(sorted[0].id);
+          }
+        });
+
+        setSelectedChapters(chosenIds);
+        showAlert({
+          title: "Đã dọn dẹp chap gần nhất",
+          message: `Đã xóa Chap ${deleted.chapter_number} (bị dở dang) và tự động chọn ${chosenIds.length} chương từ Chap ${deleted.chapter_number} đến cuối để tải lại hoàn chỉnh.`,
+          type: "success",
+        });
+      } else {
+        showAlert({
+          title: "Không có chap nào để xóa",
+          message: "Chưa có chương nào được lưu trữ cho bộ truyện này.",
+          type: "info",
+        });
+      }
+    } catch (err: any) {
+      console.error("Cleanup failed:", err);
+      showAlert({
+        title: "Thao tác thất bại",
+        message: err.response?.data?.detail || "Không thể dọn dẹp chap gần nhất.",
+        type: "error",
+      });
+    } finally {
+      setCleaningLatest(false);
+    }
   };
   const handlePathChange = (val: string) => {
     // Remove characters that are absolutely forbidden in paths: * ? " < > |
@@ -1325,6 +1516,14 @@ export const MangaDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
+    setIsDownloadOpen(false);
+    setChapters([]);
+    setSelectedChapters([]);
+    setSelectedGroups(["all"]);
+    setOnlyShowDuplicates(false);
+    setOnlyShowMissing(false);
+    setExistingStorageChapters([]);
+    setChapterSearch("");
     fetchMangaDetails();
   }, [id]);
 
@@ -1689,8 +1888,29 @@ export const MangaDetailPage: React.FC = () => {
     setCustomPath("");
     setVerifyResult(null);
     setChapterSearch("");
+    setChapters([]);
+    setSelectedChapters([]);
+    setSelectedGroups(["all"]);
+    setOnlyShowDuplicates(false);
+    setOnlyShowMissing(false);
+    setExistingStorageChapters([]);
+
     try {
       setLoadingChapters(true);
+      setLoadingStorageChapters(true);
+
+      // Fetch existing storage chapters for this manga concurrently
+      client.get(`/api/manga/${manga._id}/chapters`)
+        .then((sRes) => {
+          setExistingStorageChapters(sRes.data?.chapters || []);
+        })
+        .catch((e) => {
+          console.error("Failed to fetch storage chapters:", e);
+        })
+        .finally(() => {
+          setLoadingStorageChapters(false);
+        });
+
       // Fetch default download path
       try {
         const pathRes = await client.get("/api/downloads/base-path");
@@ -1700,13 +1920,14 @@ export const MangaDetailPage: React.FC = () => {
       }
       
       // Fetch available languages
-      const langRes = await client.get(`/api/mangadex/manga/${manga.mangadex_id}/languages`);
+      const currentMangadexId = manga.mangadex_id;
+      const langRes = await client.get(`/api/mangadex/manga/${currentMangadexId}/languages`);
       setLanguages(langRes.data);
       
       // Set English default if available
       const defaultLang = langRes.data.includes("en") ? "en" : langRes.data[0] || "en";
       setSelectedLang(defaultLang);
-      await fetchChapters(defaultLang);
+      await fetchChapters(defaultLang, currentMangadexId);
     } catch (err) {
       console.error("Failed to load languages:", err);
     } finally {
@@ -1714,21 +1935,24 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
-  const fetchChapters = async (lang: string) => {
-    if (!manga?.mangadex_id) return;
+  const fetchChapters = async (lang: string, targetMangadexId?: string) => {
+    const mdId = targetMangadexId || manga?.mangadex_id;
+    if (!mdId) return;
     try {
       setLoadingChapters(true);
-      const res = await client.get(`/api/mangadex/manga/${manga.mangadex_id}/chapters`, {
+      const res = await client.get(`/api/mangadex/manga/${mdId}/chapters`, {
         params: { lang },
       });
-      const fetchedChapters = res.data;
-      setChapters(fetchedChapters);
-      setSelectedChapters([]); // Reset selections
-      setChapterSearch("");
-
-      // Default to merged multi-group translation view
-      setSelectedGroups(["all"]);
-      setOnlyShowDuplicates(false);
+      // Guard against race conditions: verify MangaDex ID is still active
+      if (manga?.mangadex_id === mdId) {
+        const fetchedChapters = res.data;
+        setChapters(fetchedChapters);
+        setSelectedChapters([]); // Reset selections
+        setChapterSearch("");
+        setSelectedGroups(["all"]);
+        setOnlyShowDuplicates(false);
+        setOnlyShowMissing(false);
+      }
     } catch (err) {
       console.error("Failed to load chapters:", err);
     } finally {
@@ -4035,6 +4259,19 @@ export const MangaDetailPage: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Quick Action: Select Only Missing Chapters */}
+                    {missingStats.missingUnique > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSelectMissingChapters}
+                        className="px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-xs font-bold text-blue-700 dark:text-blue-300 transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+                        title="Chỉ chọn những chương chưa có trong kho lưu trữ (tự động loại bỏ trùng lặp)"
+                      >
+                        <CheckCircle2 size={13} className="text-blue-600 dark:text-blue-400" />
+                        <span>Chọn chap thiếu ({missingStats.missingUnique})</span>
+                      </button>
+                    )}
+
                     {/* Auto Deduplicate Quick Action */}
                     {duplicatesInfo.duplicateCount > 0 && (
                       <button
@@ -4060,6 +4297,93 @@ export const MangaDetailPage: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Storage & Resume Intelligence Banner */}
+                {existingStorageChapters.length > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-900 dark:text-blue-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="p-2 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+                        {loadingStorageChapters ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <DownloadCloud size={18} />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-blue-800 dark:text-blue-200">
+                            Kho lưu trữ: Đã tải {missingStats.storedUnique} / {missingStats.totalUnique} chap
+                          </span>
+                          {missingStats.missingUnique > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+                              Còn thiếu {missingStats.missingUnique} chap
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+                              Đã tải trọn bộ
+                            </span>
+                          )}
+                          {latestStoredChapter && (
+                            <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                              (Chap cao nhất: <strong>Ch. {latestStoredChapter.chapter_number}</strong>)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                          {missingStats.missingUnique > 0
+                            ? "Hệ thống phát hiện manga này đã có một phần chương. Bạn có thể chọn tải tiếp các chap còn thiếu hoặc xóa chap gần nhất nếu bị hủy giữa chừng."
+                            : "Toàn bộ các chương của manga này đã có trong bộ nhớ lưu trữ."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-stretch md:self-auto shrink-0 flex-wrap">
+                      {missingStats.missingUnique > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleSelectMissingChapters}
+                          className="flex-1 md:flex-initial px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+                          title="Chỉ chọn những chương chưa được tải về máy (tự động loại bỏ chương trùng lặp giữa các nhóm dịch)"
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>Tải chap còn thiếu ({missingStats.missingUnique})</span>
+                        </button>
+                      )}
+
+                      {latestStoredChapter && (
+                        <button
+                          type="button"
+                          disabled={cleaningLatest}
+                          onClick={handleCleanupAndRedownloadFromLatest}
+                          className="flex-1 md:flex-initial px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 text-rose-700 dark:text-rose-300 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                          title={`Xóa Chap ${latestStoredChapter.chapter_number} (nếu bị dở dang/thiếu trang do huỷ giữa chừng) và chọn tải lại từ Chap ${latestStoredChapter.chapter_number} đến cuối`}
+                        >
+                          {cleaningLatest ? (
+                            <Loader2 size={13} className="animate-spin text-rose-500" />
+                          ) : (
+                            <RefreshCw size={13} />
+                          )}
+                          <span>Xóa Chap {latestStoredChapter.chapter_number} & Tải từ đó đến cuối</span>
+                        </button>
+                      )}
+
+                      {missingStats.missingUnique > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setOnlyShowMissing((prev) => !prev)}
+                          className={`flex-1 md:flex-initial px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                            onlyShowMissing
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-[var(--bg-card)] border-blue-500/40 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+                          }`}
+                        >
+                          <Filter size={13} />
+                          <span>{onlyShowMissing ? "Xem tất cả" : `Chỉ xem chap thiếu (${missingStats.missingUnique})`}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Duplicate Notification & Resolution Banner */}
                 {duplicatesInfo.duplicateCount > 0 && (
@@ -4122,6 +4446,8 @@ export const MangaDetailPage: React.FC = () => {
                       const chapKey = String(chap.chapter ?? "").trim().toLowerCase();
                       const isDuplicate = duplicatesInfo.duplicateKeys.has(chapKey);
                       const duplicateVariants = isDuplicate ? duplicatesInfo.chapMap.get(chapKey) : [];
+                      const storedChap = storageChapterMap.get(chapKey);
+                      const isLatestStored = latestStoredChapter && String(latestStoredChapter.chapter_number).trim().toLowerCase() === chapKey;
 
                       return (
                         <div
@@ -4151,10 +4477,35 @@ export const MangaDetailPage: React.FC = () => {
                           {/* Chapter Details */}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <span className={`text-xs font-bold ${isSelected ? "text-[var(--brand-orange)]" : "text-[var(--text-primary)]"}`}>
                                   Ch. {chap.chapter}
                                 </span>
+
+                                {/* Stored / Missing Badge */}
+                                {storedChap ? (
+                                  <span
+                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 shrink-0 flex items-center gap-1"
+                                    title="Chương này đã có trong bộ nhớ lưu trữ"
+                                  >
+                                    <CheckCircle2 size={10} /> Đã tải ({storedChap.page_count || storedChap.pages?.length || "?"} trang)
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-[var(--border-primary)] shrink-0">
+                                    Chưa tải
+                                  </span>
+                                )}
+
+                                {/* Latest Stored Indicator */}
+                                {isLatestStored && (
+                                  <span
+                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 shrink-0 flex items-center gap-1"
+                                    title="Chương mới nhất đã tải (có thể bị dở dang nếu huỷ giữa chừng)"
+                                  >
+                                    <Zap size={10} /> Chap gần nhất
+                                  </span>
+                                )}
+
                                 {isDuplicate && (
                                   <span
                                     className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 shrink-0"
@@ -4196,11 +4547,13 @@ export const MangaDetailPage: React.FC = () => {
                     <p className="text-xs text-[var(--text-secondary)] font-medium">
                       {chapterSearch.trim()
                         ? `Không tìm thấy chương nào khớp với "${chapterSearch}".`
+                        : onlyShowMissing
+                        ? "Tuyệt vời! Không còn chương nào bị thiếu, bạn đã tải đầy đủ toàn bộ chương."
                         : onlyShowDuplicates
                         ? "Không có chương nào bị trùng lặp giữa các nhóm dịch đã chọn."
                         : "Không có chương nào khả dụng cho ngôn ngữ hoặc nhóm dịch này."}
                     </p>
-                    {(chapterSearch.trim() || onlyShowDuplicates) && (
+                    {(chapterSearch.trim() || onlyShowDuplicates || onlyShowMissing) && (
                       <div className="flex items-center justify-center gap-3 pt-1">
                         {chapterSearch.trim() && (
                           <button
@@ -4209,6 +4562,15 @@ export const MangaDetailPage: React.FC = () => {
                             className="text-xs text-[var(--brand-orange)] hover:underline font-bold cursor-pointer"
                           >
                             Xóa bộ lọc tìm kiếm
+                          </button>
+                        )}
+                        {onlyShowMissing && (
+                          <button
+                            type="button"
+                            onClick={() => setOnlyShowMissing(false)}
+                            className="text-xs text-blue-600 hover:underline font-bold cursor-pointer"
+                          >
+                            Hiện toàn bộ chương
                           </button>
                         )}
                         {onlyShowDuplicates && (

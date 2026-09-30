@@ -29,6 +29,7 @@ class ReadingProgressPayload(BaseModel):
     reading_mode: str = "long_strip"
     fit_mode: str = "width"
     mark_as_read: bool = False
+    language: Optional[str] = None
 
 @router.get("/manga/{manga_id}/chapters")
 async def get_manga_chapters(
@@ -71,6 +72,25 @@ async def delete_chapter(chapter_id: str = Path(...)):
     except Exception as e:
         logger.error(f"Error deleting chapter {chapter_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/manga/{manga_id}/cleanup-latest-chapter")
+async def cleanup_latest_chapter(manga_id: str = Path(...)):
+    """Find and delete the latest / highest chapter of a manga to allow a clean re-download from that chapter."""
+    try:
+        deleted = await chapter_service.delete_latest_chapter(manga_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Không tìm thấy chương nào đã lưu để xóa.")
+        return {
+            "success": True,
+            "deleted": deleted,
+            "message": f"Đã dọn dẹp Chapter {deleted.get('chapter_number')} thành công."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cleaning up latest chapter for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/chapters/{chapter_id}/delete-pages")
 async def delete_chapter_pages(
@@ -191,8 +211,29 @@ async def save_reading_progress(
             page=payload.page,
             reading_mode=payload.reading_mode,
             fit_mode=payload.fit_mode,
-            mark_as_read=payload.mark_as_read
+            mark_as_read=payload.mark_as_read,
+            language=payload.language
         )
     except Exception as e:
         logger.error(f"Error saving reading progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/manga/{manga_id}/cleanup-latest-chapter")
+async def cleanup_latest_chapter(
+    manga_id: str = Path(...),
+    lang: Optional[str] = Query(None)
+):
+    """
+    Find and delete the most recently downloaded / highest chapter for a manga,
+    optionally filtered by language, cleaning it up from MongoDB, MinIO, and local disk.
+    Useful when a download was cancelled mid-chapter and needs to be redownloaded cleanly.
+    """
+    try:
+        deleted = await chapter_service.delete_latest_chapter(manga_id, language=lang)
+        if not deleted:
+            return {"status": "none", "message": "Không có chương nào để xóa"}
+        return {"status": "success", "deleted_chapter": deleted}
+    except Exception as e:
+        logger.error(f"Error cleaning up latest chapter for {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

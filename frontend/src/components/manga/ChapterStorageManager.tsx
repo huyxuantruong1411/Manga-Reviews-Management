@@ -21,7 +21,8 @@ import {
   Terminal,
   CheckCircle2,
   Activity,
-  Sparkles
+  Sparkles,
+  Globe
 } from "lucide-react";
 import client from "../../api/client";
 import type {
@@ -789,19 +790,45 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                 )}
               </div>
 
-              {availableLanguages.length > 1 && (
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)]"
-                >
-                  <option value="all">Tất cả ngôn ngữ</option>
-                  {availableLanguages.map((l) => (
-                    <option key={l} value={l}>
-                      {l.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
+              {/* Language Filter */}
+              {availableLanguages.length > 0 && (
+                <div className="flex items-center gap-1 p-1 bg-zinc-500/10 rounded-xl border border-[var(--border-primary)] shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLanguage("all")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      selectedLanguage === "all"
+                        ? "bg-[var(--brand-orange)] text-white shadow-xs"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    <Globe size={12} />
+                    <span>Tất cả</span>
+                    <span className="text-[10px] opacity-80">({chapters.length})</span>
+                  </button>
+                  {availableLanguages.map((l) => {
+                    const count = chapters.filter(c => (c.language || "en").toLowerCase() === l.toLowerCase()).length;
+                    const isSelected = selectedLanguage === l.toLowerCase();
+                    const label = l.toLowerCase() === "vi" ? "VI (Tiếng Việt)" : l.toLowerCase() === "en" ? "EN (English)" : l.toUpperCase();
+                    return (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => setSelectedLanguage(l.toLowerCase())}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-500/10"
+                        }`}
+                      >
+                        <span>{label}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/25 text-white" : "bg-zinc-500/20 text-zinc-400"}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
 
               {availableGroups.length > 1 && (

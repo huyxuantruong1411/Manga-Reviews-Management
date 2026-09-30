@@ -860,7 +860,8 @@ class ChapterService:
         page: int = 1,
         reading_mode: str = "long_strip",
         fit_mode: str = "width",
-        mark_as_read: bool = False
+        mark_as_read: bool = False,
+        language: Optional[str] = None
     ) -> Dict[str, Any]:
         """Save user reading position and settings."""
         now = datetime.utcnow()
@@ -880,6 +881,8 @@ class ChapterService:
             "fit_mode": fit_mode,
             "updated_at": now
         }
+        if language:
+            update_data["last_read_language"] = language.lower()
 
         await self._get_reading_col().update_one(
             {"manga_id": manga_id},
@@ -899,5 +902,72 @@ class ChapterService:
             logger.warning(f"Failed to auto-update manga status on reading: {e}")
 
         return update_data
+
+    async def delete_latest_chapter(self, manga_id: str, language: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Find and delete the most recently downloaded / highest chapter for a manga,
+        optionally filtered by language, cleaning it up from MongoDB, MinIO, and local disk.
+        """
+        query: Dict[str, Any] = {"manga_id": manga_id}
+        if language:
+            query["language"] = language.lower()
+
+        cursor = self._get_chapters_col().find(query).sort([
+            ("chapter_numeric", -1),
+            ("created_at", -1)
+        ]).limit(1)
+
+        latest_chap = None
+        async for doc in cursor:
+            latest_chap = doc
+            break
+
+        if not latest_chap:
+            return None
+
+        c_id = str(latest_chap["_id"])
+        c_num = latest_chap.get("chapter_number", "")
+        c_title = latest_chap.get("title", "")
+        c_lang = latest_chap.get("language", "")
+
+        # 1. Delete from MinIO & MongoDB via delete_chapter
+        await self.delete_chapter(c_id)
+
+        # 2. Check if local disk folder exists and remove it
+        try:
+            manga = await self._get_mangas_col().find_one({"_id": ObjectId(manga_id)})
+            download_path = manga.get("download_path") if manga else None
+            if download_path and os.path.exists(download_path):
+                import shutil
+                c_prefix = f"chapter {str(c_num).lower()}"
+                for entry in os.listdir(download_path):
+                    entry_path = os.path.join(download_path, entry)
+                    if os.path.isdir(entry_path):
+                        low_entry = entry.lower()
+                        # Match "Chapter X", "Chapter X - ...", "Chapter X [...]"
+                        if (
+                            low_entry == c_prefix
+                            or low_entry.startswith(f"{c_prefix} ")
+                            or low_entry.startswith(f"{c_prefix}-")
+                            or low_entry.startswith(f"{c_prefix}[")
+                        ):
+                            # If language is specified, prioritize matching language tag if present
+                            if c_lang and f"[{c_lang.lower()}]" in low_entry:
+                                shutil.rmtree(entry_path, ignore_errors=True)
+                                logger.info(f"Removed language-matched local chapter folder: {entry_path}")
+                                break
+                            elif not any(f"[{other_l}]" in low_entry for other_l in ["vi", "en", "ja", "es", "fr", "ru"]):
+                                shutil.rmtree(entry_path, ignore_errors=True)
+                                logger.info(f"Removed local chapter folder: {entry_path}")
+                                break
+        except Exception as e:
+            logger.error(f"Error removing local folder for chapter {c_num}: {e}")
+
+        return {
+            "chapter_id": c_id,
+            "chapter_number": c_num,
+            "title": c_title,
+            "language": c_lang
+        }
 
 chapter_service = ChapterService()

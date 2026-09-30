@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -11,6 +11,10 @@ import {
   Loader2,
   BookOpen,
   Check,
+  Globe,
+  AlertTriangle,
+  Download,
+  Sparkles
 } from "lucide-react";
 import client from "../api/client";
 import type { Chapter, PageItem } from "../types/chapter";
@@ -78,6 +82,9 @@ export const MangaReaderPage: React.FC = () => {
     try {
       const res = await client.get(`/api/chapters/${targetChapterId}`);
       setCurrentChapter(res.data);
+      if (res.data.language) {
+        setActiveLanguage(res.data.language.toLowerCase());
+      }
       const chapterPages = res.data.pages || [];
       setPages(chapterPages);
       setCurrentPage(Math.min(Math.max(1, targetPage), chapterPages.length || 1));
@@ -92,7 +99,8 @@ export const MangaReaderPage: React.FC = () => {
           chapter_number: res.data.chapter_number,
           page: targetPage,
           reading_mode: readingMode,
-          fit_mode: fitMode
+          fit_mode: fitMode,
+          language: res.data.language
         }).catch(() => {});
       }
     } catch (err) {
@@ -116,13 +124,158 @@ export const MangaReaderPage: React.FC = () => {
     navigate(`/manga/${mangaId}?tab=chapters`);
   };
 
-  // Chapter Navigation
-  const currentChapterIndex = chapters.findIndex((c) => c.id === currentChapter?.id);
-  const prevChapter = currentChapterIndex > 0 ? chapters[currentChapterIndex - 1] : null;
-  const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1 ? chapters[currentChapterIndex + 1] : null;
+  // Active reading language
+  const [activeLanguage, setActiveLanguage] = useState<string>("en");
+
+  // Available unique languages in downloaded chapters
+  const availableLanguages = useMemo(() => {
+    const set = new Set<string>();
+    chapters.forEach((c) => {
+      if (c.language) set.add(c.language.toLowerCase());
+    });
+    return Array.from(set);
+  }, [chapters]);
+
+  // Chapters filtered to the active reading language, sorted by numeric chapter
+  const activeLanguageChapters = useMemo(() => {
+    if (!chapters.length) return [];
+    const filtered = chapters.filter(
+      (c) => (c.language || "en").toLowerCase() === activeLanguage.toLowerCase()
+    );
+    const list = filtered.length > 0 ? filtered : chapters;
+    return [...list].sort((a, b) => a.chapter_numeric - b.chapter_numeric);
+  }, [chapters, activeLanguage]);
+
+  // Current chapter index in the active language sequence
+  const currentChapterIndex = activeLanguageChapters.findIndex((c) => c.id === currentChapter?.id);
+  const prevChapter = currentChapterIndex > 0 ? activeLanguageChapters[currentChapterIndex - 1] : null;
+  const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < activeLanguageChapters.length - 1
+    ? activeLanguageChapters[currentChapterIndex + 1]
+    : null;
+
+  // Chapters in other languages that continue after current chapter (MangaDex-style switch)
+  const otherLanguageNextChapters = useMemo(() => {
+    if (!currentChapter) return [];
+    const currLang = (currentChapter.language || "en").toLowerCase();
+    const currNum = currentChapter.chapter_numeric;
+    return chapters
+      .filter((c) => (c.language || "en").toLowerCase() !== currLang && c.chapter_numeric > currNum)
+      .sort((a, b) => a.chapter_numeric - b.chapter_numeric);
+  }, [chapters, currentChapter]);
+
+  const nextAltLanguageChapter = otherLanguageNextChapters[0] || null;
+
+  // Gap detection between chapters
+  const detectGap = (currNum: number, nxtNum: number) => {
+    if (nxtNum <= currNum) return { hasGap: false, count: 0, desc: "" };
+
+    const startInt = Math.floor(currNum) + 1;
+    const endInt = Math.floor(nxtNum) - 1;
+
+    if (startInt <= endInt) {
+      const missingList: number[] = [];
+      for (let i = startInt; i <= endInt; i++) {
+        missingList.push(i);
+      }
+      const count = missingList.length;
+      const desc = count === 1
+        ? `Chương ${missingList[0]}`
+        : count === 2
+        ? `Chương ${missingList[0]} và Chương ${missingList[1]}`
+        : `Từ Chương ${missingList[0]} đến Chương ${missingList[missingList.length - 1]}`;
+      return { hasGap: true, count, desc };
+    }
+
+    if (nxtNum - currNum > 1.05) {
+      return {
+        hasGap: true,
+        count: Math.floor(nxtNum - currNum) - 1 || 1,
+        desc: `các phân đoạn chap giữa ${currNum} và ${nxtNum}`,
+      };
+    }
+
+    return { hasGap: false, count: 0, desc: "" };
+  };
+
+  // Gap warning modal state
+  const [gapWarningModal, setGapWarningModal] = useState<{
+    targetChapter: Chapter;
+    missingCount: number;
+    missingDesc: string;
+  } | null>(null);
+
+  // MangaDex-style Language switch modal state
+  const [languageSwitchModal, setLanguageSwitchModal] = useState<{
+    targetChapter: Chapter;
+  } | null>(null);
 
   const goToChapter = (targetChapId: string, pageNum: number = 1) => {
     navigate(`/manga/${mangaId}/read/${targetChapId}?page=${pageNum}`);
+  };
+
+  const handleSafeGoToChapter = (targetChap: Chapter) => {
+    if (!currentChapter) {
+      goToChapter(targetChap.id, 1);
+      return;
+    }
+
+    // Check if target chapter has a different language
+    if ((targetChap.language || "en").toLowerCase() !== activeLanguage.toLowerCase()) {
+      setActiveLanguage(targetChap.language || "en");
+    }
+
+    // Check forward chapter gap
+    if (targetChap.chapter_numeric > currentChapter.chapter_numeric) {
+      const gap = detectGap(currentChapter.chapter_numeric, targetChap.chapter_numeric);
+      if (gap.hasGap) {
+        setGapWarningModal({
+          targetChapter: targetChap,
+          missingCount: gap.count,
+          missingDesc: gap.desc,
+        });
+        return;
+      }
+    }
+
+    goToChapter(targetChap.id, 1);
+  };
+
+  const handleRequestNextChapter = () => {
+    if (nextChapter) {
+      handleSafeGoToChapter(nextChapter);
+    } else if (nextAltLanguageChapter) {
+      setLanguageSwitchModal({ targetChapter: nextAltLanguageChapter });
+    }
+  };
+
+  const handleSwitchLanguage = (newLang: string) => {
+    setActiveLanguage(newLang);
+    const candidateChapters = chapters.filter(
+      (c) => (c.language || "en").toLowerCase() === newLang.toLowerCase()
+    );
+    if (candidateChapters.length === 0) return;
+
+    // Find the closest chapter to current chapter_numeric
+    if (currentChapter) {
+      const exactMatch = candidateChapters.find(
+        (c) => c.chapter_number.trim().toLowerCase() === currentChapter.chapter_number.trim().toLowerCase()
+      );
+      if (exactMatch) {
+        goToChapter(exactMatch.id, 1);
+        return;
+      }
+
+      // Closest numeric
+      const closest = [...candidateChapters].sort(
+        (a, b) => Math.abs(a.chapter_numeric - currentChapter.chapter_numeric) - Math.abs(b.chapter_numeric - currentChapter.chapter_numeric)
+      )[0];
+      if (closest) {
+        goToChapter(closest.id, 1);
+        return;
+      }
+    }
+
+    goToChapter(candidateChapters[0].id, 1);
   };
 
   // Long Strip Scroll Observer
@@ -164,18 +317,18 @@ export const MangaReaderPage: React.FC = () => {
     if (readingMode === "single") {
       if (currentPage < pages.length) {
         setCurrentPage((prev) => prev + 1);
-      } else if (nextChapter) {
-        goToChapter(nextChapter.id, 1);
+      } else {
+        handleRequestNextChapter();
       }
     } else if (readingMode === "double_rtl" || readingMode === "double_ltr") {
       const step = currentPage === 1 ? 1 : 2;
       if (currentPage + step <= pages.length) {
         setCurrentPage((prev) => prev + step);
-      } else if (nextChapter) {
-        goToChapter(nextChapter.id, 1);
+      } else {
+        handleRequestNextChapter();
       }
     }
-  }, [readingMode, currentPage, pages.length, nextChapter]);
+  }, [readingMode, currentPage, pages.length, nextChapter, nextAltLanguageChapter]);
 
   const handleTurnPrev = useCallback(() => {
     if (readingMode === "single") {
@@ -300,15 +453,36 @@ export const MangaReaderPage: React.FC = () => {
               </p>
             )}
           </div>
+
+          {/* Language Switcher Pills in Header (when multiple languages are available) */}
+          {availableLanguages.length > 1 && (
+            <div className="hidden sm:flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-0.5 text-xs font-bold shrink-0">
+              <Globe size={13} className="text-zinc-500 ml-1.5 mr-1" />
+              {availableLanguages.map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => handleSwitchLanguage(lang)}
+                  className={`px-2 py-0.5 rounded-lg uppercase transition cursor-pointer text-[11px] font-bold ${
+                    activeLanguage.toLowerCase() === lang.toLowerCase()
+                      ? "bg-[var(--brand-orange)] text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title={`Đổi sang bản dịch [${lang.toUpperCase()}]`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Center: Chapter & Page Selectors */}
         <div className="hidden md:flex items-center space-x-2">
           {/* Prev Chapter */}
           <button
-            onClick={() => prevChapter && goToChapter(prevChapter.id, 1)}
+            onClick={() => prevChapter && handleSafeGoToChapter(prevChapter)}
             disabled={!prevChapter}
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
             title="Chương trước"
           >
             <ChevronLeft size={16} />
@@ -317,10 +491,13 @@ export const MangaReaderPage: React.FC = () => {
           {/* Chapter Selector Dropdown */}
           <select
             value={currentChapter?.id || ""}
-            onChange={(e) => goToChapter(e.target.value, 1)}
+            onChange={(e) => {
+              const target = activeLanguageChapters.find((c) => c.id === e.target.value);
+              if (target) handleSafeGoToChapter(target);
+            }}
             className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-zinc-200 focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer max-w-[200px] truncate"
           >
-            {chapters.map((chap) => (
+            {activeLanguageChapters.map((chap) => (
               <option key={chap.id} value={chap.id} className="bg-zinc-900 text-white">
                 Ch. {chap.chapter_number} {chap.title ? `- ${chap.title}` : ""} ({chap.page_count} trang)
               </option>
@@ -329,10 +506,20 @@ export const MangaReaderPage: React.FC = () => {
 
           {/* Next Chapter */}
           <button
-            onClick={() => nextChapter && goToChapter(nextChapter.id, 1)}
-            disabled={!nextChapter}
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-            title="Chương tiếp theo"
+            onClick={handleRequestNextChapter}
+            disabled={!nextChapter && !nextAltLanguageChapter}
+            className={`p-1.5 rounded-lg border transition cursor-pointer ${
+              !nextChapter && nextAltLanguageChapter
+                ? "bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30"
+                : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+            }`}
+            title={
+              nextChapter
+                ? `Chương tiếp theo (Ch. ${nextChapter.chapter_number})`
+                : nextAltLanguageChapter
+                ? `Đổi sang bản [${nextAltLanguageChapter.language?.toUpperCase()}] Ch. ${nextAltLanguageChapter.chapter_number}`
+                : "Hết chương"
+            }
           >
             <ChevronRight size={16} />
           </button>
@@ -498,20 +685,58 @@ export const MangaReaderPage: React.FC = () => {
                   <div>
                     <h3 className="text-base font-bold text-white">Đã đọc hết Chapter {currentChapter?.chapter_number}!</h3>
                     <p className="text-xs text-zinc-400 mt-1">
-                      {nextChapter ? `Chương tiếp theo: Ch. ${nextChapter.chapter_number}` : "Bạn đã đọc đến chương mới nhất."}
+                      {nextChapter
+                        ? `Chương tiếp theo: Ch. ${nextChapter.chapter_number} [${(nextChapter.language || activeLanguage).toUpperCase()}]`
+                        : `Bạn đã đọc đến chương mới nhất của bản [${activeLanguage.toUpperCase()}].`}
                     </p>
                   </div>
+
+                  {/* Missing gap warning banner if nextChapter has a gap */}
+                  {(() => {
+                    if (!nextChapter || !currentChapter) return null;
+                    const gap = detectGap(currentChapter.chapter_numeric, nextChapter.chapter_numeric);
+                    if (!gap.hasGap) return null;
+                    return (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start space-x-2.5 text-left text-xs text-amber-300">
+                        <AlertTriangle size={18} className="shrink-0 text-amber-400 mt-0.5" />
+                        <div>
+                          <span className="font-bold">Lưu ý thiếu chương:</span> Đang bị khuyết {gap.count} chương ({gap.desc}) trước khi tới Ch. {nextChapter.chapter_number}.
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* MangaDex-style Language Switch Card if nextChapter is null but nextAltLanguageChapter exists */}
+                  {!nextChapter && nextAltLanguageChapter && (
+                    <div className="p-4 bg-amber-500/5 border border-amber-500/30 rounded-2xl space-y-2 text-left">
+                      <div className="flex items-center space-x-1.5 text-amber-400 font-bold text-xs">
+                        <Sparkles size={14} />
+                        <span>Gợi ý chuyển ngôn ngữ (MangaDex style)</span>
+                      </div>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        Bản dịch <span className="uppercase font-bold text-white">[{activeLanguage}]</span> đã hết ở chương này. Tuy nhiên có bản dịch tiếng <span className="uppercase font-bold text-[var(--brand-orange)]">[{nextAltLanguageChapter.language}]</span> tiếp nối từ <strong className="text-white">Chương {nextAltLanguageChapter.chapter_number}</strong>!
+                      </p>
+                      <button
+                        onClick={() => handleSwitchLanguage(nextAltLanguageChapter.language || "vi")}
+                        className="w-full mt-1 py-2.5 px-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <span>Chuyển sang [{nextAltLanguageChapter.language?.toUpperCase()}] Ch. {nextAltLanguageChapter.chapter_number}</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-center space-x-3 pt-2">
                     <button
                       onClick={handleExit}
-                      className="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs font-bold text-zinc-300"
+                      className="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs font-bold text-zinc-300 cursor-pointer"
                     >
                       Danh sách chương
                     </button>
                     {nextChapter && (
                       <button
-                        onClick={() => goToChapter(nextChapter.id, 1)}
-                        className="px-5 py-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-lg"
+                        onClick={() => handleSafeGoToChapter(nextChapter)}
+                        className="px-5 py-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-lg transition cursor-pointer"
                       >
                         Đọc Ch. {nextChapter.chapter_number} →
                       </button>
@@ -655,6 +880,31 @@ export const MangaReaderPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Language Switcher in Sidebar */}
+            {availableLanguages.length > 1 && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center space-x-1.5">
+                  <Globe size={12} className="text-[var(--brand-orange)]" />
+                  <span>Bản dịch ngôn ngữ</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {availableLanguages.map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => handleSwitchLanguage(lang)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold uppercase transition cursor-pointer ${
+                        activeLanguage.toLowerCase() === lang.toLowerCase()
+                          ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {lang === "vi" ? "VI - Tiếng Việt" : lang === "en" ? "EN - English" : lang.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Reading Mode */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
@@ -750,21 +1000,21 @@ export const MangaReaderPage: React.FC = () => {
             {/* Chapter Jump List */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                Danh sách chương ({chapters.length})
+                Danh sách chương [{activeLanguage.toUpperCase()}] ({activeLanguageChapters.length})
               </label>
-              <div className="max-h-48 overflow-y-auto space-y-1 pr-1 bg-zinc-900/60 p-2 rounded-xl border border-zinc-800">
-                {chapters.map((chap) => {
+              <div className="max-h-52 overflow-y-auto space-y-1 pr-1 bg-zinc-900/60 p-2 rounded-xl border border-zinc-800">
+                {activeLanguageChapters.map((chap) => {
                   const isCurrent = chap.id === currentChapter?.id;
                   return (
                     <button
                       key={chap.id}
                       onClick={() => {
-                        goToChapter(chap.id, 1);
+                        handleSafeGoToChapter(chap);
                         setShowSidebar(false);
                       }}
-                      className={`w-full p-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition ${
+                      className={`w-full p-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition cursor-pointer ${
                         isCurrent
-                          ? "bg-[var(--brand-orange)] text-white"
+                          ? "bg-[var(--brand-orange)] text-white shadow-sm"
                           : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
                       }`}
                     >
@@ -823,6 +1073,113 @@ export const MangaReaderPage: React.FC = () => {
             >
               <ChevronRight size={18} />
             </button>
+          </div>
+        </div>
+      )}
+      {/* Gap Warning Modal */}
+      {gapWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-amber-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <AlertTriangle size={24} />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <span>Phát hiện thiếu chương</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-mono font-normal">
+                  Khuyết {gapWarningModal.missingCount} chap
+                </span>
+              </h3>
+              <p className="text-xs text-zinc-300 mt-2 leading-relaxed">
+                Bạn đang chuẩn bị chuyển từ <strong className="text-white">Chương {currentChapter?.chapter_number}</strong> sang <strong className="text-[var(--brand-orange)]">Chương {gapWarningModal.targetChapter.chapter_number}</strong>.
+              </p>
+              <div className="mt-3 p-3 rounded-2xl bg-zinc-950/60 border border-zinc-800 text-xs text-amber-200 space-y-1">
+                <div className="font-semibold text-zinc-400">Các chương chưa được tải xuống:</div>
+                <div className="font-bold text-amber-300">{gapWarningModal.missingDesc}</div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+              <button
+                onClick={() => {
+                  const target = gapWarningModal.targetChapter;
+                  setGapWarningModal(null);
+                  goToChapter(target.id, 1);
+                }}
+                className="w-full sm:flex-1 py-2.5 px-4 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow transition cursor-pointer"
+              >
+                Bỏ qua & Đọc Ch. {gapWarningModal.targetChapter.chapter_number}
+              </button>
+              <button
+                onClick={() => {
+                  setGapWarningModal(null);
+                  handleExit();
+                }}
+                className="w-full sm:w-auto py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center space-x-1"
+                title="Về tab Chapters để tải các chap còn thiếu"
+              >
+                <Download size={13} />
+                <span>Tải bổ sung</span>
+              </button>
+              <button
+                onClick={() => setGapWarningModal(null)}
+                className="w-full sm:w-auto py-2.5 px-3 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MangaDex-style Language Switch Confirmation Modal */}
+      {languageSwitchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-[var(--brand-orange)]/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] flex items-center justify-center">
+              <Globe size={24} />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <span>Hết chương bản [{activeLanguage.toUpperCase()}]</span>
+              </h3>
+              <p className="text-xs text-zinc-300 mt-2 leading-relaxed">
+                Bản dịch tiếng <strong className="text-white uppercase">[{activeLanguage}]</strong> đã kết thúc ở Chương {currentChapter?.chapter_number}.
+              </p>
+              <p className="text-xs text-zinc-300 mt-2 leading-relaxed">
+                Hệ thống nhận thấy có bản dịch tiếng <strong className="text-[var(--brand-orange)] uppercase">[{languageSwitchModal.targetChapter.language}]</strong> tiếp nối từ <strong className="text-white">Chương {languageSwitchModal.targetChapter.chapter_number}</strong>. Bạn có muốn đổi ngôn ngữ để tiếp tục đọc không?
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+              <button
+                onClick={() => {
+                  const target = languageSwitchModal.targetChapter;
+                  setLanguageSwitchModal(null);
+                  handleSafeGoToChapter(target);
+                }}
+                className="w-full sm:flex-1 py-2.5 px-4 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow transition cursor-pointer"
+              >
+                Đổi sang [{languageSwitchModal.targetChapter.language?.toUpperCase()}] Ch. {languageSwitchModal.targetChapter.chapter_number}
+              </button>
+              <button
+                onClick={() => {
+                  setLanguageSwitchModal(null);
+                  handleExit();
+                }}
+                className="w-full sm:w-auto py-2.5 px-3 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Về danh sách chap
+              </button>
+              <button
+                onClick={() => setLanguageSwitchModal(null)}
+                className="w-full sm:w-auto py-2.5 px-3 border border-transparent text-zinc-500 hover:text-zinc-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Hủy
+              </button>
+            </div>
           </div>
         </div>
       )}
