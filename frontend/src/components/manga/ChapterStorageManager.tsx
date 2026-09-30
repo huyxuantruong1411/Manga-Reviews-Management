@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   RefreshCw,
   X,
-  ChevronRight,
   Layers,
   Check,
   Loader2,
@@ -93,13 +92,15 @@ interface ChapterStorageManagerProps {
   mangaTitle: string;
   onOpenReader: (chapterId: string, pageNumber?: number) => void;
   onRefreshChapters?: () => void;
+  onChaptersCountChange?: (count: number) => void;
 }
 
 export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
   mangaId,
   mangaTitle,
   onOpenReader,
-  onRefreshChapters
+  onRefreshChapters,
+  onChaptersCountChange
 }) => {
   // State
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -155,7 +156,9 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     setLoading(true);
     try {
       const res = await client.get(`/api/manga/${mangaId}/chapters`);
-      setChapters(res.data.chapters || []);
+      const chaps = res.data.chapters || [];
+      setChapters(chaps);
+      if (onChaptersCountChange) onChaptersCountChange(chaps.length);
       if (onRefreshChapters) onRefreshChapters();
     } catch (err) {
       console.error("Error fetching chapters:", err);
@@ -888,7 +891,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
             </div>
           ) : viewMode === "grid" ? (
             /* Grid View */
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
               {filteredChapters.map((chap) => {
                 const isSelected = selectedChapterIds.includes(chap.id);
                 return (
@@ -899,23 +902,23 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                     className={`group relative p-4 rounded-2xl border transition duration-200 cursor-pointer select-none flex flex-col justify-between ${
                       isSelected
                         ? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] ring-2 ring-[var(--brand-orange)]/30"
-                        : "bg-[var(--bg-primary)] border-[var(--border-primary)] hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm hover:shadow"
+                        : "bg-[var(--bg-primary)] border-[var(--border-primary)] hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm hover:shadow-md"
                     }`}
                   >
                     <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center space-x-2.5">
-                          <div className={`p-2.5 rounded-xl ${
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                          <div className={`p-2.5 rounded-xl shrink-0 ${
                             isSelected ? "bg-[var(--brand-orange)] text-white" : "bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]"
                           }`}>
                             <Folder size={18} />
                           </div>
-                          <div>
-                            <h4 className="text-sm font-black text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-black text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition truncate">
                               Chapter {chap.chapter_number}
                             </h4>
                             {chap.title && (
-                              <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
+                              <p className="text-xs text-[var(--text-secondary)] truncate" title={chap.title}>
                                 {chap.title}
                               </p>
                             )}
@@ -925,7 +928,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                         {/* Selection Checkbox */}
                         <div
                           onClick={(e) => handleChapterSelect(chap.id, e)}
-                          className={`p-1 rounded-md transition ${
+                          className={`p-1 rounded-md transition shrink-0 ${
                             isSelected ? "text-[var(--brand-orange)]" : "text-zinc-300 dark:text-zinc-600 hover:text-zinc-500"
                           }`}
                         >
@@ -935,21 +938,21 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 
                       {/* Badges */}
                       <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold">
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-secondary)]">
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-secondary)] whitespace-nowrap">
                           {chap.page_count} trang
                         </span>
                         {chap.language && (
-                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 uppercase">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">
                             {chap.language}
                           </span>
                         )}
                         {chap.scanlation_group && (
-                          <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 truncate max-w-[120px]">
+                          <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 truncate max-w-[120px]" title={chap.scanlation_group}>
                             {chap.scanlation_group}
                           </span>
                         )}
                         {chap.source === "local_import" && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                             Imported
                           </span>
                         )}
@@ -957,26 +960,30 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                     </div>
 
                     {/* Bottom Actions */}
-                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-[var(--border-primary)]/50">
+                    <div className="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-[var(--border-primary)]/40">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenChapter(chap);
                         }}
-                        className="text-xs font-bold text-[var(--brand-orange)] hover:underline flex items-center space-x-1"
+                        className="py-1.5 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition flex items-center justify-center space-x-1.5 whitespace-nowrap overflow-hidden"
+                        title="Xem và quản lý các trang ảnh bên trong chapter"
                       >
-                        <span>Mở thư mục</span>
-                        <ChevronRight size={13} />
+                        <FolderOpen size={13} className="shrink-0 text-zinc-400 group-hover:text-[var(--brand-orange)]" />
+                        <span className="truncate">Xem ảnh</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onOpenReader(chap.id);
+                          onOpenReader(chap.id, 1);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center space-x-1"
+                        className="py-1.5 px-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-1.5 whitespace-nowrap"
+                        title="Đọc chapter này trong trình đọc toàn màn hình"
                       >
-                        <Eye size={12} />
+                        <Eye size={13} className="shrink-0" />
                         <span>Đọc ngay</span>
                       </button>
                     </div>
@@ -1052,11 +1059,12 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onOpenReader(chap.id);
+                              onOpenReader(chap.id, 1);
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition"
+                            className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition inline-flex items-center space-x-1"
                           >
-                            Đọc
+                            <Eye size={12} />
+                            <span>Đọc ngay</span>
                           </button>
                         </td>
                       </tr>

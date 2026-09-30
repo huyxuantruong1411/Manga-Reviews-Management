@@ -10,6 +10,7 @@ import ImageToolsPage from "./pages/ImageToolsPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import SyncManagerPage from "./pages/SyncManagerPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import MangaReaderPage from "./pages/MangaReaderPage";
 import { AlertProvider } from "./hooks/useAlert";
 import { DownloadProvider } from "./hooks/useDownload";
 
@@ -19,6 +20,9 @@ export const App: React.FC = () => {
       <AlertProvider>
         <DownloadProvider>
           <Routes>
+            {/* Dedicated full-screen MangaDex-style reader route */}
+            <Route path="manga/:id/read/:chapterId" element={<MangaReaderPage />} />
+
             <Route path="/" element={<Layout />}>
               <Route index element={<MangaListPage />} />
               <Route path="manga/:id" element={<MangaDetailPage />} />
