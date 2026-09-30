@@ -352,6 +352,13 @@ class ChapterService:
         # Delete document from MongoDB
         await self._get_chapters_col().delete_one(filter_query)
 
+        # Cascading delete extracted panels and vision features
+        try:
+            from backend.services.panel_scanner_service import panel_scanner_service
+            await panel_scanner_service.delete_panels_for_chapter(c_id_str)
+        except Exception as pe:
+            logger.warning(f"Error cascading delete panels for chapter {c_id_str}: {pe}")
+
         # Log audit event
         try:
             manga_doc = await self._get_mangas_col().find_one({"_id": ObjectId(manga_id)})
@@ -395,9 +402,21 @@ class ChapterService:
             else:
                 pages_to_keep.append(p)
 
-        # Renumber remaining pages strictly 1..N
+        # Renumber remaining pages strictly 1..N and build mapping
+        old_to_new = {}
         for idx, p in enumerate(pages_to_keep):
-            p["page_number"] = idx + 1
+            old_num = p["page_number"]
+            new_num = idx + 1
+            p["page_number"] = new_num
+            old_to_new[old_num] = new_num
+
+        # Cascading delete panels for deleted pages and renumber remaining
+        try:
+            from backend.services.panel_scanner_service import panel_scanner_service
+            await panel_scanner_service.delete_panels_for_pages(str(chapter["_id"]), list(page_numbers))
+            await panel_scanner_service.renumber_panels_for_chapter(str(chapter["_id"]), old_to_new)
+        except Exception as pe:
+            logger.warning(f"Error cascading delete/renumber panels: {pe}")
 
         await self._get_chapters_col().update_one(
             filter_query,
