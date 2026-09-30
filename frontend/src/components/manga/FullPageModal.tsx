@@ -26,7 +26,7 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
-  }, [panel?.panel_id]);
+  }, [panel]);
 
   const zoomIn = () => {
     if (zoomLevel < 2.5) setZoomLevel((prev) => Math.min(2.5, prev + 0.25));

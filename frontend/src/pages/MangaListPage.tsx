@@ -1431,19 +1431,18 @@ export const MangaListPage: React.FC = () => {
           {viewMode === "grid" && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {mangas.map((manga) => (
-                <a
+                <article
                   key={manga._id}
-                  href={`/manga/${manga._id}`}
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) navigate(`/manga/${manga._id}`); }}
                   onClick={(e) => {
                     if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
                       return;
                     }
                     const target = e.target as HTMLElement;
                     const closestAnchor = target.closest("a");
-                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || (closestAnchor && closestAnchor !== e.currentTarget)) {
-                      e.preventDefault();
-                      return;
-                    }
+                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || closestAnchor) return;
                     e.preventDefault();
                     navigate(`/manga/${manga._id}`);
                   }}
@@ -1566,7 +1565,7 @@ export const MangaListPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </a>
+                </article>
               ))}
             </div>
           )}
@@ -1757,19 +1756,18 @@ export const MangaListPage: React.FC = () => {
           {viewMode === "card" && (
             <div className="space-y-4">
               {mangas.map((manga) => (
-                <a
+                <article
                   key={manga._id}
-                  href={`/manga/${manga._id}`}
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) navigate(`/manga/${manga._id}`); }}
                   onClick={(e) => {
                     if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
                       return;
                     }
                     const target = e.target as HTMLElement;
                     const closestAnchor = target.closest("a");
-                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || (closestAnchor && closestAnchor !== e.currentTarget)) {
-                      e.preventDefault();
-                      return;
-                    }
+                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || closestAnchor) return;
                     e.preventDefault();
                     navigate(`/manga/${manga._id}`);
                   }}
@@ -1927,7 +1925,7 @@ export const MangaListPage: React.FC = () => {
                       </a>
                     </div>
                   </div>
-                </a>
+                </article>
               ))}
             </div>
           )}

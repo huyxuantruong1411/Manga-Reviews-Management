@@ -73,9 +73,38 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await self.service._save_page_panels("m", "c", 1, "k", [{}])
 
+    async def test_replaced_image_cannot_receive_stale_ocr(self):
+        chapters = SimpleNamespace(find_one=AsyncMock(return_value={"pages": [{"page_number": 1, "object_key": "k", "md5_hash": "new"}]}))
+        with patch.object(self.service, "_get_chapters_col", return_value=chapters):
+            with self.assertRaises(ValueError):
+                await self.service._save_page_panels("m", "c", 1, "k", [{}], "old")
+
+    async def test_cancel_during_last_page_is_not_reported_completed(self):
+        cursor = MagicMock()
+        cursor.sort.return_value = cursor
+        cursor.to_list = AsyncMock(return_value=[{"_id": "c", "pages": [{"page_number": 1, "object_key": "k"}]}])
+        db = SimpleNamespace(
+            chapters=SimpleNamespace(distinct=AsyncMock(return_value=["m"]), find=MagicMock(return_value=cursor)),
+            mangas=SimpleNamespace(find_one=AsyncMock(return_value={"title": "M"})),
+        )
+        self.service._global_scan_active = True
+        def analyze(*args):
+            self.service._cancel_global_scan = True
+            return []
+        with patch("backend.services.panel_scanner_service.get_db", return_value=db), patch.object(self.service, "ensure_indexes", AsyncMock()), patch.object(self.service, "_fetch_page_bytes", AsyncMock(return_value=b"image")), patch.object(self.service, "_analyze_page_image", analyze):
+            await self.service._run_global_scan_task(None, True)
+        status = self.service.get_global_scan_status()
+        self.assertEqual(status["stage"], "cancelled")
+        self.assertFalse(status["is_scanning"])
+        self.assertEqual(status["current_page"], 0)
+
     def test_normalization_preserves_valid_words_and_punctuation(self):
         self.assertEqual(normalize_comic_text("Understanding, friendship!"), "Understanding, friendship!")
         self.assertEqual(normalize_comic_text("incredi-\nble"), "incredible")
+
+    def test_merged_english_ocr_is_repaired_without_splitting_vietnamese(self):
+        self.assertEqual(normalize_comic_text("HELLOFRIEND."), "Hello friend.")
+        self.assertEqual(normalize_comic_text("TRUYENTRANH", "vi"), "Truyentranh")
 
     def test_highlighting_does_not_trust_ocr_html(self):
         highlighted = self.service._highlight_text('<img src=x onerror="evil()">dream', ["dream"])

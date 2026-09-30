@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useEffectEvent } from "react";
 import {
   Search,
   Sparkles,
@@ -7,7 +7,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import client, { apiUrl } from "../../api/client";
+import client, { apiUrl, apiErrorMessage } from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import type { PanelResult, PanelStats, PanelScanStatus } from "../../types/panel";
 import type { Chapter } from "../../types/chapter";
@@ -54,152 +54,88 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch initial stats and stored chapters
-  const fetchStats = async () => {
+  const [searchError, setSearchError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+  const performSearch = useCallback(async (q: string, chapId: string) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoading(true);
+    setActivePopover(null);
+    setSearchError("");
     try {
-      const res = await client.get(`/api/manga/${mangaId}/panels/stats`);
-      setStats(res.data);
-      if (res.data.is_scanning) {
-        startListeningProgress();
+      const res = await client.get(`/api/manga/${mangaId}/panels/search`, {
+        signal: controller.signal,
+        params: { q: q.trim(), chapter_id: chapId === "all" ? undefined : chapId, limit: 36, offset: 0 },
+      });
+      if (controller.signal.aborted) return;
+      setResults(res.data.results || []);
+      setTotalResults(res.data.total || 0);
+      setActiveQuery(q);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setResults([]); setTotalResults(0);
+        setSearchError(apiErrorMessage(error, "Không tải được kết quả panel. Vui lòng thử lại."));
       }
-    } catch (e) {
-      console.error("Error fetching panel stats:", e);
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
     }
-  };
+  }, [mangaId]);
 
-  const fetchChapters = async () => {
-    try {
-      const res = await client.get(`/api/manga/${mangaId}/chapters`);
-      setChapters(res.data.chapters || []);
-    } catch (e) {
-      console.error("Error fetching chapters:", e);
+  const onProgress = useEffectEvent((data: PanelScanStatus) => {
+    setScanStatus(data);
+    if (["completed", "error", "cancelled"].includes(data.stage) && !data.is_scanning) {
+      client.get(`/api/manga/${mangaId}/panels/stats`).then(res => setStats(res.data)).catch(() => {});
+      void performSearch(searchQuery, selectedChapterId);
     }
-  };
+  });
 
   useEffect(() => {
-    fetchStats();
-    fetchChapters();
-    // Default search for recent panels
-    performSearch("", "all");
-
-    // Keyboard shortcut '/' to focus search
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && !(e.target instanceof HTMLElement && (e.target.closest("input, textarea, select") || e.target.isContentEditable))) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
+    const controller = new AbortController();
+    Promise.all([
+      client.get(`/api/manga/${mangaId}/panels/stats`, { signal: controller.signal }),
+      client.get(`/api/manga/${mangaId}/chapters`, { signal: controller.signal }),
+    ]).then(([stat, chapter]) => {
+      if (controller.signal.aborted) return;
+      setStats(stat.data); setChapters(chapter.data.chapters || []);
+      void performSearch("", "all");
+    }).catch(error => {
+      if (!controller.signal.aborted) setSearchError(apiErrorMessage(error, "Không tải được dữ liệu panel."));
+    });
+    const es = new EventSource(apiUrl(`/api/manga/${mangaId}/scan-progress`));
+    sseRef.current = es;
+    es.onmessage = event => {
+      try { onProgress(JSON.parse(event.data)); } catch (error) { console.error(error); }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "/" && !(event.target instanceof HTMLElement && (event.target.closest("input, textarea, select") || event.target.isContentEditable))) {
+        event.preventDefault(); searchInputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      controller.abort(); requestRef.current?.abort(); es.close();
       window.removeEventListener("keydown", handleKeyDown);
-      if (sseRef.current) sseRef.current.close();
     };
-  }, [mangaId]);
+  }, [mangaId, performSearch]);
 
-  // Search logic
-  const performSearch = async (q: string, chapId: string) => {
-    setLoading(true);
-    setActivePopover(null);
-    try {
-      const queryParam = q.trim() || "";
-      const res = await client.get(`/api/manga/${mangaId}/panels/search`, {
-        params: {
-          q: queryParam,
-          chapter_id: chapId === "all" ? undefined : chapId,
-          limit: 36,
-          offset: 0,
-        },
-      });
-      setResults(res.data.results || []);
-      setTotalResults(res.data.total || 0);
-      setActiveQuery(q);
-    } catch (e: any) {
-      console.error("Search error:", e);
-      setResults([]);
-      setTotalResults(0);
-    } finally {
-      setLoading(false);
-    }
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault(); void performSearch(searchQuery, selectedChapterId);
   };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    performSearch(searchQuery, selectedChapterId);
+  const handleChapterFilterChange = (chapter: string) => {
+    setSelectedChapterId(chapter); void performSearch(searchQuery, chapter);
   };
-
-  const handleChapterFilterChange = (chapId: string) => {
-    setSelectedChapterId(chapId);
-    performSearch(searchQuery, chapId);
-  };
-
-  // SSE Progress Streaming
-  const startListeningProgress = () => {
-    if (sseRef.current) sseRef.current.close();
-
-    const url = apiUrl(`/api/manga/${mangaId}/scan-progress`);
-    const es = new EventSource(url);
-    sseRef.current = es;
-
-    es.onmessage = (event) => {
-      try {
-        const data: PanelScanStatus = json_parse_safe(event.data);
-        if (data) {
-          setScanStatus(data);
-          if (["completed", "error", "cancelled"].includes(data.stage) && !data.is_scanning) {
-            es.close();
-            sseRef.current = null;
-            fetchStats();
-            performSearch(searchQuery, selectedChapterId);
-            if (data.stage === "completed") {
-              showAlert({
-                title: "Hoàn tất trích xuất đặc trưng",
-                message: data.message || "Đã phân đoạn panel và nhận diện text thành công!",
-                type: "success",
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("SSE parse error:", err);
-      }
-    };
-
-    es.onerror = () => {
-      es.close();
-      sseRef.current = null;
-    };
-  };
-
-  const json_parse_safe = (str: string) => {
-    try {
-      return JSON.parse(str);
-    } catch {
-      return null;
-    }
-  };
-
-  // Trigger scan
   const handleTriggerScan = async () => {
     try {
-      const payload = {
-        chapter_ids: scanChapterSelection === "all" ? undefined : [scanChapterSelection],
+      await client.post(`/api/manga/${mangaId}/scan-panels`, {
         force_rescan: forceRescan,
-      };
-      await client.post(`/api/manga/${mangaId}/scan-panels`, payload);
+        chapter_ids: scanChapterSelection === "all" ? undefined : [scanChapterSelection],
+      });
       setIsScanModalOpen(false);
-      startListeningProgress();
-      showAlert({
-        title: "Bắt đầu trích xuất",
-        message: "Hệ thống đang chạy ngầm phân tích hình ảnh và nhận diện văn bản.",
-        type: "info",
-      });
-      fetchStats();
-    } catch (e: any) {
-      showAlert({
-        title: "Lỗi khởi chạy",
-        message: e.response?.data?.detail || "Không thể khởi chạy tác vụ quét.",
-        type: "error",
-      });
+      const res = await client.get(`/api/manga/${mangaId}/scan-status`);
+      setScanStatus(res.data);
+    } catch (error) {
+      showAlert({ title: "Không thể bắt đầu quét", message: apiErrorMessage(error, "Không thể khởi chạy tác vụ quét."), type: "error" });
     }
   };
 
@@ -486,7 +422,8 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
             className="w-full max-w-md rounded-3xl bg-[var(--bg-card)] border border-[var(--border-primary)] p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
+            {searchError && <p role="alert" className="text-red-500">{searchError}</p>}
+      {/* Header */}
             <div className="flex items-center justify-between border-b border-[var(--border-primary)]/60 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/20 text-amber-500">
@@ -584,7 +521,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 
       {/* Floating Word Popover */}
       {activePopover && (
-        <WordPopover
+        <WordPopover key={activePopover?.word}
           word={activePopover.word}
           position={activePopover.position}
           onClose={() => setActivePopover(null)}

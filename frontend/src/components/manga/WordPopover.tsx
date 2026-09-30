@@ -31,7 +31,6 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
 
     client
       .get(`/api/dictionary/define/${encodeURIComponent(word.toLowerCase())}`)

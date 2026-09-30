@@ -19,7 +19,7 @@ logger = logging.getLogger("panel_scanner_service")
 HYPHEN_REGEX = re.compile(r"(\w+)-\s*\n\s*(\w+)")
 
 
-def normalize_comic_text(text: str) -> str:
+def normalize_comic_text(text: str, language: str = "en") -> str:
     """
     Clean up comic-specific dialogue formatting:
     1. Rejoin hyphenated words split across lines (e.g. 'incredi- ble' -> 'incredible')
@@ -35,8 +35,16 @@ def normalize_comic_text(text: str) -> str:
     t = re.sub(r"-\s+", "", t)
     t = re.sub(r"\s+", " ", t).strip()
 
-    # Preserve words and punctuation. Length alone cannot distinguish a merged
-    # OCR token from a valid word/name (e.g. "understanding" or "Chainsawman").
+    # Only repair long ALL-CAPS English OCR runs, retaining punctuation and the
+    # original transcript. Never apply an English splitter to Vietnamese/Japanese.
+    if language.lower() == "en":
+        import wordninja
+        def split_run(match):
+            parts = wordninja.split(match.group())
+            if len(parts) > 1 and all(len(p) > 1 or p.lower() in {"a", "i"} for p in parts):
+                return " ".join(parts).upper()
+            return match.group()
+        t = re.sub(r"\b[A-Z]{9,}\b", split_run, t)
 
     # 3. If entire text is UPPERCASE, convert to title/sentence case
     if t.isupper() and len(t) > 3:
@@ -335,6 +343,7 @@ class PanelScannerService:
                             "chapter_id": c_id_str,
                             "page_number": page_num,
                             "object_key": obj_key,
+                            "page_hash": page.get("md5_hash"),
                             "pipeline_version": 2,
                         })
                         if existing_count:
@@ -375,9 +384,10 @@ class PanelScannerService:
                         page_num,
                         obj_key,
                         chap_title,
+                        chap.get("language", "en"),
                     )
 
-                    await self._save_page_panels(manga_id, c_id_str, page_num, obj_key, extracted_panels)
+                    await self._save_page_panels(manga_id, c_id_str, page_num, obj_key, extracted_panels, page.get("md5_hash"))
                     panels_extracted_total += len(extracted_panels)
 
                     processed_pages += 1
@@ -521,6 +531,7 @@ class PanelScannerService:
                             "chapter_id": c_id_str,
                             "page_number": page_num,
                             "object_key": obj_key,
+                            "page_hash": page.get("md5_hash"),
                             "pipeline_version": 2,
                         })
                             if existing_count:
@@ -566,9 +577,11 @@ class PanelScannerService:
                             page_num,
                             obj_key,
                             chap_title,
+                            chap.get("language", "en"),
                         )
 
-                        await self._save_page_panels(mid, c_id_str, page_num, obj_key, extracted_panels)
+                        if not await self._save_page_panels(mid, c_id_str, page_num, obj_key, extracted_panels, page.get("md5_hash")):
+                            break
                         total_panels_extracted += len(extracted_panels)
 
                         total_processed_pages += 1
@@ -613,13 +626,14 @@ class PanelScannerService:
         finally:
             self._global_scan_active = False
 
-    async def _save_page_panels(self, manga_id, chapter_id, page_number, object_key, panels):
+    async def _save_page_panels(self, manga_id, chapter_id, page_number, object_key, panels, expected_hash=None):
         if self._global_scan_active and self._cancel_global_scan:
-            return
+            return False
         chapter_key = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
         chapter = await self._get_chapters_col().find_one({"_id": chapter_key, "manga_id": manga_id})
         if not chapter or not any(
             p.get("page_number") == page_number and
+            (not expected_hash or p.get("md5_hash") == expected_hash) and
             (p.get("object_key") or f"chapters/{manga_id}/{chapter_id}/{p.get('filename', str(page_number) + '.jpg')}") == object_key
             for p in chapter.get("pages", [])
         ):
@@ -638,8 +652,10 @@ class PanelScannerService:
         await col.delete_many({**selector, "scan_generation": {"$ne": generation}})
         await get_db().panel_scan_pages.update_one(selector, {"$set": {
             "manga_id": manga_id, "object_key": object_key,
+            "page_hash": expected_hash,
             "pipeline_version": 2, "scanned_at": datetime.utcnow(),
         }}, upsert=True)
+        return True
 
     async def _fetch_page_bytes(
         self,
@@ -704,6 +720,7 @@ class PanelScannerService:
         page_num: int,
         obj_key: str,
         chapter_title: str = "",
+        language: str = "en",
     ) -> List[Dict[str, Any]]:
         """Decode image, segment panels, run OCR, NLP tokenize, lemmatize."""
         img = vision_service.decode_image_bytes(image_bytes)
@@ -727,7 +744,7 @@ class PanelScannerService:
         for p_idx, (nx1, ny1, nx2, ny2) in enumerate(panels):
             assigned_texts = panel_texts_list[p_idx]
             raw_text = "\n".join(d["text"] for d in assigned_texts).strip()
-            cleaned_text = normalize_comic_text(raw_text)
+            cleaned_text = normalize_comic_text(raw_text, language)
 
             lemmas = []
             vocab_list = []

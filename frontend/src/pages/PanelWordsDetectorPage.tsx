@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useEffectEvent } from "react";
 import {
   ScanSearch,
   Search,
@@ -96,20 +96,17 @@ export const PanelWordsDetectorPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchTelemetry();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- State updates follow the async HTTP request.
+    void fetchTelemetry();
   }, [fetchTelemetry]);
 
   // Fetch chapters for selected manga filter
   useEffect(() => {
     if (!selectedMangaId || selectedMangaId === "all") {
-      setChapterList([]);
-      setSelectedChapterId("all");
       return;
     }
 
     const controller = new AbortController();
-    setChapterList([]);
-    setSelectedChapterId("all");
     const fetchChapters = async () => {
       try {
         const res = await client.get(`/api/manga/${selectedMangaId}/chapters`, { signal: controller.signal });
@@ -124,47 +121,6 @@ export const PanelWordsDetectorPage: React.FC = () => {
     fetchChapters();
     return () => controller.abort();
   }, [selectedMangaId]);
-
-  // Real-time SSE Scan Progress Listener
-  useEffect(() => {
-    const connectSSE = () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-
-      const sse = new EventSource(apiUrl("/api/panels/scan-progress"));
-      eventSourceRef.current = sse;
-
-      sse.onmessage = (event) => {
-        try {
-          const data: GlobalScanStatus = JSON.parse(event.data);
-          setScanStatus(data);
-
-          if (["completed", "cancelled", "error"].includes(data.stage) && !data.is_scanning) {
-            fetchTelemetry();
-            // Refresh current search results if active
-            if (activeQuery) {
-              executeSearch(activeQuery, pageOffset, selectedMangaId, selectedChapterId);
-            }
-          }
-        } catch (e) {
-          console.error("Error parsing scan SSE event:", e);
-        }
-      };
-
-      sse.onerror = () => {
-        // SSE reconnects automatically
-      };
-    };
-
-    connectSSE();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, [fetchTelemetry, activeQuery, pageOffset, selectedMangaId, selectedChapterId, pageLimit]);
 
   // Search execution
   const executeSearch = async (
@@ -223,6 +179,24 @@ export const PanelWordsDetectorPage: React.FC = () => {
     }
   };
 
+  const onScanProgress = useEffectEvent((data: GlobalScanStatus) => {
+    setScanStatus(data);
+    if (["completed", "cancelled", "error"].includes(data.stage) && !data.is_scanning) {
+      void fetchTelemetry();
+      if (activeQuery) void executeSearch(activeQuery, pageOffset, selectedMangaId, selectedChapterId);
+    }
+  });
+
+  useEffect(() => {
+    const sse = new EventSource(apiUrl("/api/panels/scan-progress"));
+    eventSourceRef.current = sse;
+    sse.onmessage = (event) => {
+      try { onScanProgress(JSON.parse(event.data)); }
+      catch (error) { console.error("Invalid scan progress event", error); }
+    };
+    return () => { sse.close(); eventSourceRef.current = null; };
+  }, []);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPageOffset(0);
@@ -266,6 +240,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
 
   // Trigger Global Scan
   const handleStartScan = async () => {
+    if (!scanTargetMangaIds.length) return;
     try {
       setStartingScan(true);
       const payload: { force_rescan: boolean; manga_ids?: string[] } = {
@@ -340,7 +315,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                setScanTargetMangaIds([]);
+                setScanTargetMangaIds(mangaList.map(m => m.manga_id));
                 setScanForceRescan(false);
                 setIsScanModalOpen(true);
               }}
@@ -531,6 +506,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
               onChange={(e) => {
                 setSelectedMangaId(e.target.value);
                 setSelectedChapterId("all");
+                setChapterList([]);
                 setPageOffset(0);
                 if (searchQuery.trim()) {
                   executeSearch(searchQuery, 0, e.target.value, "all");
@@ -830,12 +806,12 @@ export const PanelWordsDetectorPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                    Chọn Manga để quét ({scanTargetMangaIds.length === 0 ? "Tất cả manga" : `${scanTargetMangaIds.length} bộ đã chọn`})
+                    Chọn Manga để quét ({`${scanTargetMangaIds.length} bộ đã chọn`})
                   </span>
                   <div className="flex items-center gap-2 text-[11px]">
                     <button
                       type="button"
-                      onClick={() => setScanTargetMangaIds([])}
+                      onClick={() => setScanTargetMangaIds(mangaList.map(m => m.manga_id))}
                       className="text-amber-500 hover:underline cursor-pointer"
                     >
                       Chọn tất cả
@@ -843,10 +819,10 @@ export const PanelWordsDetectorPage: React.FC = () => {
                     <span>•</span>
                     <button
                       type="button"
-                      onClick={() => setScanTargetMangaIds(mangaList.map((m) => m.manga_id))}
+                      onClick={() => setScanTargetMangaIds([])}
                       className="text-amber-500 hover:underline cursor-pointer"
                     >
-                      Chọn riêng
+                      Bỏ chọn tất cả
                     </button>
                   </div>
                 </div>
@@ -854,16 +830,13 @@ export const PanelWordsDetectorPage: React.FC = () => {
                 <div className="max-h-56 overflow-y-auto space-y-1.5 border border-[var(--border-primary)] rounded-2xl p-2 bg-[var(--bg-primary)]/50">
                   {mangaList.map((m) => {
                     const isSelected =
-                      scanTargetMangaIds.length === 0 || scanTargetMangaIds.includes(m.manga_id);
+                      scanTargetMangaIds.includes(m.manga_id);
 
                     return (
                       <div
                         key={m.manga_id}
                         onClick={() => {
-                          if (scanTargetMangaIds.length === 0) {
-                            // First custom selection
-                            setScanTargetMangaIds([m.manga_id]);
-                          } else if (scanTargetMangaIds.includes(m.manga_id)) {
+                          if (scanTargetMangaIds.includes(m.manga_id)) {
                             const filtered = scanTargetMangaIds.filter((id) => id !== m.manga_id);
                             setScanTargetMangaIds(filtered);
                           } else {
@@ -909,7 +882,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStartScan}
-                disabled={startingScan}
+                disabled={startingScan || scanTargetMangaIds.length === 0}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer"
               >
                 {startingScan ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
@@ -930,7 +903,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
 
       {/* 8. Interactive Word Popover (IPA, Audio, Meaning) */}
       {popoverWord && popoverPosition && (
-        <WordPopover
+        <WordPopover key={popoverWord}
           word={popoverWord}
           position={popoverPosition}
           onClose={() => {

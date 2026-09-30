@@ -11,7 +11,9 @@ from backend.routers.downloads import DownloadRequest
 from backend.routers.sync_manager import SyncOptions
 from backend.services.chapter_service import ChapterService
 from backend.services.audit_service import AuditService
-from backend.services.image_tools_service import _convert_single_image
+from backend.services.image_tools_service import _convert_single_image, ImageToolsService
+from backend.routers.analytics import parse_iso_date
+from backend.utils.remote_images import validate_public_url
 
 
 class SystemTests(unittest.IsolatedAsyncioTestCase):
@@ -97,6 +99,31 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result["success"])
             with Image.open(result["path"]) as image:
                 self.assertEqual(image.format, "JPEG")
+
+    def test_duplicate_deletion_requires_scan_and_retains_one_copy(self):
+        with tempfile.TemporaryDirectory(prefix="manga-regression-") as folder:
+            first, second = Path(folder) / "1.png", Path(folder) / "2.png"
+            Image.new("RGB", (10, 10), "red").save(first)
+            second.write_bytes(first.read_bytes())
+            service = ImageToolsService()
+            self.assertEqual(service.delete_duplicates([str(first)])["deleted_count"], 0)
+            service.scan_duplicates(folder)
+            self.assertEqual(service.delete_duplicates([str(first), str(second)])["deleted_count"], 0)
+            self.assertEqual(service.delete_duplicates([str(first)])["deleted_count"], 1)
+            self.assertTrue(second.exists())
+
+    def test_end_date_includes_whole_day(self):
+        end = parse_iso_date("2026-09-30", end_of_day=True)
+        self.assertEqual((end.hour, end.minute, end.second), (23, 59, 59))
+
+    async def test_remote_image_rejects_private_and_redirect_destinations(self):
+        for url in ("file:///C:/test", "http://localhost/image", "http://user:pass@example.com/image"):
+            with self.assertRaises(ValueError):
+                await validate_public_url(url)
+        addresses = [(2, 1, 6, "", ("127.0.0.1", 80))]
+        with patch("backend.utils.remote_images.socket.getaddrinfo", return_value=addresses):
+            with self.assertRaises(ValueError):
+                await validate_public_url("https://public-looking.example/image")
 
 
 if __name__ == "__main__":

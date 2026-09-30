@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Path, HTTPException, status, UploadFile, File, Request
+from fastapi import APIRouter, Path, HTTPException, status, UploadFile, File, Request, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Any, Optional
 from datetime import datetime, timedelta
 from bson import ObjectId
 import re
+import asyncio
 import io
 import json
 import logging
@@ -16,6 +17,7 @@ from backend.services.audit_service import audit_service
 from backend.config import settings
 import uuid as uuid_lib
 import httpx
+from backend.utils.remote_images import fetch_public_image
 
 logger = logging.getLogger(__name__)
 
@@ -297,36 +299,20 @@ class ImageUrlRequest(BaseModel):
 
 
 @router.post("/{manga_id}/reviews/upload-image-url")
-async def upload_image_from_url(manga_id: str = Path(...), body: ImageUrlRequest = None):
+async def upload_image_from_url(manga_id: str = Path(...), body: ImageUrlRequest = Body(...)):
     """Download an image from an external URL and store it in MinIO.
     This bypasses hotlink protection by downloading server-side."""
     if not ObjectId.is_valid(manga_id):
         raise HTTPException(status_code=400, detail="Invalid manga ID format")
 
     try:
-        _ensure_bucket(REVIEW_IMAGES_BUCKET)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MinIO bucket error: {str(e)}")
-
+        data, content_type = await fetch_public_image(body.url)
+    except (ValueError, OSError, httpx.HTTPError) as error:
+        raise HTTPException(status_code=400, detail=f"Cannot import image: {error}")
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-            resp = await client.get(body.url, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "image/*,*/*",
-                "Referer": body.url,
-            })
-            resp.raise_for_status()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download image: {str(e)}")
-
-    content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
-    if content_type not in ALLOWED_IMAGE_TYPES:
-        # Try to guess from URL
-        guessed, _ = mimetypes.guess_type(body.url.split("?")[0])
-        if guessed and guessed in ALLOWED_IMAGE_TYPES:
-            content_type = guessed
-        else:
-            raise HTTPException(status_code=400, detail=f"URL does not point to a supported image (got: {content_type})")
+        await asyncio.to_thread(_ensure_bucket, REVIEW_IMAGES_BUCKET)
+    except Exception as error:
+        raise HTTPException(status_code=503, detail="Image storage is unavailable") from error
 
     ext_map = {
         "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
@@ -337,8 +323,7 @@ async def upload_image_from_url(manga_id: str = Path(...), body: ImageUrlRequest
     object_key = f"{manga_id}/{unique_name}"
 
     try:
-        data = resp.content
-        minio_service.client.put_object(
+        await asyncio.to_thread(minio_service.client.put_object,
             REVIEW_IMAGES_BUCKET,
             object_key,
             io.BytesIO(data),

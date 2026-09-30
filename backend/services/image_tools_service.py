@@ -95,6 +95,7 @@ def _convert_single_image(filepath: str, target_ext: str) -> Dict[str, Any]:
 
 class ImageToolsService:
     def __init__(self):
+        self._duplicate_candidates = {}
         self.progress = {
             "total_files": 0,
             "scanned_files": 0,
@@ -191,6 +192,11 @@ class ImageToolsService:
         # Sort by wasted space descending
         groups.sort(key=lambda g: g["wasted_bytes"], reverse=True)
 
+        self._duplicate_candidates = {
+            os.path.realpath(item["path"]): (group["hash"], [os.path.realpath(f["path"]) for f in group["files"]])
+            for group in groups for item in group["files"]
+        }
+
         return {
             "groups": groups,
             "stats": {
@@ -206,8 +212,22 @@ class ImageToolsService:
         freed_bytes = 0
         errors: List[str] = []
 
-        for p in file_paths:
+        requested = {os.path.realpath(p) for p in file_paths}
+        for p in requested:
             try:
+                candidate = self._duplicate_candidates.get(p)
+                if not candidate:
+                    errors.append(f"Scan duplicates again before deleting: {p}")
+                    continue
+                expected_hash, siblings = candidate
+                # Keep at least one unchanged original outside this delete batch.
+                retained = [s for s in siblings if s not in requested and os.path.isfile(s)]
+                if not retained or not any(_get_file_hash(s) == expected_hash for s in retained):
+                    errors.append(f"At least one identical copy must be retained: {p}")
+                    continue
+                if not os.path.isfile(p) or _get_file_hash(p) != expected_hash:
+                    errors.append(f"File changed since scan: {p}")
+                    continue
                 if os.path.exists(p):
                     size = os.path.getsize(p)
                     os.remove(p)

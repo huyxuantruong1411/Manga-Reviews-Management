@@ -161,8 +161,8 @@ export const ImageToolsPage: React.FC = () => {
         if (res.data.download_path) {
           setScanPath(res.data.download_path);
         } else {
-          setScanPath(res.data.base_path || "");
-          showToast(`This manga has no custom download path. Using base download path.`, "info");
+          setScanPath("");
+          showToast("Manga chưa có thư mục tải riêng. Hãy chọn rõ thư mục cần quét.", "warning");
         }
       } catch (err: any) {
         console.error("Error resolving download path:", err);
@@ -1429,7 +1429,7 @@ export const ImageToolsPage: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <img 
-              src={`${client.defaults.baseURL || "http://localhost:8000"}/api/image-tools/file?path=${encodeURIComponent(zoomedImagePath)}`}
+              src={`${client.defaults.baseURL || ""}/api/image-tools/file?path=${encodeURIComponent(zoomedImagePath)}`}
               alt="Zoomed duplicate preview"
               className="max-w-full max-h-[90vh] object-contain rounded-2xl"
             />

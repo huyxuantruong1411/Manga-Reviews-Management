@@ -359,6 +359,14 @@ class ChapterService:
 
         # Delete document from MongoDB
         await self._get_chapters_col().delete_one(filter_query)
+        await self._get_reading_col().update_many(
+            {"manga_id": manga_id}, {"$pull": {"read_chapter_ids": c_id_str}}
+        )
+        await self._get_reading_col().update_many(
+            {"manga_id": manga_id, "last_read_chapter_id": c_id_str},
+            {"$set": {"last_read_chapter_id": None, "last_read_chapter_number": None,
+                      "last_read_page": 1, "updated_at": datetime.utcnow()}}
+        )
 
         # Cascading delete extracted panels and vision features
         try:
@@ -436,6 +444,18 @@ class ChapterService:
                 }
             }
         )
+
+        progress = await self._get_reading_col().find_one({"manga_id": chapter["manga_id"], "last_read_chapter_id": chapter_id})
+        if progress:
+            old_page = progress.get("last_read_page", 1)
+            new_page = old_to_new.get(old_page, max(1, min(old_page, len(pages_to_keep))))
+            fields = {"last_read_page": new_page}
+            if not pages_to_keep:
+                fields.update({"last_read_chapter_id": None, "last_read_chapter_number": None})
+            await self._get_reading_col().update_one(
+                {"manga_id": chapter["manga_id"], "last_read_chapter_id": chapter_id, "last_read_page": old_page},
+                {"$set": fields}
+            )
 
         return {
             "chapter_id": chapter_id,

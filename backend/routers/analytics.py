@@ -1,19 +1,20 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from backend.services.analytics_service import analytics_service
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
-def parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
+def parse_iso_date(date_str: Optional[str], end_of_day: bool = False) -> Optional[datetime]:
     if not date_str:
         return None
     try:
         if "T" not in date_str and len(date_str) == 10:
-            return datetime.strptime(date_str, "%Y-%m-%d")
+            value = datetime.strptime(date_str, "%Y-%m-%d")
+            return value + timedelta(days=1, microseconds=-1) if end_of_day else value
         return datetime.fromisoformat(date_str)
-    except ValueError:
-        return None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="Invalid ISO date") from error
 
 def parse_list_param(param: Optional[Any]) -> Optional[List[str]]:
     if not param:
@@ -122,11 +123,11 @@ async def get_all_analytics(
         )
         
         added_start = parse_iso_date(added_start_date)
-        added_end = parse_iso_date(added_end_date)
+        added_end = parse_iso_date(added_end_date, end_of_day=True)
         review_start = parse_iso_date(review_start_date)
-        review_end = parse_iso_date(review_end_date)
+        review_end = parse_iso_date(review_end_date, end_of_day=True)
         completed_start = parse_iso_date(completed_start_date)
-        completed_end = parse_iso_date(completed_end_date)
+        completed_end = parse_iso_date(completed_end_date, end_of_day=True)
         
         return await analytics_service.get_all_analytics(
             filter_query=filter_query,
@@ -138,6 +139,8 @@ async def get_all_analytics(
             completed_start=completed_start,
             completed_end=completed_end
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -170,6 +173,8 @@ async def get_overview(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         return await analytics_service.get_overview_stats(filter_query)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -202,6 +207,8 @@ async def get_score_distribution(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         return await analytics_service.get_score_distribution(filter_query)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -234,6 +241,8 @@ async def get_top_tags(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         return await analytics_service.get_top_tags(filter_query)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -269,8 +278,10 @@ async def get_manga_timeline(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         start_dt = parse_iso_date(added_start_date)
-        end_dt = parse_iso_date(added_end_date)
+        end_dt = parse_iso_date(added_end_date, end_of_day=True)
         return await analytics_service.get_manga_added_timeline(filter_query, timeline_group_by, start_dt, end_dt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -308,8 +319,10 @@ async def get_review_timeline(
         from backend.database.connection import get_db
         manga_ids = [str(mid) for mid in await get_db().mangas.find(filter_query).distinct("_id")]
         start_dt = parse_iso_date(review_start_date)
-        end_dt = parse_iso_date(review_end_date)
+        end_dt = parse_iso_date(review_end_date, end_of_day=True)
         return await analytics_service.get_review_activity_timeline(manga_ids, timeline_group_by, start_dt, end_dt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -347,8 +360,10 @@ async def get_completed_timeline(
         from backend.database.connection import get_db
         manga_ids = [str(mid) for mid in await get_db().mangas.find(filter_query).distinct("_id")]
         start_dt = parse_iso_date(completed_start_date)
-        end_dt = parse_iso_date(completed_end_date)
+        end_dt = parse_iso_date(completed_end_date, end_of_day=True)
         return await analytics_service.get_manga_completed_timeline(manga_ids, timeline_group_by, start_dt, end_dt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -381,6 +396,8 @@ async def get_tags_details(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         return await analytics_service.get_tags_details(filter_query)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -413,6 +430,8 @@ async def get_creators_details(
             authors=authors, artists=artists, rating_min=rating_min, rating_max=rating_max, year_start=year_start, year_end=year_end
         )
         return await analytics_service.get_creators_details(filter_query)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

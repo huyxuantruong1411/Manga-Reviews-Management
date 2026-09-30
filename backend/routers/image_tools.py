@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from fastapi import APIRouter, Path, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -59,6 +60,7 @@ async def _resolve_scan_path(path: Optional[str], manga_id: Optional[str]) -> st
         dl_path = manga.get("download_path")
         if dl_path and os.path.isdir(dl_path):
             return dl_path
+        raise HTTPException(status_code=400, detail="Manga chưa có thư mục tải riêng. Hãy chọn rõ thư mục cần quét.")
 
     # 3. Fall back to global base path
     db_config = await get_db().settings.find_one({"_id": "download_config"})
@@ -86,7 +88,7 @@ async def get_scan_progress():
 async def scan_duplicates(req: ScanDuplicatesRequest):
     """Scan a folder for duplicate images using MD5 hashing."""
     scan_path = await _resolve_scan_path(req.path, req.manga_id)
-    result = image_tools_service.scan_duplicates(scan_path)
+    result = await asyncio.to_thread(image_tools_service.scan_duplicates, scan_path)
     result["scan_path"] = scan_path
     return result
 
@@ -96,14 +98,14 @@ async def delete_duplicates(req: DeleteDuplicatesRequest):
     """Delete specified duplicate image files."""
     if not req.file_paths:
         raise HTTPException(status_code=400, detail="No file paths provided")
-    return image_tools_service.delete_duplicates(req.file_paths)
+    return await asyncio.to_thread(image_tools_service.delete_duplicates, req.file_paths)
 
 
 @router.post("/scan-format")
 async def scan_format(req: ScanFormatRequest):
     """Scan a folder for images not matching the target format."""
     scan_path = await _resolve_scan_path(req.path, req.manga_id)
-    result = image_tools_service.scan_non_target_format(scan_path, req.target_format)
+    result = await asyncio.to_thread(image_tools_service.scan_non_target_format, scan_path, req.target_format)
     result["scan_path"] = scan_path
     return result
 
@@ -113,7 +115,7 @@ async def convert_format(req: ConvertFormatRequest):
     """Convert specified image files to target format."""
     if not req.file_paths:
         raise HTTPException(status_code=400, detail="No file paths provided")
-    return image_tools_service.convert_images(req.file_paths, req.target_format)
+    return await asyncio.to_thread(image_tools_service.convert_images, req.file_paths, req.target_format)
 
 
 @router.get("/manga/{manga_id}/download-path")
