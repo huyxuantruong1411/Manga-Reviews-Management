@@ -10,33 +10,47 @@ venv/
 var/
 Pipfile.lock
 poetry.lock
+*.log
 
-# Node / JS
+# Node / Frontend
 node_modules/
 dist/
 dist-ssr/
 .eslintcache
+.vite/
 
-# Local Env
+# Local Environment & Secrets
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+mangadex_access.txt
+get_mangadex_access_token.py
 
 # OS / Editors
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Project specifics
+# Project specifics & Temporary dumps
 downloads/
-mangadex_access.txt
-get_mangadex_access_token.py
-*_source_dump.txt
 backend/minio_data/
 backend/scratch/
 ref/
+note.txt
+*_source_dump.txt
+dump_backend.py
+dump_frontend.py
+backend/dump_backend.py
+frontend/dump_frontend.py
+backend/scrape_site.py
+backend/test_all_mangas.py
+backend/test_serialization.py
+scraped_*.txt
