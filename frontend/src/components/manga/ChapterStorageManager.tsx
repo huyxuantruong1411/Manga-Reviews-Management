@@ -27,6 +27,9 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  ChevronsLeft,
+  ChevronsRight,
+  SlidersHorizontal,
   Maximize2,
   Plus,
   Minus
@@ -143,6 +146,26 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
       [volKey]: !prev[volKey]
     }));
   };
+
+  // Pagination states for Chapter Storage
+  const [chapterPageSize, setChapterPageSize] = useState<number | "all">(() => {
+    const saved = localStorage.getItem("chapter_storage_page_size");
+    if (saved === "all") return "all";
+    const num = Number(saved);
+    return [12, 24, 48, 96, 120].includes(num) ? num : 24;
+  });
+  const [chapterCurrentPage, setChapterCurrentPage] = useState<number>(1);
+  const [jumpPageInput, setJumpPageInput] = useState<string>("");
+  const chapterListTopRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem("chapter_storage_page_size", String(chapterPageSize));
+  }, [chapterPageSize]);
+
+  // Reset to page 1 on filter, search, or page size change
+  useEffect(() => {
+    setChapterCurrentPage(1);
+  }, [searchQuery, selectedLanguage, selectedGroup, chapterPageSize]);
 
   // Keyboard navigation for Lightbox Preview
   useEffect(() => {
@@ -276,21 +299,127 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     });
   }, [chapters, selectedLanguage, selectedGroup, searchQuery]);
 
+  // Pagination metrics & slices
+  const totalFilteredCount = filteredChapters.length;
+  const effectivePageSize =
+    chapterPageSize === "all" ? totalFilteredCount || 1 : Number(chapterPageSize);
+  const totalPages =
+    chapterPageSize === "all" ? 1 : Math.max(1, Math.ceil(totalFilteredCount / effectivePageSize));
+
+  useEffect(() => {
+    if (chapterCurrentPage > totalPages && totalPages > 0) {
+      setChapterCurrentPage(totalPages);
+    }
+  }, [totalPages, chapterCurrentPage]);
+
+  const startIndex =
+    chapterPageSize === "all" ? 0 : (chapterCurrentPage - 1) * effectivePageSize;
+  const endIndex =
+    chapterPageSize === "all"
+      ? totalFilteredCount
+      : Math.min(totalFilteredCount, startIndex + effectivePageSize);
+
+  const paginatedChapters = useMemo(() => {
+    if (chapterPageSize === "all") return filteredChapters;
+    return filteredChapters.slice(startIndex, endIndex);
+  }, [filteredChapters, chapterPageSize, startIndex, endIndex]);
+
+  const handlePageChange = (newPage: number) => {
+    const clamped = Math.max(1, Math.min(newPage, totalPages));
+    setChapterCurrentPage(clamped);
+    chapterListTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(jumpPageInput, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      handlePageChange(pageNum);
+      setJumpPageInput("");
+    }
+  };
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages: (number | "ellipsis")[] = [];
+    if (chapterCurrentPage <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push("ellipsis");
+      pages.push(totalPages);
+    } else if (chapterCurrentPage >= totalPages - 3) {
+      pages.push(1);
+      pages.push("ellipsis");
+      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push("ellipsis");
+      pages.push(chapterCurrentPage - 1);
+      pages.push(chapterCurrentPage);
+      pages.push(chapterCurrentPage + 1);
+      pages.push("ellipsis");
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  // Group chapters by Volume for current view (Issue 6 - MangaDex style)
+  interface VolumeGroup {
+    volume: string | null;
+    label: string;
+    chapters: Chapter[];
+    minChapter: string;
+    maxChapter: string;
+  }
+
+  const paginatedVolumeGroups = useMemo<VolumeGroup[]>(() => {
+    const map = new Map<string, Chapter[]>();
+    const order: string[] = [];
+
+    paginatedChapters.forEach((c) => {
+      const volKey = c.volume ? `Volume ${c.volume}` : "Khác / Chưa phân Vol";
+      if (!map.has(volKey)) {
+        map.set(volKey, []);
+        order.push(volKey);
+      }
+      map.get(volKey)!.push(c);
+    });
+
+    return order.map((volKey) => {
+      const chaps = map.get(volKey)!;
+      const minChap = chaps[0]?.chapter_number || "";
+      const maxChap = chaps[chaps.length - 1]?.chapter_number || "";
+      return {
+        volume: volKey.startsWith("Volume ") ? volKey.replace("Volume ", "") : null,
+        label: volKey,
+        chapters: chaps,
+        minChapter: minChap,
+        maxChapter: maxChap
+      };
+    });
+  }, [paginatedChapters]);
+
+  const hasAnyVolume = useMemo(() => {
+    return chapters.some((c) => c.volume !== null && c.volume !== undefined && c.volume !== "");
+  }, [chapters]);
+
   // Multi-selection for Chapters (Ctrl+Click, Shift+Click)
-  const handleChapterSelect = (
-    id: string,
-    e: React.MouseEvent
-  ) => {
+  const handleChapterSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
     if (e.shiftKey && lastSelectedChapterId) {
-      // Range selection
-      const ids = filteredChapters.map((c) => c.id);
+      // Range selection within current paginated chapters, or fallback to filtered
+      const pageIds = paginatedChapters.map((c) => c.id);
+      const isBothInPage =
+        pageIds.includes(lastSelectedChapterId) && pageIds.includes(id);
+      const ids = isBothInPage ? pageIds : filteredChapters.map((c) => c.id);
       const startIndex = ids.indexOf(lastSelectedChapterId);
       const endIndex = ids.indexOf(id);
 
       if (startIndex !== -1 && endIndex !== -1) {
-        const [low, high] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+        const [low, high] =
+          startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
         const range = ids.slice(low, high + 1);
         const newSet = new Set(selectedChapterIds);
         range.forEach((r) => newSet.add(r));
@@ -313,6 +442,25 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
     setLastSelectedChapterId(id);
+  };
+
+  const isCurrentPageAllSelected = useMemo(() => {
+    if (paginatedChapters.length === 0) return false;
+    return paginatedChapters.every((c) => selectedChapterIds.includes(c.id));
+  }, [paginatedChapters, selectedChapterIds]);
+
+  const isCurrentPageSomeSelected = useMemo(() => {
+    return paginatedChapters.some((c) => selectedChapterIds.includes(c.id));
+  }, [paginatedChapters, selectedChapterIds]);
+
+  const handleToggleCurrentPageChapters = () => {
+    const pageIds = paginatedChapters.map((c) => c.id);
+    if (isCurrentPageAllSelected) {
+      setSelectedChapterIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      const newSet = new Set([...selectedChapterIds, ...pageIds]);
+      setSelectedChapterIds(Array.from(newSet));
+    }
   };
 
   const handleSelectAllChapters = () => {
@@ -388,45 +536,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     setLastSelectedPageNumber(null);
   };
 
-  // Group chapters by Volume (Issue 6 - MangaDex style)
-  interface VolumeGroup {
-    volume: string | null;
-    label: string;
-    chapters: Chapter[];
-    minChapter: string;
-    maxChapter: string;
-  }
 
-  const volumeGroups = useMemo<VolumeGroup[]>(() => {
-    const map = new Map<string, Chapter[]>();
-    const order: string[] = [];
-
-    filteredChapters.forEach((c) => {
-      const volKey = c.volume ? `Volume ${c.volume}` : "Khác / Chưa phân Vol";
-      if (!map.has(volKey)) {
-        map.set(volKey, []);
-        order.push(volKey);
-      }
-      map.get(volKey)!.push(c);
-    });
-
-    return order.map((volKey) => {
-      const chaps = map.get(volKey)!;
-      const minChap = chaps[0]?.chapter_number || "";
-      const maxChap = chaps[chaps.length - 1]?.chapter_number || "";
-      return {
-        volume: volKey.startsWith("Volume ") ? volKey.replace("Volume ", "") : null,
-        label: volKey,
-        chapters: chaps,
-        minChapter: minChap,
-        maxChapter: maxChap
-      };
-    });
-  }, [filteredChapters]);
-
-  const hasAnyVolume = useMemo(() => {
-    return chapters.some((c) => c.volume !== null && c.volume !== undefined && c.volume !== "");
-  }, [chapters]);
 
   // Deletion execution
   const handleDeleteConfirm = async () => {
@@ -956,17 +1066,44 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 
             {/* Selection actions & View Switcher */}
             <div className="flex items-center flex-wrap gap-2">
+              {/* Select Current Page Chapters */}
               <button
-                onClick={handleSelectAllChapters}
+                type="button"
+                onClick={handleToggleCurrentPageChapters}
                 className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5 transition cursor-pointer"
+                title="Chọn / Bỏ chọn toàn bộ các chapter hiển thị trên trang này"
               >
-                {selectedChapterIds.length > 0 && selectedChapterIds.length === filteredChapters.length ? (
+                {isCurrentPageAllSelected ? (
                   <CheckSquare size={14} className="text-[var(--brand-orange)]" />
+                ) : isCurrentPageSomeSelected ? (
+                  <CheckSquare size={14} className="text-zinc-400" />
                 ) : (
                   <Square size={14} />
                 )}
-                <span>Chọn tất cả ({selectedChapterIds.length})</span>
+                <span>
+                  Chọn trang này ({paginatedChapters.filter((c) => selectedChapterIds.includes(c.id)).length}/
+                  {paginatedChapters.length})
+                </span>
               </button>
+
+              {/* Select All Filtered Chapters across all pages */}
+              {totalFilteredCount > paginatedChapters.length && (
+                <button
+                  type="button"
+                  onClick={handleSelectAllChapters}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
+                    selectedChapterIds.length === totalFilteredCount
+                      ? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)]"
+                      : "border-[var(--border-primary)] hover:border-zinc-400 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                  title="Chọn toàn bộ chapters trong danh sách đã lọc"
+                >
+                  <CheckSquare size={14} />
+                  <span>
+                    Chọn toàn bộ ({selectedChapterIds.length}/{totalFilteredCount})
+                  </span>
+                </button>
+              )}
 
               {selectedChapterIds.length > 0 && (
                 <>
@@ -1029,6 +1166,101 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Sub-bar: Status and Top Pagination Controls */}
+          {totalFilteredCount > 0 && (
+            <div
+              ref={chapterListTopRef}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 pb-1 border-t border-[var(--border-primary)]/60 text-xs"
+            >
+              {/* Left: Summary Info */}
+              <div className="flex items-center space-x-2 text-[var(--text-secondary)] font-medium flex-wrap">
+                <span>
+                  Hiển thị{" "}
+                  <strong className="text-[var(--text-primary)] font-bold">
+                    {totalFilteredCount === 0 ? 0 : `${startIndex + 1} - ${endIndex}`}
+                  </strong>{" "}
+                  /{" "}
+                  <strong className="text-[var(--text-primary)] font-bold">
+                    {totalFilteredCount}
+                  </strong>{" "}
+                  chapter
+                </span>
+                {filteredChapters.length !== chapters.length && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-400">
+                    (Lọc từ {chapters.length})
+                  </span>
+                )}
+                {totalPages > 1 && (
+                  <span className="text-[11px] text-[var(--brand-orange)] font-bold bg-[var(--brand-orange)]/10 px-2 py-0.5 rounded-full">
+                    Trang {chapterCurrentPage} / {totalPages}
+                  </span>
+                )}
+              </div>
+
+              {/* Right: Page Size Selector & Mini Navigation */}
+              <div className="flex items-center space-x-3 shrink-0 flex-wrap">
+                {/* Page Size Selector Pills */}
+                <div className="flex items-center space-x-1.5">
+                  <SlidersHorizontal size={13} className="text-zinc-400 shrink-0" />
+                  <span className="text-[11px] font-semibold text-zinc-400 hidden md:inline">
+                    Mỗi trang:
+                  </span>
+                  <div className="flex items-center bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-0.5 font-bold">
+                    {[12, 24, 48, 96, 120, "all"].map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => {
+                          setChapterPageSize(size as any);
+                          setChapterCurrentPage(1);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg transition cursor-pointer text-[11px] ${
+                          chapterPageSize === size
+                            ? "bg-[var(--brand-orange)] text-white shadow-xs"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        }`}
+                        title={
+                          size === "all"
+                            ? "Hiển thị toàn bộ"
+                            : `Hiển thị ${size} chương mỗi trang`
+                        }
+                      >
+                        {size === "all" ? "Tất cả" : size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mini Page Switcher */}
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-0.5 font-bold">
+                    <button
+                      type="button"
+                      disabled={chapterCurrentPage <= 1}
+                      onClick={() => handlePageChange(chapterCurrentPage - 1)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition"
+                      title="Trang trước"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="px-2 font-mono text-[11px] text-[var(--text-primary)]">
+                      {chapterCurrentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={chapterCurrentPage >= totalPages}
+                      onClick={() => handlePageChange(chapterCurrentPage + 1)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition"
+                      title="Trang tiếp"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Hint */}
           <div className="text-[11px] text-[var(--text-secondary)] italic flex items-center space-x-1.5">
@@ -1264,10 +1496,10 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
             }
 
             // MangaDex Volume Grouping view
-            if (groupByVolume && hasAnyVolume && volumeGroups.length > 1) {
+            if (groupByVolume && hasAnyVolume && paginatedVolumeGroups.length > 1) {
               return (
                 <div className="space-y-4">
-                  {volumeGroups.map((volGroup) => {
+                  {paginatedVolumeGroups.map((volGroup) => {
                     const isCollapsed = !!collapsedVolumes[volGroup.label];
                     const volIds = volGroup.chapters.map((c) => c.id);
                     const allVolSelected =
@@ -1307,7 +1539,10 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                                 {volGroup.label}
                               </span>
                               <span className="text-xs text-[var(--text-secondary)] font-medium bg-zinc-500/10 px-2.5 py-0.5 rounded-full">
-                                {volGroup.chapters.length} chương {volGroup.minChapter ? `(Ch. ${volGroup.minChapter} - Ch. ${volGroup.maxChapter})` : ""}
+                                {volGroup.chapters.length} chương{" "}
+                                {volGroup.minChapter
+                                  ? `(Ch. ${volGroup.minChapter} - Ch. ${volGroup.maxChapter})`
+                                  : ""}
                               </span>
                             </div>
                           </div>
@@ -1332,8 +1567,151 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
             }
 
             // Flat chapters
-            return renderChapters(filteredChapters);
+            return renderChapters(paginatedChapters);
           })()}
+
+          {/* Professional Bottom Pagination Component */}
+          {totalFilteredCount > 0 && (
+            <div className="mt-6 p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-sm flex flex-col lg:flex-row items-center justify-between gap-4">
+              {/* Left: Detailed Info & Dropdown Page Size */}
+              <div className="flex items-center space-x-3 text-xs text-[var(--text-secondary)] font-medium flex-wrap">
+                <span>
+                  Hiển thị{" "}
+                  <strong className="text-[var(--text-primary)] font-bold">
+                    {startIndex + 1} - {endIndex}
+                  </strong>{" "}
+                  trên{" "}
+                  <strong className="text-[var(--text-primary)] font-bold">
+                    {totalFilteredCount}
+                  </strong>{" "}
+                  chapter
+                  {totalPages > 1 && ` (Trang ${chapterCurrentPage}/${totalPages})`}
+                </span>
+                <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 hidden sm:block" />
+                <div className="flex items-center space-x-2">
+                  <span className="text-zinc-400 text-xs">Cỡ trang:</span>
+                  <select
+                    value={chapterPageSize}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setChapterPageSize(val === "all" ? "all" : Number(val));
+                      setChapterCurrentPage(1);
+                    }}
+                    className="px-2.5 py-1 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer"
+                  >
+                    <option value={12}>12 mục / trang</option>
+                    <option value={24}>24 mục / trang</option>
+                    <option value={48}>48 mục / trang</option>
+                    <option value={96}>96 mục / trang</option>
+                    <option value={120}>120 mục / trang</option>
+                    <option value="all">Tất cả ({totalFilteredCount})</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Center: Numeric Page Navigation with smart ellipsis */}
+              {totalPages > 1 && (
+                <div className="flex items-center space-x-1 flex-wrap justify-center">
+                  {/* First Page button */}
+                  <button
+                    type="button"
+                    disabled={chapterCurrentPage <= 1}
+                    onClick={() => handlePageChange(1)}
+                    className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+                    title="Về trang đầu tiên (Trang 1)"
+                  >
+                    <ChevronsLeft size={15} />
+                  </button>
+
+                  {/* Prev Page button */}
+                  <button
+                    type="button"
+                    disabled={chapterCurrentPage <= 1}
+                    onClick={() => handlePageChange(chapterCurrentPage - 1)}
+                    className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+                    title="Trang trước"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+
+                  {/* Page number buttons */}
+                  <div className="flex items-center space-x-1">
+                    {getPageNumbers().map((item, idx) => {
+                      if (item === "ellipsis") {
+                        return (
+                          <span
+                            key={`ellipsis-${idx}`}
+                            className="px-2 py-1 text-xs text-zinc-400 select-none"
+                          >
+                            ...
+                          </span>
+                        );
+                      }
+                      const isCurrent = item === chapterCurrentPage;
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handlePageChange(item)}
+                          className={`min-w-[34px] h-[34px] rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center ${
+                            isCurrent
+                              ? "bg-[var(--brand-orange)] text-white shadow-md font-black"
+                              : "border border-[var(--border-primary)] hover:border-zinc-400 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Next Page button */}
+                  <button
+                    type="button"
+                    disabled={chapterCurrentPage >= totalPages}
+                    onClick={() => handlePageChange(chapterCurrentPage + 1)}
+                    className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+                    title="Trang tiếp"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+
+                  {/* Last Page button */}
+                  <button
+                    type="button"
+                    disabled={chapterCurrentPage >= totalPages}
+                    onClick={() => handlePageChange(totalPages)}
+                    className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+                    title={`Đến trang cuối (Trang ${totalPages})`}
+                  >
+                    <ChevronsRight size={15} />
+                  </button>
+                </div>
+              )}
+
+              {/* Right: Quick Jump Form */}
+              {totalPages > 1 && (
+                <form onSubmit={handleJumpSubmit} className="flex items-center space-x-1.5 text-xs">
+                  <span className="text-zinc-400 font-medium">Nhảy tới:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    placeholder={String(chapterCurrentPage)}
+                    value={jumpPageInput}
+                    onChange={(e) => setJumpPageInput(e.target.value)}
+                    className="w-14 px-2 py-1.5 text-center rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-orange)]"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-[var(--brand-orange)] hover:text-white text-xs font-bold text-[var(--text-primary)] transition cursor-pointer shadow-xs"
+                  >
+                    Đi
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         /* Inside Chapter: Pages Explorer */
