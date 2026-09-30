@@ -22,6 +22,8 @@ export interface Chapter {
   source_id?: string | null;
   pages: PageItem[];
   page_count: number;
+  uploader?: string | null;
+  publish_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }

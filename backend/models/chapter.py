@@ -25,6 +25,10 @@ class ChapterBase(BaseModel):
     source_id: Optional[str] = Field(None, description="External ID e.g. MangaDex chapter UUID")
     pages: List[PageItem] = Field(default_factory=list)
     page_count: int = Field(0, description="Total pages in chapter")
+    uploader: Optional[str] = Field(None, description="Uploader username")
+    publish_at: Optional[datetime] = Field(None, description="Publish date on source")
+    readable_at: Optional[datetime] = Field(None, description="Readable date on source")
+    external_url: Optional[str] = Field(None, description="External URL if hosted externally")
 
 class ChapterCreate(ChapterBase):
     pass

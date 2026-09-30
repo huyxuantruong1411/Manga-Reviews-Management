@@ -35,6 +35,7 @@ import {
   Minus
 } from "lucide-react";
 import client from "../../api/client";
+import { useAlert } from "../../hooks/useAlert";
 import type {
   Chapter,
   PageItem,
@@ -113,9 +114,12 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
   onRefreshChapters,
   onChaptersCountChange
 }) => {
+  const { showAlert } = useAlert();
+
   // State
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingMetadata, setSyncingMetadata] = useState(false);
   const [activeChapter, setActiveChapter] = useState<Chapter | null>(null);
   const [activeChapterPages, setActiveChapterPages] = useState<PageItem[]>([]);
   const [loadingPages, setLoadingPages] = useState(false);
@@ -237,6 +241,28 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     }
   };
 
+  const handleSyncMetadata = async () => {
+    try {
+      setSyncingMetadata(true);
+      const res = await client.post(`/api/manga/${mangaId}/chapters/sync-metadata`);
+      showAlert({
+        title: "Đồng bộ thành công",
+        message: res.data.message || `Đã cập nhật metadata cho ${res.data.updated_count} chapter(s).`,
+        type: "success"
+      });
+      await fetchChapters();
+      if (onRefreshChapters) onRefreshChapters();
+    } catch (e: any) {
+      showAlert({
+        title: "Lỗi đồng bộ",
+        message: e.response?.data?.detail || "Không thể đồng bộ metadata từ MangaDex.",
+        type: "error"
+      });
+    } finally {
+      setSyncingMetadata(false);
+    }
+  };
+
   useEffect(() => {
     fetchChapters();
   }, [mangaId]);
@@ -280,9 +306,24 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     return Array.from(set);
   }, [chapters]);
 
-  // Filtered chapters
+  const parseChapterNum = (ch: any): number => {
+    const s = String(ch ?? "").trim().toLowerCase();
+    if (s === "oneshot" || s === "one-shot") return 0;
+    const num = parseFloat(s);
+    return isNaN(num) ? 999999 : num;
+  };
+
+  const parseVolNum = (vol: any): number => {
+    if (!vol) return 999999;
+    const s = String(vol).trim().toLowerCase();
+    if (s === "none" || s === "null" || s === "no volume") return 999999;
+    const num = parseFloat(s);
+    return isNaN(num) ? 999999 : num;
+  };
+
+  // Filtered and sorted chapters
   const filteredChapters = useMemo(() => {
-    return chapters.filter((c) => {
+    const list = chapters.filter((c) => {
       if (selectedLanguage !== "all" && c.language?.toLowerCase() !== selectedLanguage) {
         return false;
       }
@@ -297,7 +338,21 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
       }
       return true;
     });
-  }, [chapters, selectedLanguage, selectedGroup, searchQuery]);
+
+    return [...list].sort((a, b) => {
+      if (groupByVolume) {
+        // Group by volume first: numbered volumes in ascending order, No Volume at end
+        const vA = parseVolNum(a.volume);
+        const vB = parseVolNum(b.volume);
+        if (vA !== vB) return vA - vB;
+      }
+      // Prioritize natural chapter number ordering
+      const numA = parseChapterNum(a.chapter_number);
+      const numB = parseChapterNum(b.chapter_number);
+      if (numA !== numB) return numA - numB;
+      return a.chapter_number.localeCompare(b.chapter_number, undefined, { numeric: true });
+    });
+  }, [chapters, selectedLanguage, selectedGroup, searchQuery, groupByVolume]);
 
   // Pagination metrics & slices
   const totalFilteredCount = filteredChapters.length;
@@ -378,7 +433,10 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
     const order: string[] = [];
 
     paginatedChapters.forEach((c) => {
-      const volKey = c.volume ? `Volume ${c.volume}` : "Khác / Chưa phân Vol";
+      const volClean = c.volume && String(c.volume).trim().toLowerCase() !== "none" && String(c.volume).trim().toLowerCase() !== "null"
+        ? String(c.volume).trim()
+        : null;
+      const volKey = volClean ? `Volume ${volClean}` : "No Volume";
       if (!map.has(volKey)) {
         map.set(volKey, []);
         order.push(volKey);
@@ -388,6 +446,12 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 
     return order.map((volKey) => {
       const chaps = map.get(volKey)!;
+      chaps.sort((a, b) => {
+        const numA = parseChapterNum(a.chapter_number);
+        const numB = parseChapterNum(b.chapter_number);
+        if (numA !== numB) return numA - numB;
+        return a.chapter_number.localeCompare(b.chapter_number, undefined, { numeric: true });
+      });
       const minChap = chaps[0]?.chapter_number || "";
       const maxChap = chaps[chaps.length - 1]?.chapter_number || "";
       return {
@@ -401,7 +465,11 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
   }, [paginatedChapters]);
 
   const hasAnyVolume = useMemo(() => {
-    return chapters.some((c) => c.volume !== null && c.volume !== undefined && c.volume !== "");
+    return chapters.some((c) => {
+      if (!c.volume) return false;
+      const s = String(c.volume).trim().toLowerCase();
+      return s !== "" && s !== "none" && s !== "null" && s !== "no volume";
+    });
   }, [chapters]);
 
   // Multi-selection for Chapters (Ctrl+Click, Shift+Click)
@@ -1142,6 +1210,17 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                 </button>
               )}
 
+              <button
+                type="button"
+                disabled={syncingMetadata}
+                onClick={handleSyncMetadata}
+                className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                title="Đồng bộ lại thông tin metadata (Volume, Scanlation Group, Uploader, Ngày đăng) từ MangaDex cho các chương đã tải"
+              >
+                <RefreshCw size={13} className={syncingMetadata ? "animate-spin text-[var(--brand-orange)]" : ""} />
+                <span>{syncingMetadata ? "Đang đồng bộ..." : "Đồng bộ MangaDex"}</span>
+              </button>
+
               <div className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden p-0.5 bg-[var(--bg-primary)]">
                 <button
                   onClick={() => setViewMode("grid")}
@@ -1321,9 +1400,13 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                           <span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-secondary)] whitespace-nowrap">
                             {chap.page_count} trang
                           </span>
-                          {chap.volume && (
+                          {chap.volume ? (
                             <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 whitespace-nowrap">
                               Vol. {chap.volume}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-400 whitespace-nowrap">
+                              No Volume
                             </span>
                           )}
                           {chap.language && (
@@ -1334,6 +1417,16 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                           {chap.scanlation_group && (
                             <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 truncate max-w-[120px]" title={chap.scanlation_group}>
                               {chap.scanlation_group}
+                            </span>
+                          )}
+                          {chap.uploader && (
+                            <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 truncate max-w-[110px]" title={`Người đăng: ${chap.uploader}`}>
+                              👤 {chap.uploader}
+                            </span>
+                          )}
+                          {chap.publish_at && (
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-400 whitespace-nowrap" title={`Ngày đăng: ${new Date(chap.publish_at).toLocaleString()}`}>
+                              📅 {new Date(chap.publish_at).toLocaleDateString()}
                             </span>
                           )}
                           {chap.source === "local_import" && (
@@ -1397,6 +1490,8 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                       <th className="p-3">Volume</th>
                       <th className="p-3">Language</th>
                       <th className="p-3">Scanlation Group</th>
+                      <th className="p-3">Người đăng</th>
+                      <th className="p-3">Ngày đăng</th>
                       <th className="p-3">Trang</th>
                       <th className="p-3 text-right">Hành động</th>
                     </tr>
@@ -1428,11 +1523,13 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                           <td className="p-3">{chap.title || "-"}</td>
                           <td className="p-3">
                             {chap.volume ? (
-                              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold">
+                              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">
                                 Vol. {chap.volume}
                               </span>
                             ) : (
-                              "-"
+                              <span className="px-2 py-0.5 rounded bg-zinc-500/10 text-zinc-400 font-medium whitespace-nowrap">
+                                No Volume
+                              </span>
                             )}
                           </td>
                           <td className="p-3">
@@ -1441,6 +1538,22 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
                             </span>
                           </td>
                           <td className="p-3">{chap.scanlation_group || "No Group"}</td>
+                          <td className="p-3 text-zinc-400 truncate max-w-[110px]" title={chap.uploader || ""}>
+                            {chap.uploader ? (
+                              <span className="text-sky-600 dark:text-sky-400 font-medium">
+                                👤 {chap.uploader}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="p-3 text-zinc-400 whitespace-nowrap">
+                            {chap.publish_at ? (
+                              <span>📅 {new Date(chap.publish_at).toLocaleDateString()}</span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td className="p-3 font-bold">{chap.page_count}</td>
                           <td className="p-3 text-right space-x-2">
                             <button

@@ -91,6 +91,16 @@ async def cleanup_latest_chapter(manga_id: str = Path(...)):
         logger.error(f"Error cleaning up latest chapter for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/manga/{manga_id}/chapters/sync-metadata")
+async def sync_manga_chapters_metadata(manga_id: str = Path(...)):
+    """Synchronize missing metadata (volume, group_name, uploader, publish_at) from MangaDex for all stored chapters."""
+    try:
+        res = await chapter_service.sync_chapters_metadata_from_mangadex(manga_id)
+        return res
+    except Exception as e:
+        logger.error(f"Error syncing chapter metadata for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/chapters/{chapter_id}/delete-pages")
 async def delete_chapter_pages(

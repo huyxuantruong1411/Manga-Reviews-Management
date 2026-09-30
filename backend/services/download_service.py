@@ -28,6 +28,7 @@ active_cancellations = {}
 class DownloadService:
     def __init__(self):
         self.running_tasks = set()
+        self._last_progress_updates: Dict[str, float] = {}
 
     def _get_tasks_collection(self):
         return get_db().download_tasks
@@ -48,11 +49,24 @@ class DownloadService:
         
         chapters_detail = []
         for c in chapters:
+            raw_vol = c.get("volume")
+            vol_clean = None
+            if raw_vol is not None:
+                s_vol = str(raw_vol).strip()
+                if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
+                    vol_clean = s_vol
+
             chapters_detail.append({
                 "id": c["id"],
                 "chapter": c["chapter"],
                 "title": c.get("title", ""),
+                "volume": vol_clean,
                 "group_name": c.get("group_name", ""),
+                "group_id": c.get("group_id", ""),
+                "publish_at": c.get("publish_at"),
+                "readable_at": c.get("readable_at"),
+                "uploader": c.get("uploader"),
+                "pages": c.get("pages"),
                 "status": "pending",
                 "error": None
             })
@@ -82,7 +96,10 @@ class DownloadService:
         return await self._get_tasks_collection().find_one({"_id": task_id})
 
     async def list_tasks(self, limit: int = 20) -> List[Dict[str, Any]]:
-        cursor = self._get_tasks_collection().find().sort("created_at", -1).limit(limit)
+        cursor = self._get_tasks_collection().find(
+            {},
+            {"chapters_detail": 0}
+        ).sort("created_at", -1).limit(limit)
         tasks = []
         async for doc in cursor:
             tasks.append(doc)
@@ -319,6 +336,9 @@ class DownloadService:
                             "volume": chap.get("volume"),
                             "language": lang,
                             "scanlation_group": chap.get("group_name"),
+                            "uploader": chap.get("uploader"),
+                            "publish_at": chap.get("publish_at"),
+                            "readable_at": chap.get("readable_at"),
                             "source": "mangadex",
                             "source_id": chap_id,
                             "pages": page_items,
@@ -483,6 +503,13 @@ class DownloadService:
         remaining_chapters: Optional[int] = None
     ):
         try:
+            now_ts = time.time()
+            last_ts = self._last_progress_updates.get(task_id, 0.0)
+            is_edge_page = (page_num == 1 or page_num == page_total)
+            if not is_edge_page and (now_ts - last_ts < 0.4):
+                return
+            self._last_progress_updates[task_id] = now_ts
+
             # Generate thumbnail preview asynchronously
             preview_base64 = await asyncio.to_thread(self._generate_base64_thumbnail, bytes_data)
             
@@ -560,10 +587,11 @@ class DownloadService:
                     if not bytes_data:
                         return False
 
-                # Always upload to MinIO storage
+                # Always upload to MinIO storage in worker thread so event loop is never blocked
                 content_type = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
                 try:
-                    obj_key, fsize, width, height, md5_h = minio_service.upload_chapter_page(
+                    obj_key, fsize, width, height, md5_h = await asyncio.to_thread(
+                        minio_service.upload_chapter_page,
                         manga_id=manga_id,
                         chapter_id=chap_id,
                         filename=file_name,
@@ -635,6 +663,7 @@ class DownloadService:
                     total_bytes_downloaded=total_b,
                     remaining_chapters=rem_ch
                 )
+                await asyncio.sleep(0.01)
                 return True
 
         tasks = [download_page(idx, url) for idx, url in enumerate(urls)]

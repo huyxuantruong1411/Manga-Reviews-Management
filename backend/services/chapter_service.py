@@ -198,15 +198,27 @@ class ChapterService:
         pages = chapter_data.get("pages", [])
         page_count = len(pages)
 
+        # Clean volume
+        raw_vol = chapter_data.get("volume")
+        vol_clean = None
+        if raw_vol is not None:
+            s_vol = str(raw_vol).strip()
+            if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
+                vol_clean = s_vol
+
         now = datetime.utcnow()
         doc = {
             "manga_id": str(chapter_data["manga_id"]),
             "chapter_number": c_num,
             "chapter_numeric": c_numeric,
-            "volume": chapter_data.get("volume"),
+            "volume": vol_clean,
             "title": chapter_data.get("title", ""),
             "language": chapter_data.get("language", "en"),
             "scanlation_group": chapter_data.get("scanlation_group"),
+            "uploader": chapter_data.get("uploader"),
+            "publish_at": chapter_data.get("publish_at"),
+            "readable_at": chapter_data.get("readable_at"),
+            "external_url": chapter_data.get("external_url"),
             "source": chapter_data.get("source", "mangadex"),
             "source_id": chapter_data.get("source_id"),
             "pages": pages,
@@ -214,13 +226,20 @@ class ChapterService:
             "updated_at": now
         }
 
-        # Check if existing chapter matches (manga_id, chapter_number, language, scanlation_group)
-        existing = await self._get_chapters_col().find_one({
-            "manga_id": doc["manga_id"],
-            "chapter_number": doc["chapter_number"],
-            "language": doc["language"],
-            "scanlation_group": doc["scanlation_group"]
-        })
+        # Check if existing chapter matches (manga_id, source_id) or (manga_id, chapter_number, language, scanlation_group)
+        existing = None
+        if doc.get("source_id"):
+            existing = await self._get_chapters_col().find_one({
+                "manga_id": doc["manga_id"],
+                "source_id": doc["source_id"]
+            })
+        if not existing:
+            existing = await self._get_chapters_col().find_one({
+                "manga_id": doc["manga_id"],
+                "chapter_number": doc["chapter_number"],
+                "language": doc["language"],
+                "scanlation_group": doc["scanlation_group"]
+            })
 
         if existing:
             await self._get_chapters_col().update_one(
@@ -232,6 +251,90 @@ class ChapterService:
             doc["created_at"] = now
             result = await self._get_chapters_col().insert_one(doc)
             return str(result.inserted_id)
+
+    async def sync_chapters_metadata_from_mangadex(self, manga_id: str) -> Dict[str, Any]:
+        """
+        Synchronizes / backfills missing chapter metadata (volume, group_name, uploader, publish_at)
+        from MangaDex for all stored chapters of this manga.
+        """
+        from backend.services.mangadex_service import mangadex_service
+        filter_query = {"_id": ObjectId(manga_id)} if ObjectId.is_valid(manga_id) else {"_id": manga_id}
+        manga = await self._get_mangas_col().find_one(filter_query)
+        if not manga or not manga.get("mangadex_id"):
+            return {"updated_count": 0, "message": "Manga không liên kết với MangaDex."}
+
+        mangadex_id = manga["mangadex_id"]
+        
+        # Get all distinct languages among existing stored chapters
+        languages = await self._get_chapters_col().distinct("language", {"manga_id": manga_id})
+        if not languages:
+            languages = ["vi", "en"]
+
+        updated_count = 0
+        now = datetime.utcnow()
+
+        for lang in languages:
+            try:
+                md_chapters = await mangadex_service.get_manga_chapters(mangadex_id, lang)
+            except Exception as e:
+                logger.error(f"Error fetching MangaDex feed for lang {lang}: {e}")
+                continue
+
+            # Index by source_id (MangaDex UUID) and by chapter_number
+            by_source_id = {c["id"]: c for c in md_chapters if c.get("id")}
+            by_chap_num = {str(c["chapter"]).strip().lower(): c for c in md_chapters if c.get("chapter")}
+
+            # Fetch all stored chapters for this manga and language
+            stored_cursor = self._get_chapters_col().find({"manga_id": manga_id, "language": lang})
+            async for doc in stored_cursor:
+                matched_md = None
+                if doc.get("source_id") and doc["source_id"] in by_source_id:
+                    matched_md = by_source_id[doc["source_id"]]
+                elif str(doc.get("chapter_number", "")).strip().lower() in by_chap_num:
+                    matched_md = by_chap_num[str(doc.get("chapter_number", "")).strip().lower()]
+
+                if matched_md:
+                    updates: Dict[str, Any] = {}
+                    # Update volume
+                    md_vol = matched_md.get("volume")
+                    if md_vol is not None and doc.get("volume") != md_vol:
+                        updates["volume"] = md_vol
+                    elif md_vol is None and doc.get("volume") is not None and str(doc.get("volume")).lower() in ("", "none", "null"):
+                        updates["volume"] = None
+                    
+                    # Update group
+                    md_group = matched_md.get("group_name")
+                    if md_group and (not doc.get("scanlation_group") or doc.get("scanlation_group") in ("No Group", "")):
+                        updates["scanlation_group"] = md_group
+                    
+                    # Update uploader
+                    md_uploader = matched_md.get("uploader")
+                    if md_uploader and not doc.get("uploader"):
+                        updates["uploader"] = md_uploader
+
+                    # Update dates
+                    md_pub = matched_md.get("publish_at")
+                    if md_pub and not doc.get("publish_at"):
+                        try:
+                            # parse ISO if string
+                            if isinstance(md_pub, str):
+                                dt = datetime.fromisoformat(md_pub.replace("Z", "+00:00"))
+                                updates["publish_at"] = dt
+                            else:
+                                updates["publish_at"] = md_pub
+                        except Exception:
+                            pass
+
+                    if updates:
+                        updates["updated_at"] = now
+                        await self._get_chapters_col().update_one({"_id": doc["_id"]}, {"$set": updates})
+                        updated_count += 1
+
+        return {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Đã đồng bộ và cập nhật metadata cho {updated_count} chapter(s) từ MangaDex."
+        }
 
     async def delete_chapter(self, chapter_id: str) -> bool:
         """Delete an entire chapter and remove all its pages from MinIO storage."""

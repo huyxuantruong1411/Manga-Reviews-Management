@@ -127,6 +127,12 @@ class DownloadChapterPayload(BaseModel):
     chapter: str
     title: Optional[str] = ""
     volume: Optional[str] = None
+    group_name: Optional[str] = None
+    group_id: Optional[str] = None
+    publish_at: Optional[str] = None
+    readable_at: Optional[str] = None
+    uploader: Optional[str] = None
+    pages: Optional[int] = None
 
 class DownloadRequest(BaseModel):
     chapters: List[DownloadChapterPayload]

@@ -2005,6 +2005,12 @@ export const MangaDetailPage: React.FC = () => {
             chapter: c.chapter,
             title: c.title,
             volume: c.volume,
+            group_name: c.group_name,
+            group_id: c.group_id,
+            publish_at: c.publish_at,
+            readable_at: c.readable_at,
+            uploader: c.uploader,
+            pages: c.pages,
           })),
         lang: selectedLang,
         save_to_disk: saveToDisk,
@@ -4515,9 +4521,13 @@ export const MangaDetailPage: React.FC = () => {
                                   </span>
                                 )}
                               </div>
-                              {chap.volume && (
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 shrink-0">
+                              {chap.volume ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
                                   Vol. {chap.volume}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 shrink-0">
+                                  No Volume
                                 </span>
                               )}
                             </div>
@@ -4530,11 +4540,26 @@ export const MangaDetailPage: React.FC = () => {
                               <p className="text-[11px] italic text-zinc-400 mt-0.5">Không có tiêu đề</p>
                             )}
 
-                            {/* Scanlation Group Badge */}
+                            {/* Scanlation Group, Pages, Uploader & Date Badges */}
                             <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                               <span className="px-2 py-0.5 rounded-md bg-zinc-500/10 border border-[var(--border-primary)] text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-full">
                                 👥 {chap.group_name || "No Group"}
                               </span>
+                              {chap.pages > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-zinc-500/10 border border-[var(--border-primary)] text-[10px] font-medium text-[var(--text-secondary)] shrink-0">
+                                  {chap.pages} trang
+                                </span>
+                              )}
+                              {chap.uploader && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-medium text-blue-600 dark:text-blue-400 shrink-0 truncate max-w-[120px]" title={`Người đăng: ${chap.uploader}`}>
+                                  👤 {chap.uploader}
+                                </span>
+                              )}
+                              {chap.publish_at && (
+                                <span className="text-[10px] text-zinc-400 shrink-0" title={`Ngày đăng: ${new Date(chap.publish_at).toLocaleString()}`}>
+                                  📅 {new Date(chap.publish_at).toLocaleDateString()}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

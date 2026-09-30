@@ -59,6 +59,23 @@ class MangaDexService:
     
     CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
+    def __init__(self):
+        self._image_client: Optional[httpx.AsyncClient] = None
+        self._image_client_lock = asyncio.Lock()
+
+    async def _get_image_client(self) -> httpx.AsyncClient:
+        from backend.config import settings
+        proxies = settings.mangadex_proxy if settings.mangadex_proxy else None
+        if self._image_client is None or self._image_client.is_closed:
+            async with self._image_client_lock:
+                if self._image_client is None or self._image_client.is_closed:
+                    self._image_client = httpx.AsyncClient(
+                        proxy=proxies,
+                        timeout=httpx.Timeout(30.0, connect=10.0),
+                        limits=httpx.Limits(max_keepalive_connections=20, max_connections=40)
+                    )
+        return self._image_client
+
     def _get_headers(self) -> Dict[str, str]:
         return {
             "User-Agent": "Manga-Reviews-Management/1.0.0 (contact@manga-reviews-management.local)"
@@ -577,7 +594,8 @@ class MangaDexService:
 
     async def get_manga_chapters(self, mangadex_id: str, lang: str = "en") -> List[Dict[str, Any]]:
         """
-        Get all chapters of a manga translated into the specified language, sorted by chapter number.
+        Get all chapters of a manga translated into the specified language, sorted naturally by chapter number.
+        Preserves all MangaDex metadata: volume, scanlation group, uploader, publishAt, readableAt, pages.
         """
         all_chapters = []
         offset = 0
@@ -590,7 +608,7 @@ class MangaDexService:
                 "order[chapter]": "asc",
                 "includeFutureUpdates": 0,
                 "contentRating[]": self.CONTENT_RATINGS,
-                "includes[]": ["scanlation_group"]
+                "includes[]": ["scanlation_group", "user"]
             }
             
             data = await self._request(f"/manga/{mangadex_id}/feed", params)
@@ -598,51 +616,98 @@ class MangaDexService:
                 break
             
             for chap in data["data"]:
-                attr = chap["attributes"]
+                attr = chap.get("attributes", {})
                 # Skip external links
                 if attr.get("externalUrl") is not None:
                     continue
 
                 group_ids = []
                 group_names = []
+                uploader_name = None
+                uploader_id = None
                 for rel in chap.get("relationships", []):
-                    if rel.get("type") == "scanlation_group":
+                    rel_type = rel.get("type")
+                    if rel_type == "scanlation_group":
                         group_ids.append(rel.get("id"))
                         name = rel.get("attributes", {}).get("name")
                         if name:
                             group_names.append(name)
+                    elif rel_type == "user":
+                        uploader_id = rel.get("id")
+                        uploader_name = rel.get("attributes", {}).get("username")
                 
                 group_id = ",".join(group_ids) if group_ids else "no-group"
                 group_name = " & ".join(group_names) if group_names else "No Group"
+
+                # Normalize volume: clean empty strings, "none", "null" to None
+                raw_vol = attr.get("volume")
+                vol_clean = None
+                if raw_vol is not None:
+                    s_vol = str(raw_vol).strip()
+                    if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
+                        vol_clean = s_vol
 
                 all_chapters.append({
                     "id": chap["id"],
                     "chapter": attr.get("chapter") or "Oneshot",
                     "title": attr.get("title") or "",
-                    "volume": attr.get("volume"),
+                    "volume": vol_clean,
                     "group_id": group_id,
-                    "group_name": group_name
+                    "group_name": group_name,
+                    "uploader": uploader_name,
+                    "uploader_id": uploader_id,
+                    "publish_at": attr.get("publishAt"),
+                    "readable_at": attr.get("readableAt"),
+                    "created_at": attr.get("createdAt"),
+                    "updated_at": attr.get("updatedAt"),
+                    "pages": attr.get("pages") or 0,
+                    "version": attr.get("version", 1),
+                    "language": attr.get("translatedLanguage") or lang
                 })
             
             if offset + limit >= data.get("total", 0):
                 break
             offset += limit
             
-        # De-duplicate by (chapter, group_id)
+        # De-duplicate by (chapter, group_id) while preserving richer metadata
         unique_chapters = {}
         for c in all_chapters:
             key = (c["chapter"], c["group_id"])
             if key not in unique_chapters:
                 unique_chapters[key] = c
+            else:
+                prev = unique_chapters[key]
+                if not prev.get("volume") and c.get("volume"):
+                    prev["volume"] = c.get("volume")
+                if not prev.get("title") and c.get("title"):
+                    prev["title"] = c.get("title")
+                if not prev.get("uploader") and c.get("uploader"):
+                    prev["uploader"] = c.get("uploader")
+                if not prev.get("publish_at") and c.get("publish_at"):
+                    prev["publish_at"] = c.get("publish_at")
+                if not prev.get("pages") and c.get("pages"):
+                    prev["pages"] = c.get("pages")
                 
         result = list(unique_chapters.values())
         
-        # Sort key helper
+        # Sort key helper: strictly prioritize numeric chapter number, then volume number, then group
         def get_chap_num(x):
             try:
-                return float(x["chapter"])
-            except ValueError:
-                return 999999.0
+                ch_str = str(x.get("chapter", "0")).strip().lower()
+                if ch_str in ("oneshot", "one-shot"):
+                    c_num = 0.0
+                else:
+                    c_num = float(ch_str)
+            except (ValueError, TypeError):
+                c_num = 999999.0
+
+            vol_raw = x.get("volume")
+            try:
+                v_num = float(vol_raw) if vol_raw is not None else 999999.0
+            except (ValueError, TypeError):
+                v_num = 999999.0
+
+            return (c_num, v_num, x.get("group_name", ""))
 
         result.sort(key=get_chap_num)
         return result
@@ -690,63 +755,58 @@ class MangaDexService:
     async def download_image_bytes(self, url: str, _retries: int = 2) -> Optional[bytes]:
         """
         Downloads image bytes for local saving or uploading to MinIO.
-        Retries on transient network failures before falling back to Playwright.
+        Uses pooled persistent client. Retries on transient network failures before falling back to Playwright.
+        Note: MangaDex image CDNs / MangaDex@Home nodes are not throttled by the REST API rate limiter.
         """
-        # Enforce rate limits
-        await mangadex_rate_limiter.acquire()
-        
-        from backend.config import settings
-        proxies = settings.mangadex_proxy if settings.mangadex_proxy else None
         headers = self._get_headers()
-        
-        async with httpx.AsyncClient(proxy=proxies, timeout=30.0) as client:
-            try:
-                resp = await client.get(url, headers=headers)
-                resp.raise_for_status()
-                return resp.content
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                response_text = e.response.text
-                logger.warning(f"HTTP Error downloading image {url}: {status_code} - {response_text[:200]}")
-                
-                # Check if it looks like a browser block/unsupported browser page (e.g. HTML response)
-                is_html_block = False
-                if "content-type" in e.response.headers:
-                    ct = e.response.headers["content-type"].lower()
-                    if "text/html" in ct or "application/xhtml+xml" in ct:
-                        is_html_block = True
-                elif response_text.strip().startswith("<!doctype html") or "<html" in response_text.lower():
+        client = await self._get_image_client()
+        try:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            return resp.content
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            response_text = e.response.text
+            logger.warning(f"HTTP Error downloading image {url}: {status_code} - {response_text[:200]}")
+            
+            # Check if it looks like a browser block/unsupported browser page (e.g. HTML response)
+            is_html_block = False
+            if "content-type" in e.response.headers:
+                ct = e.response.headers["content-type"].lower()
+                if "text/html" in ct or "application/xhtml+xml" in ct:
                     is_html_block = True
-                
-                if is_html_block or "Unsupported Browser" in response_text or status_code == 403:
-                    logger.warning(f"Detected browser block/challenge page for image download. Attempting browser simulation fallback...")
-                    fallback_bytes = await self._download_via_playwright(url)
-                    if fallback_bytes is not None:
-                        return fallback_bytes
-                return None
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout,
-                    httpx.NetworkError, httpx.RemoteProtocolError) as e:
-                # Retry on transient network failures before falling back to Playwright
-                if _retries > 0:
-                    wait = 3 * (3 - _retries)  # 3s, 6s backoff
-                    logger.warning(f"Network error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
-                    await asyncio.sleep(wait)
-                    return await self.download_image_bytes(url, _retries=_retries - 1)
-                logger.warning(f"Network error downloading image {url}: {e}. Attempting browser simulation fallback...")
+            elif response_text.strip().startswith("<!doctype html") or "<html" in response_text.lower():
+                is_html_block = True
+            
+            if is_html_block or "Unsupported Browser" in response_text or status_code == 403:
+                logger.warning(f"Detected browser block/challenge page for image download. Attempting browser simulation fallback...")
                 fallback_bytes = await self._download_via_playwright(url)
                 if fallback_bytes is not None:
                     return fallback_bytes
-                logger.error(f"Browser simulation fallback also failed for downloading image {url}.")
-                return None
-            except Exception as e:
-                # Catch-all: also retry for unexpected transient errors (e.g. RemoteProtocolError variants)
-                if _retries > 0:
-                    wait = 3 * (3 - _retries)
-                    logger.warning(f"Unexpected error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
-                    await asyncio.sleep(wait)
-                    return await self.download_image_bytes(url, _retries=_retries - 1)
-                logger.error(f"Error downloading image bytes from {url}: {e}")
-                return None
+            return None
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout,
+                httpx.NetworkError, httpx.RemoteProtocolError) as e:
+            # Retry on transient network failures before falling back to Playwright
+            if _retries > 0:
+                wait = 3 * (3 - _retries)  # 3s, 6s backoff
+                logger.warning(f"Network error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
+                await asyncio.sleep(wait)
+                return await self.download_image_bytes(url, _retries=_retries - 1)
+            logger.warning(f"Network error downloading image {url}: {e}. Attempting browser simulation fallback...")
+            fallback_bytes = await self._download_via_playwright(url)
+            if fallback_bytes is not None:
+                return fallback_bytes
+            logger.error(f"Browser simulation fallback also failed for downloading image {url}.")
+            return None
+        except Exception as e:
+            # Catch-all: also retry for unexpected transient errors (e.g. RemoteProtocolError variants)
+            if _retries > 0:
+                wait = 3 * (3 - _retries)
+                logger.warning(f"Unexpected error downloading image {url}: {e}. Retrying in {wait}s ({_retries} retries left)...")
+                await asyncio.sleep(wait)
+                return await self.download_image_bytes(url, _retries=_retries - 1)
+            logger.error(f"Error downloading image bytes from {url}: {e}")
+            return None
 
     async def get_manga_covers(self, mangadex_id: str) -> List[Dict[str, Any]]:
         """
