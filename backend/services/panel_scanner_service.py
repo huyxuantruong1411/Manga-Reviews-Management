@@ -72,6 +72,24 @@ class PanelScannerService:
         self._scan_stats: Dict[str, Dict[str, Any]] = {}
         self._scan_queues: Dict[str, List[asyncio.Queue]] = {}
 
+        # Global system-wide scan states
+        self._global_scan_active: bool = False
+        self._cancel_global_scan: bool = False
+        self._global_scan_status: Dict[str, Any] = {
+            "stage": "idle",
+            "current_manga_id": None,
+            "current_manga_title": "",
+            "mangas_scanned": 0,
+            "total_mangas": 0,
+            "current_page": 0,
+            "total_pages": 0,
+            "panels_extracted": 0,
+            "percent": 0,
+            "message": "Hệ thống sẵn sàng trích xuất đặc trưng toàn thư viện.",
+            "is_scanning": False,
+        }
+        self._global_scan_queues: List[asyncio.Queue] = []
+
     @property
     def nlp(self):
         if self._nlp is None:
@@ -106,7 +124,7 @@ class PanelScannerService:
             logger.warning(f"Error ensuring indexes for manga_panels: {e}")
 
     def is_scanning(self, manga_id: str) -> bool:
-        return self._active_scans.get(manga_id, False)
+        return self._active_scans.get(manga_id, False) or self._global_scan_active
 
     def get_scan_status(self, manga_id: str) -> Dict[str, Any]:
         return self._scan_stats.get(
@@ -154,17 +172,91 @@ class PanelScannerService:
             except Exception:
                 pass
 
+    # --- Global System-wide Scan Support ---
+    def get_global_scan_status(self) -> Dict[str, Any]:
+        return dict(self._global_scan_status)
+
+    def register_global_queue(self) -> asyncio.Queue:
+        q = asyncio.Queue()
+        self._global_scan_queues.append(q)
+        return q
+
+    def unregister_global_queue(self, q: asyncio.Queue):
+        if q in self._global_scan_queues:
+            self._global_scan_queues.remove(q)
+
+    async def _emit_global_progress(
+        self,
+        stage: str,
+        current_manga_id: Optional[str],
+        current_manga_title: str,
+        mangas_scanned: int,
+        total_mangas: int,
+        current_page: int,
+        total_pages: int,
+        panels_extracted: int,
+        message: str,
+    ):
+        percent = int((current_page / max(1, total_pages)) * 100) if total_pages > 0 else 0
+        stat = {
+            "stage": stage,
+            "current_manga_id": current_manga_id,
+            "current_manga_title": current_manga_title,
+            "mangas_scanned": mangas_scanned,
+            "total_mangas": total_mangas,
+            "current_page": current_page,
+            "total_pages": total_pages,
+            "panels_extracted": panels_extracted,
+            "percent": min(100, percent),
+            "message": message,
+            "is_scanning": self._global_scan_active,
+        }
+        self._global_scan_status = stat
+
+        for q in list(self._global_scan_queues):
+            try:
+                await q.put(stat)
+            except Exception:
+                pass
+
+    async def trigger_global_scan(
+        self,
+        manga_ids: Optional[List[str]] = None,
+        force_rescan: bool = False,
+    ) -> Dict[str, Any]:
+        """Trigger background scanning across the entire manga library or selected manga."""
+        if self._global_scan_active:
+            return {
+                "success": False,
+                "message": "Quá trình quét toàn bộ thư viện đang diễn ra.",
+            }
+
+        self._global_scan_active = True
+        self._cancel_global_scan = False
+        asyncio.create_task(self._run_global_scan_task(manga_ids, force_rescan))
+        return {
+            "success": True,
+            "message": "Đã kích hoạt quét trích xuất đặc trưng hình ảnh cho toàn hệ thống.",
+        }
+
+    def cancel_global_scan(self) -> Dict[str, Any]:
+        """Cancel ongoing global library scan."""
+        if not self._global_scan_active:
+            return {"success": False, "message": "Không có tác vụ quét nào đang chạy."}
+        self._cancel_global_scan = True
+        return {"success": True, "message": "Đã gửi yêu cầu dừng quét hệ thống."}
+
     async def trigger_scan(
         self,
         manga_id: str,
         chapter_ids: Optional[List[str]] = None,
         force_rescan: bool = False,
     ) -> Dict[str, Any]:
-        """Trigger background scanning and feature extraction for a manga."""
-        if self._active_scans.get(manga_id, False):
+        """Trigger background scanning and feature extraction for a single manga."""
+        if self._active_scans.get(manga_id, False) or self._global_scan_active:
             return {
                 "success": False,
-                "message": "Quá trình quét và trích xuất đang diễn ra cho manga này.",
+                "message": "Quá trình quét và trích xuất đang diễn ra.",
             }
 
         self._active_scans[manga_id] = True
@@ -225,6 +317,7 @@ class PanelScannerService:
             for chap in chapters:
                 c_id_str = str(chap["_id"])
                 chap_num = str(chap.get("chapter_number", "1"))
+                chap_title = chap.get("title", "")
                 vol_num = chap.get("volume")
                 pages = chap.get("pages", [])
 
@@ -277,6 +370,7 @@ class PanelScannerService:
                         vol_num,
                         page_num,
                         obj_key,
+                        chap_title,
                     )
 
                     # 3. Save panels to MongoDB
@@ -317,6 +411,217 @@ class PanelScannerService:
             )
         finally:
             self._active_scans[manga_id] = False
+
+    async def _run_global_scan_task(
+        self,
+        manga_ids: Optional[List[str]],
+        force_rescan: bool,
+    ):
+        """Execute full library scanning across all downloaded manga chapters."""
+        try:
+            await self.ensure_indexes()
+            await self._emit_global_progress(
+                stage="discovering",
+                current_manga_id=None,
+                current_manga_title="",
+                mangas_scanned=0,
+                total_mangas=0,
+                current_page=0,
+                total_pages=0,
+                panels_extracted=0,
+                message="Đang kiểm tra danh sách manga và các chapter trong hệ thống...",
+            )
+
+            db = get_db()
+            if manga_ids and len(manga_ids) > 0:
+                target_ids = manga_ids
+            else:
+                target_ids = await db.chapters.distinct("manga_id")
+
+            if not target_ids:
+                await self._emit_global_progress(
+                    stage="completed",
+                    current_manga_id=None,
+                    current_manga_title="",
+                    mangas_scanned=0,
+                    total_mangas=0,
+                    current_page=0,
+                    total_pages=0,
+                    panels_extracted=0,
+                    message="Không tìm thấy manga nào có chapter trong hệ thống.",
+                )
+                return
+
+            total_mangas = len(target_ids)
+            total_library_pages = 0
+            manga_chapters_map: Dict[str, List[Dict[str, Any]]] = {}
+
+            for mid in target_ids:
+                chaps = await db.chapters.find({"manga_id": mid}).sort([
+                    ("chapter_numeric", 1),
+                    ("chapter_number", 1)
+                ]).to_list(2000)
+                manga_chapters_map[mid] = chaps
+                for c in chaps:
+                    total_library_pages += len(c.get("pages", []))
+
+            if total_library_pages == 0:
+                await self._emit_global_progress(
+                    stage="completed",
+                    current_manga_id=None,
+                    current_manga_title="",
+                    mangas_scanned=0,
+                    total_mangas=total_mangas,
+                    current_page=0,
+                    total_pages=0,
+                    panels_extracted=0,
+                    message="Chưa có trang truyện nào được tải xuống để quét.",
+                )
+                return
+
+            total_processed_pages = 0
+            total_panels_extracted = 0
+
+            for m_idx, mid in enumerate(target_ids):
+                if self._cancel_global_scan:
+                    await self._emit_global_progress(
+                        stage="cancelled",
+                        current_manga_id=mid,
+                        current_manga_title="",
+                        mangas_scanned=m_idx,
+                        total_mangas=total_mangas,
+                        current_page=total_processed_pages,
+                        total_pages=total_library_pages,
+                        panels_extracted=total_panels_extracted,
+                        message="Quá trình quét đã được dừng bởi người dùng.",
+                    )
+                    return
+
+                m_filter = {"_id": ObjectId(mid)} if ObjectId.is_valid(mid) else {"_id": mid}
+                manga_doc = await db.mangas.find_one(m_filter)
+                manga_title = manga_doc.get("title", f"Manga {mid}") if manga_doc else f"Manga {mid}"
+
+                chapters = manga_chapters_map.get(mid, [])
+                for chap in chapters:
+                    if self._cancel_global_scan:
+                        break
+
+                    c_id_str = str(chap["_id"])
+                    chap_num = str(chap.get("chapter_number", "1"))
+                    chap_title = chap.get("title", "")
+                    vol_num = chap.get("volume")
+                    pages = chap.get("pages", [])
+
+                    for page in pages:
+                        if self._cancel_global_scan:
+                            break
+
+                        page_num = page.get("page_number", 1)
+                        filename = page.get("filename", f"{page_num}.jpg")
+                        obj_key = page.get("object_key") or f"chapters/{mid}/{c_id_str}/{filename}"
+
+                        if not force_rescan:
+                            existing_count = await self._get_panels_col().count_documents({
+                                "chapter_id": c_id_str,
+                                "page_number": page_num,
+                            })
+                            if existing_count > 0:
+                                total_processed_pages += 1
+                                if total_processed_pages % 10 == 0 or total_processed_pages == total_library_pages:
+                                    await self._emit_global_progress(
+                                        stage="indexing",
+                                        current_manga_id=mid,
+                                        current_manga_title=manga_title,
+                                        mangas_scanned=m_idx,
+                                        total_mangas=total_mangas,
+                                        current_page=total_processed_pages,
+                                        total_pages=total_library_pages,
+                                        panels_extracted=total_panels_extracted,
+                                        message=f"Bỏ qua trang đã quét: {manga_title} • Ch.{chap_num} • Trang {page_num}",
+                                    )
+                                continue
+
+                        await self._emit_global_progress(
+                            stage="ocr_processing",
+                            current_manga_id=mid,
+                            current_manga_title=manga_title,
+                            mangas_scanned=m_idx,
+                            total_mangas=total_mangas,
+                            current_page=total_processed_pages,
+                            total_pages=total_library_pages,
+                            panels_extracted=total_panels_extracted,
+                            message=f"Đang nhận diện ({m_idx + 1}/{total_mangas}): {manga_title} • Ch.{chap_num} • Trang {page_num}",
+                        )
+
+                        image_bytes = await self._fetch_page_bytes(mid, c_id_str, filename, obj_key, page)
+                        if not image_bytes:
+                            total_processed_pages += 1
+                            continue
+
+                        extracted_panels = await asyncio.to_thread(
+                            self._analyze_page_image,
+                            image_bytes,
+                            mid,
+                            manga_title,
+                            c_id_str,
+                            chap_num,
+                            vol_num,
+                            page_num,
+                            obj_key,
+                            chap_title,
+                        )
+
+                        if force_rescan:
+                            await self._get_panels_col().delete_many({
+                                "chapter_id": c_id_str,
+                                "page_number": page_num,
+                            })
+
+                        if extracted_panels:
+                            await self._get_panels_col().insert_many(extracted_panels)
+                            total_panels_extracted += len(extracted_panels)
+
+                        total_processed_pages += 1
+                        await self._emit_global_progress(
+                            stage="indexing",
+                            current_manga_id=mid,
+                            current_manga_title=manga_title,
+                            mangas_scanned=m_idx + 1,
+                            total_mangas=total_mangas,
+                            current_page=total_processed_pages,
+                            total_pages=total_library_pages,
+                            panels_extracted=total_panels_extracted,
+                            message=f"Đã trích xuất {len(extracted_panels)} panels từ {manga_title} • Ch.{chap_num} • Trang {page_num}",
+                        )
+                        await asyncio.sleep(0.01)
+
+            await self._emit_global_progress(
+                stage="completed",
+                current_manga_id=None,
+                current_manga_title="",
+                mangas_scanned=total_mangas,
+                total_mangas=total_mangas,
+                current_page=total_processed_pages,
+                total_pages=total_library_pages,
+                panels_extracted=total_panels_extracted,
+                message=f"Hoàn thành! Đã quét {total_processed_pages} trang qua {total_mangas} bộ manga, trích xuất thành công {total_panels_extracted} panels.",
+            )
+
+        except Exception as e:
+            logger.error(f"Error during global panels scan: {e}", exc_info=True)
+            await self._emit_global_progress(
+                stage="error",
+                current_manga_id=None,
+                current_manga_title="",
+                mangas_scanned=0,
+                total_mangas=0,
+                current_page=0,
+                total_pages=0,
+                panels_extracted=0,
+                message=f"Đã xảy ra lỗi khi quét: {str(e)}",
+            )
+        finally:
+            self._global_scan_active = False
 
     async def _fetch_page_bytes(
         self,
@@ -378,6 +683,7 @@ class PanelScannerService:
         vol_num: Optional[str],
         page_num: int,
         obj_key: str,
+        chapter_title: str = "",
     ) -> List[Dict[str, Any]]:
         """Decode image, segment panels, run OCR, NLP tokenize, lemmatize."""
         img = vision_service.decode_image_bytes(image_bytes)
@@ -444,6 +750,7 @@ class PanelScannerService:
                 "manga_title": manga_title,
                 "chapter_id": chapter_id,
                 "chapter_number": chapter_num,
+                "chapter_title": chapter_title or "",
                 "volume": vol_num,
                 "page_number": page_num,
                 "page_minio_key": obj_key,
@@ -463,22 +770,24 @@ class PanelScannerService:
 
     async def search_panels(
         self,
-        manga_id: str,
         query: str,
+        manga_id: Optional[str] = None,
         chapter_id: Optional[str] = None,
-        limit: int = 24,
+        limit: int = 36,
         offset: int = 0,
     ) -> Dict[str, Any]:
         """
-        Search panels by dialogue, keyword, or lemma across stored chapters.
-        Returns ranked panels with highlighted snippets and metadata.
+        Search panels by dialogue, keyword, or lemma across stored chapters and manga.
+        Returns ranked panels with highlighted snippets and rich origin metadata.
         """
         clean_q = query.strip()
         if not clean_q:
             return {"total": 0, "limit": limit, "offset": offset, "results": [], "query": ""}
 
-        # Base filter
-        base_filter: Dict[str, Any] = {"manga_id": manga_id}
+        # Base filter: if manga_id is provided and not "all", filter by manga
+        base_filter: Dict[str, Any] = {}
+        if manga_id and manga_id != "all":
+            base_filter["manga_id"] = manga_id
         if chapter_id and chapter_id != "all":
             base_filter["chapter_id"] = chapter_id
 
@@ -513,26 +822,50 @@ class PanelScannerService:
 
         cursor = col.find(base_filter).sort([
             ("created_at", -1),
+            ("manga_title", 1),
             ("chapter_number", 1),
             ("page_number", 1),
             ("panel_index", 1),
         ]).skip(offset).limit(limit)
 
+        raw_docs = await cursor.to_list(length=limit)
+
+        # Batch-lookup manga covers for rich origin display
+        unique_manga_ids = list({d.get("manga_id") for d in raw_docs if d.get("manga_id")})
+        manga_cover_map: Dict[str, Optional[str]] = {}
+        if unique_manga_ids:
+            try:
+                obj_m_ids = [ObjectId(m) for m in unique_manga_ids if ObjectId.is_valid(m)]
+                str_m_ids = [m for m in unique_manga_ids if not ObjectId.is_valid(m)]
+                manga_records = await self._get_mangas_col().find(
+                    {"$or": [{"_id": {"$in": obj_m_ids}}, {"_id": {"$in": str_m_ids}}]},
+                    {"_id": 1, "minio_cover_key": 1, "title": 1}
+                ).to_list(len(unique_manga_ids))
+                for m in manga_records:
+                    mid_str = str(m["_id"])
+                    cov_key = m.get("minio_cover_key")
+                    manga_cover_map[mid_str] = minio_service.get_presigned_url(cov_key) if cov_key else None
+            except Exception as me:
+                logger.warning(f"Error fetching manga covers for search results: {me}")
+
         results = []
-        async for doc in cursor:
+        for doc in raw_docs:
             raw_text = doc.get("raw_text", "")
             cleaned = doc.get("cleaned_text", "")
 
             # Generate highlighted text snippet
             highlighted = self._highlight_text(raw_text or cleaned, tokens)
+            doc_manga_id = doc.get("manga_id")
 
             results.append(
                 {
                     "panel_id": str(doc["_id"]),
-                    "manga_id": doc.get("manga_id"),
+                    "manga_id": doc_manga_id,
                     "manga_title": doc.get("manga_title", ""),
+                    "manga_cover_url": manga_cover_map.get(str(doc_manga_id)),
                     "chapter_id": doc.get("chapter_id"),
                     "chapter_number": doc.get("chapter_number", ""),
+                    "chapter_title": doc.get("chapter_title", ""),
                     "volume": doc.get("volume"),
                     "page_number": doc.get("page_number", 1),
                     "panel_index": doc.get("panel_index", 0),
@@ -570,7 +903,7 @@ class PanelScannerService:
             return text
 
     async def get_manga_stats(self, manga_id: str) -> Dict[str, Any]:
-        """Return total panels, indexed pages, distinct vocabulary for manga."""
+        """Return total panels, indexed pages, distinct vocabulary for a single manga."""
         col = self._get_panels_col()
         total_panels = await col.count_documents({"manga_id": manga_id})
 
@@ -602,8 +935,75 @@ class PanelScannerService:
             "total_pages_scanned": total_pages,
             "total_chapters_scanned": len(scanned_chap_ids),
             "total_unique_words": total_words,
-            "is_scanning": self._active_scans.get(manga_id, False),
+            "is_scanning": self._active_scans.get(manga_id, False) or self._global_scan_active,
         }
+
+    async def get_global_stats(self) -> Dict[str, Any]:
+        """Return library-wide statistics: total panels, pages, manga series, unique vocabulary."""
+        col = self._get_panels_col()
+        total_panels = await col.count_documents({})
+
+        # Distinct manga and chapters scanned
+        scanned_manga_ids = await col.distinct("manga_id")
+        scanned_chap_ids = await col.distinct("chapter_id")
+
+        # Vocabulary count across all panels in library
+        pipeline = [
+            {"$unwind": "$lemmas"},
+            {"$group": {"_id": "$lemmas"}},
+            {"$count": "total_words"}
+        ]
+        agg_res = await col.aggregate(pipeline).to_list(1)
+        total_words = agg_res[0]["total_words"] if agg_res else 0
+
+        # Total pages scanned across library
+        page_pipeline = [
+            {"$group": {"_id": {"manga": "$manga_id", "chap": "$chapter_id", "pg": "$page_number"}}},
+            {"$count": "total_pages"}
+        ]
+        page_res = await col.aggregate(page_pipeline).to_list(1)
+        total_pages = page_res[0]["total_pages"] if page_res else 0
+
+        return {
+            "total_panels": total_panels,
+            "total_pages_scanned": total_pages,
+            "total_mangas_scanned": len(scanned_manga_ids),
+            "total_chapters_scanned": len(scanned_chap_ids),
+            "total_unique_words": total_words,
+            "is_scanning": self._global_scan_active or any(self._active_scans.values()),
+        }
+
+    async def get_scanned_manga_list(self) -> List[Dict[str, Any]]:
+        """Return list of manga with download/panel metrics for filter dropdowns and scan manager."""
+        db = get_db()
+        chap_manga_ids = await db.chapters.distinct("manga_id")
+        if not chap_manga_ids:
+            return []
+
+        obj_ids = [ObjectId(m) for m in chap_manga_ids if ObjectId.is_valid(m)]
+        str_ids = [m for m in chap_manga_ids if not ObjectId.is_valid(m)]
+
+        mangas = await db.mangas.find({
+            "$or": [{"_id": {"$in": obj_ids}}, {"_id": {"$in": str_ids}}]
+        }).to_list(1000)
+
+        results = []
+        for m in mangas:
+            mid = str(m["_id"])
+            cover_key = m.get("minio_cover_key")
+            cover_url = minio_service.get_presigned_url(cover_key) if cover_key else None
+            panel_count = await self._get_panels_col().count_documents({"manga_id": mid})
+            chap_count = await db.chapters.count_documents({"manga_id": mid})
+            results.append({
+                "manga_id": mid,
+                "title": m.get("title", "Unknown"),
+                "cover_url": cover_url,
+                "chapters_count": chap_count,
+                "panels_count": panel_count,
+            })
+
+        results.sort(key=lambda x: (x["panels_count"] == 0, x["title"]))
+        return results
 
     async def delete_panels_for_chapter(self, chapter_id: str):
         """Cascading delete constraint: called when chapter is deleted."""

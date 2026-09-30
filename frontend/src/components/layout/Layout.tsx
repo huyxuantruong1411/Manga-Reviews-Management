@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History } from "lucide-react";
+import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History, ScanSearch } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
@@ -96,7 +96,7 @@ export const Layout: React.FC = () => {
         </div>
         
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <NavLink
             to="/"
             className={({ isActive }) =>
@@ -109,6 +109,20 @@ export const Layout: React.FC = () => {
           >
             <Compass size={20} />
             <span>Manga Library</span>
+          </NavLink>
+
+          <NavLink
+            to="/panel-words-detector"
+            className={({ isActive }) =>
+              `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                isActive
+                  ? "bg-[var(--brand-orange)] text-white"
+                  : "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`
+            }
+          >
+            <ScanSearch size={20} />
+            <span>Panel Words Detector</span>
           </NavLink>
           
           <NavLink

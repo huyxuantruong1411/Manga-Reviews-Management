@@ -22,6 +22,130 @@ class ScanPanelsRequest(BaseModel):
     force_rescan: bool = False
 
 
+class GlobalScanRequest(BaseModel):
+    manga_ids: Optional[List[str]] = None
+    force_rescan: bool = False
+
+
+# ==========================================
+# Global System-Wide Endpoints
+# ==========================================
+
+@router.get("/panels/search")
+async def search_all_panels(
+    q: str = Query(..., min_length=1, description="Keyword, dialogue phrase, or lemma"),
+    manga_id: Optional[str] = Query(None, description="Optional manga filter"),
+    chapter_id: Optional[str] = Query(None, description="Optional chapter filter"),
+    limit: int = Query(36, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """
+    Search scene panels across the entire manga collection or filtered by manga/chapter.
+    Returns ranked panels with highlighted snippet and rich origin metadata.
+    """
+    try:
+        res = await panel_scanner_service.search_panels(
+            query=q,
+            manga_id=manga_id,
+            chapter_id=chapter_id,
+            limit=limit,
+            offset=offset,
+        )
+        return res
+    except Exception as e:
+        logger.error(f"Error in global panel search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/panels/stats")
+async def get_global_panels_stats():
+    """Retrieve system-wide telemetry: total panels, scanned pages, manga series, unique vocabulary."""
+    try:
+        stats = await panel_scanner_service.get_global_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error fetching global panel stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/panels/mangas")
+async def get_scanned_manga_list():
+    """Retrieve list of manga in system with their scanned panel counts and chapter counts."""
+    try:
+        return await panel_scanner_service.get_scanned_manga_list()
+    except Exception as e:
+        logger.error(f"Error fetching scanned manga list: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/panels/scan")
+async def trigger_global_library_scan(
+    payload: GlobalScanRequest = Body(default_factory=GlobalScanRequest),
+):
+    """Trigger background scanning and feature extraction across the entire manga library."""
+    try:
+        res = await panel_scanner_service.trigger_global_scan(
+            manga_ids=payload.manga_ids,
+            force_rescan=payload.force_rescan,
+        )
+        return res
+    except Exception as e:
+        logger.error(f"Error triggering global library scan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/panels/scan/cancel")
+async def cancel_global_library_scan():
+    """Cancel ongoing global library scan."""
+    try:
+        return panel_scanner_service.cancel_global_scan()
+    except Exception as e:
+        logger.error(f"Error cancelling global library scan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/panels/scan-status")
+async def get_global_scan_status():
+    """Retrieve current global scan progress status."""
+    return panel_scanner_service.get_global_scan_status()
+
+
+@router.get("/panels/scan-progress")
+async def stream_global_scan_progress():
+    """Server-Sent Events (SSE) endpoint streaming real-time global feature extraction progress."""
+    q = panel_scanner_service.register_global_queue()
+
+    async def event_generator():
+        try:
+            initial_stat = panel_scanner_service.get_global_scan_status()
+            yield f"data: {json.dumps(initial_stat)}\n\n"
+
+            while True:
+                try:
+                    stat = await asyncio.wait_for(q.get(), timeout=25.0)
+                    yield f"data: {json.dumps(stat)}\n\n"
+                    if stat.get("stage") in ("completed", "error", "cancelled") and not stat.get("is_scanning", False):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            panel_scanner_service.unregister_global_queue(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ==========================================
+# Single Manga Endpoints (Backwards Compatible)
+# ==========================================
+
 @router.post("/manga/{manga_id}/scan-panels")
 async def trigger_manga_scan(
     manga_id: str = Path(...),
@@ -94,8 +218,8 @@ async def search_manga_panels(
     """
     try:
         res = await panel_scanner_service.search_panels(
-            manga_id=manga_id,
             query=q,
+            manga_id=manga_id,
             chapter_id=chapter_id,
             limit=limit,
             offset=offset,

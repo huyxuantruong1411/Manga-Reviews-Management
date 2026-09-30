@@ -2,8 +2,10 @@ export interface PanelResult {
   panel_id: string;
   manga_id: string;
   manga_title: string;
+  manga_cover_url?: string | null;
   chapter_id: string;
   chapter_number: string;
+  chapter_title?: string;
   volume?: string | null;
   page_number: number;
   panel_index: number;
@@ -28,6 +30,20 @@ export interface PanelScanStatus {
   is_scanning: boolean;
 }
 
+export interface GlobalScanStatus {
+  stage: string;
+  current_manga_id?: string | null;
+  current_manga_title: string;
+  mangas_scanned: number;
+  total_mangas: number;
+  current_page: number;
+  total_pages: number;
+  panels_extracted: number;
+  percent: number;
+  message: string;
+  is_scanning: boolean;
+}
+
 export interface PanelStats {
   manga_id: string;
   total_panels: number;
@@ -35,6 +51,23 @@ export interface PanelStats {
   total_chapters_scanned: number;
   total_unique_words: number;
   is_scanning: boolean;
+}
+
+export interface GlobalPanelStats {
+  total_panels: number;
+  total_pages_scanned: number;
+  total_mangas_scanned: number;
+  total_chapters_scanned: number;
+  total_unique_words: number;
+  is_scanning: boolean;
+}
+
+export interface ScannedMangaItem {
+  manga_id: string;
+  title: string;
+  cover_url?: string | null;
+  chapters_count: number;
+  panels_count: number;
 }
 
 export interface WordMeaning {
