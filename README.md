@@ -1,7 +1,7 @@
 # Manga Reviews Management & AI Vision Lexis System
 
 <p align="center">
-  <img src="frontend/src/assets/hero.png" alt="Manga Reviews Management Banner" width="800" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="docs/assets/banner.svg" alt="Manga Reviews Management Banner" width="100%" />
 </p>
 
 <p align="center">
