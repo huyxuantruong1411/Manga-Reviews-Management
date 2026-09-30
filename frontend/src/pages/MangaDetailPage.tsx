@@ -780,6 +780,8 @@ export const MangaDetailPage: React.FC = () => {
   const [history, setHistory] = useState<AuditLog[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailError, setDetailError] = useState("");
+  const detailRequestRef = useRef<AbortController | null>(null);
   const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
 
   // Parallel Tab States & URL sync
@@ -1478,15 +1480,21 @@ export const MangaDetailPage: React.FC = () => {
   };
 
   const fetchMangaDetails = async () => {
+    detailRequestRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
     try {
       setLoading(true);
+      setDetailError("");
+      setLastReadProgress(null);
       const [mangaRes, reviewsRes, historyRes, tagsRes] = await Promise.all([
-        client.get(`/api/manga/${id}`),
-        client.get(`/api/manga/${id}/reviews`),
-        client.get(`/api/manga/${id}/history`),
-        client.get("/api/tags/"),
+        client.get(`/api/manga/${id}`, { signal: controller.signal }),
+        client.get(`/api/manga/${id}/reviews`, { signal: controller.signal }),
+        client.get(`/api/manga/${id}/history`, { signal: controller.signal }),
+        client.get("/api/tags/", { signal: controller.signal }),
       ]);
 
+      if (controller.signal.aborted) return;
       setManga(mangaRes.data);
       setReviews(reviewsRes.data);
       setHistory(historyRes.data);
@@ -1494,14 +1502,14 @@ export const MangaDetailPage: React.FC = () => {
       setEditTags(mangaRes.data.tag_ids);
 
       // Load reading progress
-      client.get(`/api/manga/${id}/reading-progress`).then((progressRes) => {
+      client.get(`/api/manga/${id}/reading-progress`, { signal: controller.signal }).then((progressRes) => {
         if (progressRes.data?.last_read_chapter_id) {
           setLastReadProgress(progressRes.data);
         }
       }).catch(() => {});
 
       // Load storage chapters count
-      client.get(`/api/manga/${id}/chapters`).then((chapRes) => {
+      client.get(`/api/manga/${id}/chapters`, { signal: controller.signal }).then((chapRes) => {
         setStorageChaptersCount(chapRes.data?.chapters?.length || 0);
       }).catch(() => {});
 
@@ -1510,9 +1518,12 @@ export const MangaDetailPage: React.FC = () => {
         fetchCounts(mangaRes.data.mangadex_id);
       }
     } catch (err) {
-      console.error("Error loading details:", err);
+      if (!controller.signal.aborted) {
+        setDetailError("Không tải được manga. Dữ liệu có thể đã bị xóa hoặc dịch vụ chưa kết nối.");
+        console.error("Error loading details:", err);
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -1526,6 +1537,7 @@ export const MangaDetailPage: React.FC = () => {
     setExistingStorageChapters([]);
     setChapterSearch("");
     fetchMangaDetails();
+    return () => detailRequestRef.current?.abort();
   }, [id]);
 
   // Sync details from MangaDex with real stepper progress modal
@@ -2104,6 +2116,10 @@ export const MangaDetailPage: React.FC = () => {
       showToast("Failed to clean up tabs.", "error");
     }
   };
+
+  if (detailError && !loading) {
+    return <div role="alert" className="p-8 text-center space-y-4"><p>{detailError}</p><button type="button" onClick={fetchMangaDetails} className="underline">Thử lại</button></div>;
+  }
 
   if (loading || !manga) {
     return (

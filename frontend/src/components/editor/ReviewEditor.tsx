@@ -1239,23 +1239,6 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
     };
   }, [handleSave, isSaving, uploadingMedia]);
 
-  // Finalize (cleanup orphaned media) on unmount to preserve Ctrl+Z during editing session
-  const reviewIdRef = useRef(reviewId);
-  useEffect(() => {
-    reviewIdRef.current = reviewId;
-  }, [reviewId]);
-
-  useEffect(() => {
-    return () => {
-      const finalReviewId = reviewIdRef.current;
-      if (finalReviewId) {
-        client.post(`/api/manga/${mangaId}/reviews/${finalReviewId}/finalize`).catch((err) => {
-          console.warn("Finalize on unmount failed:", err);
-        });
-      }
-    };
-  }, [mangaId]);
-
   return (
     <div className={`review-editor-container mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}>
       {/* Hidden file inputs for various media types */}

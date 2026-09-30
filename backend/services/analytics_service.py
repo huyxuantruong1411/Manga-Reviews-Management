@@ -465,9 +465,9 @@ class AnalyticsService:
                     if isinstance(tag_list, list):
                         for tid in tag_list:
                             if tid:
-                                stats["tag_counts"][str(tid)] = stats["tag_counts"].get(str(tid), 0) + count
+                                stats["tag_counts"][str(tid)] = stats["tag_counts"].get(str(tid), 0) + 1
                     elif tag_list:
-                        stats["tag_counts"][str(tag_list)] = stats["tag_counts"].get(str(tag_list), 0) + count
+                        stats["tag_counts"][str(tag_list)] = stats["tag_counts"].get(str(tag_list), 0) + 1
                         
             # Format and map tags
             formatted_creators = []
@@ -540,7 +540,7 @@ class AnalyticsService:
             {"$group": {"_id": "$period", "count": {"$sum": 1}}},
             {"$sort": {"_id": 1}}
         ]
-        res = await mangas_coll.aggregate(pipeline).to_list(200)
+        res = await mangas_coll.aggregate(pipeline).to_list(None)
         return [{"period": item["_id"], "count": item["count"]} for item in res]
 
     async def get_manga_completed_timeline(self, manga_ids: List[str], group_by: str = "month",
@@ -586,7 +586,7 @@ class AnalyticsService:
             {"$group": {"_id": "$period", "count": {"$sum": 1}}},
             {"$sort": {"_id": 1}}
         ]
-        res = await audit_coll.aggregate(pipeline).to_list(200)
+        res = await audit_coll.aggregate(pipeline).to_list(None)
         return [{"period": item["_id"], "count": item["count"]} for item in res]
 
     async def get_review_activity_timeline(self, manga_ids: List[str], group_by: str = "month",
@@ -625,7 +625,7 @@ class AnalyticsService:
             {"$group": {"_id": "$period", "count": {"$sum": 1}}},
             {"$sort": {"_id": 1}}
         ]
-        res = await reviews_coll.aggregate(pipeline).to_list(200)
+        res = await reviews_coll.aggregate(pipeline).to_list(None)
         return [{"period": item["_id"], "count": item["count"]} for item in res]
 
     async def get_metadata_distributions(self, filter_query: Dict[str, Any]) -> Dict[str, Any]:

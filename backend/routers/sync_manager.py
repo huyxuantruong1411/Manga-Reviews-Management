@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api/sync", tags=["Sync Manager"])
 # Request/Response schemas
 class SyncOptions(BaseModel):
     sync_metadata: bool = True
+    sync_trackers: bool = False
     sync_covers: bool = False
     sync_recommendations: bool = False
 

@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
         await download_service.auto_resume_tasks()
     except Exception as e:
         logger.critical(f"Failed to start database connections: {e}")
+        await close_mongo_connection()
+        raise
     yield
     # Shutdown: close Mongo
     await close_mongo_connection()

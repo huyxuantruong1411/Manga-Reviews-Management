@@ -16,7 +16,7 @@ def get_db():
     return db_instance.db
 
 async def connect_to_mongo():
-    logger.info(f"Connecting to MongoDB at {settings.mongodb_uri}...")
+    logger.info("Connecting to MongoDB...")
     db_instance.client = AsyncIOMotorClient(settings.mongodb_uri)
     db_instance.db = db_instance.client[settings.database_name]
     # Verify connection

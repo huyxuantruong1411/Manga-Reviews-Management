@@ -525,48 +525,14 @@ async def finalize_review(manga_id: str = Path(...), review_id: str = Path(...))
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # Extract all media URLs from the saved content
+    # Uploads are shared by manga and may belong to another review, an unsaved
+    # draft, or another browser tab. Finalization is not proof of orphanhood.
+    # Keep this endpoint non-destructive until media ownership/draft references
+    # and a separate recoverable garbage collection workflow are available.
     referenced_urls = set()
-    content_json = review.get("content_json")
-    if content_json:
-        _extract_media_urls_from_json(content_json, referenced_urls)
-
-    # Extract just the object keys from the URLs
-    endpoint = settings.minio_endpoint
-    if not endpoint.startswith("http"):
-        endpoint = f"http://{endpoint}"
-
-    referenced_keys = {}  # bucket -> set of keys
-    for url in referenced_urls:
-        for bucket in [REVIEW_IMAGES_BUCKET, REVIEW_VIDEOS_BUCKET, REVIEW_MEDIA_BUCKET]:
-            prefix = f"{endpoint}/{bucket}/"
-            if url.startswith(prefix):
-                key = url[len(prefix):]
-                if bucket not in referenced_keys:
-                    referenced_keys[bucket] = set()
-                referenced_keys[bucket].add(key)
-
-    # For each bucket, list objects for this manga and delete orphans
+    if review.get("content_json"):
+        _extract_media_urls_from_json(review["content_json"], referenced_urls)
     deleted_count = 0
-    minio = minio_service.client
-
-    for bucket in [REVIEW_IMAGES_BUCKET, REVIEW_VIDEOS_BUCKET, REVIEW_MEDIA_BUCKET]:
-        try:
-            if not minio.bucket_exists(bucket):
-                continue
-            objects = minio.list_objects(bucket, prefix=f"{manga_id}/", recursive=True)
-            bucket_refs = referenced_keys.get(bucket, set())
-            
-            for obj in objects:
-                if obj.object_name not in bucket_refs:
-                    try:
-                        minio.remove_object(bucket, obj.object_name)
-                        deleted_count += 1
-                        logger.info(f"Cleaned orphaned object: {bucket}/{obj.object_name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete orphan {bucket}/{obj.object_name}: {e}")
-        except Exception as e:
-            logger.warning(f"Error listing bucket {bucket}: {e}")
 
     # Update finalized timestamp
     await coll.update_one(

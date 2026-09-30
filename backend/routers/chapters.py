@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Path, Query, Body, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -25,9 +25,9 @@ class DuplicateCleanupPayload(BaseModel):
 class ReadingProgressPayload(BaseModel):
     chapter_id: str
     chapter_number: str
-    page: int = 1
-    reading_mode: str = "long_strip"
-    fit_mode: str = "width"
+    page: int = Field(1, ge=1)
+    reading_mode: Literal["long_strip", "single", "double_ltr", "double_rtl"] = "long_strip"
+    fit_mode: Literal["width", "height", "original"] = "width"
     mark_as_read: bool = False
     language: Optional[str] = None
 
@@ -71,24 +71,6 @@ async def delete_chapter(chapter_id: str = Path(...)):
         raise
     except Exception as e:
         logger.error(f"Error deleting chapter {chapter_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/manga/{manga_id}/cleanup-latest-chapter")
-async def cleanup_latest_chapter(manga_id: str = Path(...)):
-    """Find and delete the latest / highest chapter of a manga to allow a clean re-download from that chapter."""
-    try:
-        deleted = await chapter_service.delete_latest_chapter(manga_id)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Không tìm thấy chương nào đã lưu để xóa.")
-        return {
-            "success": True,
-            "deleted": deleted,
-            "message": f"Đã dọn dẹp Chapter {deleted.get('chapter_number')} thành công."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error cleaning up latest chapter for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/manga/{manga_id}/chapters/sync-metadata")
@@ -224,6 +206,8 @@ async def save_reading_progress(
             mark_as_read=payload.mark_as_read,
             language=payload.language
         )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Error saving reading progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))

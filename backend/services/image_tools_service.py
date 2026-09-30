@@ -60,9 +60,21 @@ def _convert_single_image(filepath: str, target_ext: str) -> Dict[str, Any]:
         old_size = os.path.getsize(filepath)
 
         with Image.open(filepath) as img:
-            if pil_format == "JPEG" and img.mode in ("RGBA", "P"):
+            if pil_format == "JPEG" and img.mode != "RGB":
                 img = img.convert("RGB")
-            img.save(new_path, format=pil_format)
+            # Encode before creating the destination. Exclusive creation also
+            # prevents two conversion workers from overwriting the same stem.
+            encoded = BytesIO()
+            img.save(encoded, format=pil_format)
+            with open(new_path, "xb") as destination:
+                try:
+                    destination.write(encoded.getvalue())
+                    destination.flush()
+                    os.fsync(destination.fileno())
+                except Exception:
+                    destination.close()
+                    os.remove(new_path)
+                    raise
 
         new_size = os.path.getsize(new_path)
 

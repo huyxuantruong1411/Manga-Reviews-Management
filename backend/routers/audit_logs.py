@@ -65,7 +65,7 @@ async def get_audit_stats():
 @router.get("/{log_id}", response_model=AuditLogResponse)
 async def get_audit_log_by_id(log_id: str = Path(...)):
     """Retrieve details of a specific audit log entry."""
-    res = await audit_service.get_audit_logs(search=log_id, limit=1)
-    if not res["items"]:
+    res = await audit_service.get_audit_log_by_id(log_id)
+    if not res:
         raise HTTPException(status_code=404, detail="Audit log entry not found")
-    return res["items"][0]
+    return res

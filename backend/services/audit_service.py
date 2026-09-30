@@ -52,6 +52,12 @@ class AuditService:
             res["timestamp"] = dt.isoformat().replace("+00:00", "Z")
         return res
 
+    async def get_audit_log_by_id(self, log_id: str):
+        if not ObjectId.is_valid(log_id):
+            return None
+        doc = await self._get_audit_collection().find_one({"_id": ObjectId(log_id)})
+        return self._serialize_log(doc) if doc else None
+
     async def log_event(
         self,
         entity_type: str,

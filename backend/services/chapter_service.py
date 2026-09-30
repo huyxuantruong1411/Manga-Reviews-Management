@@ -1,4 +1,5 @@
 import os
+import asyncio
 import re
 import uuid
 import time
@@ -221,6 +222,7 @@ class ChapterService:
             "external_url": chapter_data.get("external_url"),
             "source": chapter_data.get("source", "mangadex"),
             "source_id": chapter_data.get("source_id"),
+            "local_path": chapter_data.get("local_path"),
             "pages": pages,
             "page_count": page_count,
             "updated_at": now
@@ -233,12 +235,14 @@ class ChapterService:
                 "manga_id": doc["manga_id"],
                 "source_id": doc["source_id"]
             })
-        if not existing:
+        if not existing and not doc.get("source_id"):
             existing = await self._get_chapters_col().find_one({
                 "manga_id": doc["manga_id"],
                 "chapter_number": doc["chapter_number"],
                 "language": doc["language"],
-                "scanlation_group": doc["scanlation_group"]
+                "scanlation_group": doc["scanlation_group"],
+                "volume": doc["volume"],
+                "source_id": None,
             })
 
         if existing:
@@ -346,8 +350,12 @@ class ChapterService:
         manga_id = chapter["manga_id"]
         c_id_str = str(chapter["_id"])
 
-        # Delete all objects in MinIO
-        minio_service.delete_chapter_folder(manga_id, c_id_str)
+        # Downloaded MangaDex pages use source UUIDs, not the Mongo chapter ID.
+        # Delete the recorded objects and keep metadata if storage reports a failure.
+        for page in chapter.get("pages", []):
+            key = page.get("object_key")
+            if key and not await asyncio.to_thread(minio_service.delete_chapter_page, key):
+                raise RuntimeError("Không xóa được ảnh chương trong kho lưu trữ; hãy thử lại.")
 
         # Delete document from MongoDB
         await self._get_chapters_col().delete_one(filter_query)
@@ -986,31 +994,34 @@ class ChapterService:
         language: Optional[str] = None
     ) -> Dict[str, Any]:
         """Save user reading position and settings."""
+        key = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
+        chapter = await self._get_chapters_col().find_one({"_id": key, "manga_id": manga_id})
+        if not chapter:
+            raise ValueError("Chapter does not belong to this manga or no longer exists")
+        page_count = len(chapter.get("pages", []))
+        if not 1 <= page <= page_count:
+            raise ValueError("Page is outside the stored chapter")
+        if reading_mode not in {"long_strip", "single", "double_ltr", "double_rtl"} or fit_mode not in {"width", "height", "original"}:
+            raise ValueError("Invalid reader settings")
         now = datetime.utcnow()
-        doc = await self._get_reading_col().find_one({"manga_id": manga_id})
-        read_chapters = doc.get("read_chapter_ids", []) if doc else []
-
-        if mark_as_read and chapter_id not in read_chapters:
-            read_chapters.append(chapter_id)
-
         update_data = {
             "manga_id": manga_id,
             "last_read_chapter_id": chapter_id,
-            "last_read_chapter_number": chapter_number,
+            "last_read_chapter_number": chapter.get("chapter_number", chapter_number),
             "last_read_page": max(1, page),
-            "read_chapter_ids": read_chapters,
             "reading_mode": reading_mode,
             "fit_mode": fit_mode,
             "updated_at": now
         }
-        if language:
-            update_data["last_read_language"] = language.lower()
-
-        await self._get_reading_col().update_one(
-            {"manga_id": manga_id},
-            {"$set": update_data},
-            upsert=True
-        )
+        chapter_language = chapter.get("language") or language
+        if chapter_language:
+            update_data["last_read_language"] = chapter_language.lower()
+        update = {"$set": update_data}
+        if mark_as_read:
+            update["$addToSet"] = {"read_chapter_ids": chapter_id}
+        else:
+            update["$setOnInsert"] = {"read_chapter_ids": []}
+        await self._get_reading_col().update_one({"manga_id": manga_id}, update, upsert=True)
 
         # Also auto-update manga status to 'reading' if currently 'unread' or 'plan_to_read'
         try:
@@ -1055,35 +1066,17 @@ class ChapterService:
         # 1. Delete from MinIO & MongoDB via delete_chapter
         await self.delete_chapter(c_id)
 
-        # 2. Check if local disk folder exists and remove it
-        try:
-            manga = await self._get_mangas_col().find_one({"_id": ObjectId(manga_id)})
-            download_path = manga.get("download_path") if manga else None
-            if download_path and os.path.exists(download_path):
+        # Only remove the exact path recorded for this chapter. Guessing a
+        # directory from chapter number can delete another language/group.
+        local_path = latest_chap.get("local_path")
+        if local_path:
+            manga_key = ObjectId(manga_id) if ObjectId.is_valid(manga_id) else manga_id
+            manga = await self._get_mangas_col().find_one({"_id": manga_key})
+            root = os.path.realpath(manga.get("download_path", "")) if manga and manga.get("download_path") else None
+            target = os.path.realpath(local_path)
+            if root and target != root and os.path.commonpath([root, target]) == root and os.path.isdir(target):
                 import shutil
-                c_prefix = f"chapter {str(c_num).lower()}"
-                for entry in os.listdir(download_path):
-                    entry_path = os.path.join(download_path, entry)
-                    if os.path.isdir(entry_path):
-                        low_entry = entry.lower()
-                        # Match "Chapter X", "Chapter X - ...", "Chapter X [...]"
-                        if (
-                            low_entry == c_prefix
-                            or low_entry.startswith(f"{c_prefix} ")
-                            or low_entry.startswith(f"{c_prefix}-")
-                            or low_entry.startswith(f"{c_prefix}[")
-                        ):
-                            # If language is specified, prioritize matching language tag if present
-                            if c_lang and f"[{c_lang.lower()}]" in low_entry:
-                                shutil.rmtree(entry_path, ignore_errors=True)
-                                logger.info(f"Removed language-matched local chapter folder: {entry_path}")
-                                break
-                            elif not any(f"[{other_l}]" in low_entry for other_l in ["vi", "en", "ja", "es", "fr", "ru"]):
-                                shutil.rmtree(entry_path, ignore_errors=True)
-                                logger.info(f"Removed local chapter folder: {entry_path}")
-                                break
-        except Exception as e:
-            logger.error(f"Error removing local folder for chapter {c_num}: {e}")
+                await asyncio.to_thread(shutil.rmtree, target)
 
         return {
             "chapter_id": c_id,

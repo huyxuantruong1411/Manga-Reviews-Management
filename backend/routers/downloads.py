@@ -135,7 +135,7 @@ class DownloadChapterPayload(BaseModel):
     pages: Optional[int] = None
 
 class DownloadRequest(BaseModel):
-    chapters: List[DownloadChapterPayload]
+    chapters: List[DownloadChapterPayload] = Field(..., min_length=1)
     lang: str = "en"
     download_path: Optional[str] = None
     save_to_disk: bool = False
@@ -188,37 +188,8 @@ async def download_manga_chapters(
                 raise e
             raise HTTPException(status_code=400, detail=f"Invalid or unwriteable download path: {str(e)}")
 
-        # Resolve target directory (checking oneshot status)
         is_oneshot = False
-        try:
-            tag_ids = manga.get("tag_ids", [])
-            oid_list = []
-            for tid in tag_ids:
-                if isinstance(tid, str) and ObjectId.is_valid(tid):
-                    oid_list.append(ObjectId(tid))
-                elif isinstance(tid, ObjectId):
-                    oid_list.append(tid)
-            
-            if oid_list:
-                local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
-                for tag in local_tags:
-                    tag_name = tag.get("name")
-                    if isinstance(tag_name, dict):
-                        en_name = tag_name.get("en", "")
-                        if en_name.lower() == "oneshot":
-                            is_oneshot = True
-                            break
-                    elif isinstance(tag_name, str):
-                        if tag_name.lower() == "oneshot":
-                            is_oneshot = True
-                            break
-        except Exception as e:
-            logger.error(f"Error checking oneshot status during path validation: {e}")
-
-        if is_oneshot:
-            target_dir = abs_path
-        else:
-            target_dir = os.path.join(abs_path, clean_filename(manga["title"]))
+        target_dir = os.path.join(abs_path, clean_filename(manga["title"]))
 
         # Validate target directory content (check if contains files/folders)
         if not req.force:

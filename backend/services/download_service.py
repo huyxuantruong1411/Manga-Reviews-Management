@@ -125,7 +125,7 @@ class DownloadService:
         if not task:
             return False
             
-        if task["status"] not in ["completed", "failed", "cancelled"]:
+        if task_id in self.running_tasks or task["status"] not in ["completed", "failed", "cancelled"]:
             return False
             
         await self._get_tasks_collection().delete_one({"_id": task_id})
@@ -137,8 +137,8 @@ class DownloadService:
             return False
             
         if task_id in self.running_tasks:
-            logger.info(f"Task {task_id} is already running.")
-            return True
+            logger.info(f"Task {task_id} is still running; retry resume after cancellation completes.")
+            return False
             
         # Reset cancellations tracker
         active_cancellations[task_id] = False
@@ -157,6 +157,7 @@ class DownloadService:
                     "status": "pending",
                     "error_message": None,
                     "chapters_detail": chapters,
+                    "resolved_download_path": task.get("resolved_download_path") or task.get("download_path"),
                     "updated_at": datetime.utcnow()
                 }
             }
@@ -222,40 +223,11 @@ class DownloadService:
             if not base_dir:
                 base_dir = settings.download_dir
 
-            # Check if the manga has the "oneshot" tag
-            is_oneshot = False
-            try:
-                manga = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
-                if manga:
-                    tag_ids = manga.get("tag_ids", [])
-                    oid_list = []
-                    for tid in tag_ids:
-                        if isinstance(tid, str) and ObjectId.is_valid(tid):
-                            oid_list.append(ObjectId(tid))
-                        elif isinstance(tid, ObjectId):
-                            oid_list.append(tid)
-                    
-                    if oid_list:
-                        local_tags = await get_db().tags.find({"_id": {"$in": oid_list}}).to_list(None)
-                        for tag in local_tags:
-                            tag_name = tag.get("name")
-                            if isinstance(tag_name, dict):
-                                en_name = tag_name.get("en", "")
-                                if en_name.lower() == "oneshot":
-                                    is_oneshot = True
-                                    break
-                            elif isinstance(tag_name, str):
-                                if tag_name.lower() == "oneshot":
-                                    is_oneshot = True
-                                    break
-            except Exception as e:
-                logger.error(f"Error checking oneshot status for manga {manga_id}: {e}")
-                
-            if is_oneshot:
-                target_dir = normalize_windows_path(base_dir)
-            else:
-                target_dir = normalize_windows_path(os.path.join(base_dir, clean_filename(manga_title)))
-        
+            # Every manga gets its own directory, including oneshots. On resume,
+            # reuse the resolved directory instead of appending the title again.
+            target_dir = task.get("resolved_download_path") or normalize_windows_path(
+                os.path.join(base_dir, clean_filename(manga_title)))
+
         # Update state to downloading and store resolved download path
         await self._get_tasks_collection().update_one(
             {"_id": task_id},
@@ -263,6 +235,7 @@ class DownloadService:
                 "$set": {
                     "status": "downloading",
                     "download_path": os.path.abspath(target_dir) if target_dir else None,
+                    "resolved_download_path": os.path.abspath(target_dir) if target_dir else None,
                     "updated_at": datetime.utcnow()
                 }
             }
@@ -303,7 +276,7 @@ class DownloadService:
                 else:
                     folder_name = clean_filename(f"Chapter {chap_num}{lang_tag}")
                     
-                chap_path = os.path.join(target_dir, folder_name) if target_dir else None
+                chap_path = os.path.join(target_dir, f"{folder_name} [{lang}] [{chap_id}]") if target_dir else None
                 if chap_path:
                     os.makedirs(chap_path, exist_ok=True)
                 
@@ -341,25 +314,15 @@ class DownloadService:
                             "readable_at": chap.get("readable_at"),
                             "source": "mangadex",
                             "source_id": chap_id,
+                            "local_path": chap_path,
                             "pages": page_items,
                             "page_count": len(page_items)
                         })
                         await self._update_chapter_status(task_id, chap_id, "completed")
                         completed_count += 1
                     else:
-                        # Clean up partial uploaded pages from MinIO
-                        try:
-                            from backend.services.minio_service import minio_service
-                            minio_service.delete_chapter_folder(manga_id, chap_id)
-                        except Exception:
-                            pass
-                        # Clean up partial folder on disk if created
-                        if chap_path and os.path.exists(chap_path):
-                            try:
-                                import shutil
-                                shutil.rmtree(chap_path, ignore_errors=True)
-                            except Exception:
-                                pass
+                        # Keep completed/cached files: the folder may also hold
+                        # a previous successful download of this chapter.
                         raise RuntimeError("Failed to download one or more pages.")
                         
                 except Exception as e:
@@ -384,10 +347,10 @@ class DownloadService:
                 
             # Finalize task status
             final_task = await self.get_task_status(task_id)
-            if final_task["status"] != "cancelled":
+            if final_task and final_task["status"] != "cancelled":
                 # Check if all completed
                 failed_any = any(c["status"] == "failed" for c in final_task["chapters_detail"])
-                status = "failed" if failed_any and completed_count == 0 else "completed"
+                status = "failed" if failed_any or completed_count != total else "completed"
                 
                 await self._get_tasks_collection().update_one(
                     {"_id": task_id},
@@ -609,6 +572,7 @@ class DownloadService:
                         await loop.run_in_executor(None, self._write_file, full_path, bytes_data)
                     except Exception as e:
                         logger.error(f"Error saving image {file_name} to disk: {e}")
+                        return False
 
                 page_results[idx] = {
                     "page_number": idx + 1,

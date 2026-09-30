@@ -19,7 +19,7 @@ import {
   Minus,
   RotateCcw
 } from "lucide-react";
-import client from "../api/client";
+import client, { apiErrorMessage } from "../api/client";
 import type { Chapter, PageItem } from "../types/chapter";
 
 export const MangaReaderPage: React.FC = () => {
@@ -33,6 +33,10 @@ export const MangaReaderPage: React.FC = () => {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
   const [pages, setPages] = useState<PageItem[]>([]);
+  const [readerError, setReaderError] = useState("");
+  const [progressError, setProgressError] = useState("");
+  const chapterRequestRef = useRef<AbortController | null>(null);
+  const restorePageRef = useRef<number | null>(null);
   const [loadingChapter, setLoadingChapter] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(initialPageParam);
 
@@ -87,46 +91,68 @@ export const MangaReaderPage: React.FC = () => {
       .catch((err) => console.error("Error loading chapter list:", err));
   }, [mangaId]);
 
-  // Load Chapter Pages
+  // Chapter requests are independent of display settings and cannot overwrite
+  // a newer navigation. Never save a chapter from a different manga URL.
   const loadChapter = useCallback(async (targetChapterId: string, targetPage: number = 1) => {
-    if (!targetChapterId) return;
+    chapterRequestRef.current?.abort();
+    const controller = new AbortController();
+    chapterRequestRef.current = controller;
     setLoadingChapter(true);
+    setReaderError("");
+    setCurrentChapter(null);
+    setPages([]);
     try {
-      const res = await client.get(`/api/chapters/${targetChapterId}`);
-      setCurrentChapter(res.data);
-      if (res.data.language) {
-        setActiveLanguage(res.data.language.toLowerCase());
-      }
-      const chapterPages = res.data.pages || [];
+      const { data } = await client.get<Chapter>(`/api/chapters/${targetChapterId}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (data.manga_id !== mangaId) throw new Error("Chương không thuộc manga này.");
+      setCurrentChapter(data);
+      if (data.language) setActiveLanguage(data.language.toLowerCase());
+      const chapterPages = data.pages || [];
+      const page = Math.min(Math.max(1, targetPage), chapterPages.length || 1);
+      restorePageRef.current = page;
+      pageRefs.current = [];
       setPages(chapterPages);
-      setCurrentPage(Math.min(Math.max(1, targetPage), chapterPages.length || 1));
-
-      // Scroll top
-      window.scrollTo({ top: 0, behavior: "instant" as any });
-
-      // Sync progress to backend
-      if (mangaId) {
-        client.post(`/api/manga/${mangaId}/reading-progress`, {
-          chapter_id: targetChapterId,
-          chapter_number: res.data.chapter_number,
-          page: targetPage,
-          reading_mode: readingMode,
-          fit_mode: fitMode,
-          language: res.data.language
-        }).catch(() => {});
-      }
-    } catch (err) {
-      console.error("Error loading chapter:", err);
+      setCurrentPage(page);
+      window.scrollTo({ top: 0 });
+    } catch (error) {
+      if (!controller.signal.aborted) setReaderError(apiErrorMessage(error, "Không tải được chương hoặc chương không thuộc manga này."));
     } finally {
-      setLoadingChapter(false);
+      if (!controller.signal.aborted) setLoadingChapter(false);
     }
-  }, [mangaId, readingMode, fitMode]);
+  }, [mangaId]);
 
   useEffect(() => {
-    if (chapterId) {
-      loadChapter(chapterId, initialPageParam);
-    }
+    if (chapterId) void loadChapter(chapterId, initialPageParam);
+    return () => chapterRequestRef.current?.abort();
   }, [chapterId, initialPageParam, loadChapter]);
+
+  useEffect(() => {
+    if (!mangaId || loadingChapter || !currentChapter || currentChapter.id !== chapterId || !pages.length) return;
+    const timer = window.setTimeout(() => {
+      client.post(`/api/manga/${mangaId}/reading-progress`, {
+        chapter_id: currentChapter.id,
+        chapter_number: currentChapter.chapter_number,
+        page: currentPage,
+        reading_mode: readingMode,
+        fit_mode: fitMode,
+        language: currentChapter.language,
+        mark_as_read: currentPage === pages.length,
+      }).then(() => setProgressError("")).catch(() => setProgressError("Chưa lưu được tiến độ đọc. Kiểm tra kết nối."));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [mangaId, chapterId, currentChapter, currentPage, pages.length, readingMode, fitMode, loadingChapter]);
+
+  // Restore a panel deep link in long-strip mode after preceding images settle.
+  useEffect(() => {
+    if (loadingChapter || readingMode !== "long_strip" || !restorePageRef.current) return;
+    const target = pageRefs.current[restorePageRef.current - 1];
+    if (!target) return;
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start" });
+      restorePageRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loadingChapter, readingMode, pages]);
 
   // Exit back to Manga Detail Page at chapters tab
   const handleExit = () => {
@@ -332,6 +358,7 @@ export const MangaReaderPage: React.FC = () => {
     if (readingMode !== "long_strip" || pages.length === 0) return;
 
     const handleScroll = () => {
+      if (restorePageRef.current !== null) return;
       for (let i = 0; i < pageRefs.current.length; i++) {
         const el = pageRefs.current[i];
         if (el) {
@@ -726,6 +753,10 @@ export const MangaReaderPage: React.FC = () => {
 
       {/* Main Canvas Area */}
       <main className="flex-1 flex flex-col justify-center items-center pt-14 pb-12 w-full">
+        {(readerError || progressError) && <div role="alert" className="p-4 text-red-300 bg-red-950/60">
+          {readerError || progressError}
+          {readerError && <button type="button" className="ml-3 underline" onClick={() => chapterId && loadChapter(chapterId, initialPageParam)}>Thử lại</button>}
+        </div>}
         {loadingChapter ? (
           <div className="py-32 flex flex-col items-center justify-center space-y-3">
             <Loader2 size={36} className="animate-spin text-[var(--brand-orange)]" />
@@ -758,6 +789,8 @@ export const MangaReaderPage: React.FC = () => {
                     <img
                       src={page.url || ""}
                       alt={`Page ${page.page_number}`}
+                      width={page.width || undefined}
+                      height={page.height || undefined}
                       loading={idx < 3 ? "eager" : "lazy"}
                       className={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
                       style={{
