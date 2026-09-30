@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from fastapi import APIRouter, Path, Query, Body, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.database.connection import get_db
 from backend.services.vision_service import vision_service
@@ -18,12 +18,12 @@ router = APIRouter(prefix="/api", tags=["vision"])
 
 
 class ScanPanelsRequest(BaseModel):
-    chapter_ids: Optional[List[str]] = None
+    chapter_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
 
 
 class GlobalScanRequest(BaseModel):
-    manga_ids: Optional[List[str]] = None
+    manga_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
 
 
@@ -33,7 +33,7 @@ class GlobalScanRequest(BaseModel):
 
 @router.get("/panels/search")
 async def search_all_panels(
-    q: str = Query(..., min_length=1, description="Keyword, dialogue phrase, or lemma"),
+    q: str = Query("", max_length=200, description="Keyword, dialogue phrase, or lemma"),
     manga_id: Optional[str] = Query(None, description="Optional manga filter"),
     chapter_id: Optional[str] = Query(None, description="Optional chapter filter"),
     limit: int = Query(36, ge=1, le=100),
@@ -88,7 +88,11 @@ async def trigger_global_library_scan(
             manga_ids=payload.manga_ids,
             force_rescan=payload.force_rescan,
         )
+        if not res["success"]:
+            raise HTTPException(status_code=409, detail=res["message"])
         return res
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error triggering global library scan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,8 +128,6 @@ async def stream_global_scan_progress():
                 try:
                     stat = await asyncio.wait_for(q.get(), timeout=25.0)
                     yield f"data: {json.dumps(stat)}\n\n"
-                    if stat.get("stage") in ("completed", "error", "cancelled") and not stat.get("is_scanning", False):
-                        break
                 except asyncio.TimeoutError:
                     yield ": ping\n\n"
         finally:
@@ -153,12 +155,19 @@ async def trigger_manga_scan(
 ):
     """Trigger background scanning and panel/dialogue feature extraction for a manga."""
     try:
+        key = ObjectId(manga_id) if ObjectId.is_valid(manga_id) else manga_id
+        if not await get_db().mangas.find_one({"_id": key}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Manga not found")
         res = await panel_scanner_service.trigger_scan(
             manga_id=manga_id,
             chapter_ids=payload.chapter_ids,
             force_rescan=payload.force_rescan,
         )
+        if not res["success"]:
+            raise HTTPException(status_code=409, detail=res["message"])
         return res
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error triggering manga panels scan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -185,8 +194,6 @@ async def stream_scan_progress(manga_id: str = Path(...)):
                 try:
                     stat = await asyncio.wait_for(q.get(), timeout=25.0)
                     yield f"data: {json.dumps(stat)}\n\n"
-                    if stat.get("stage") in ("completed", "error") and not stat.get("is_scanning", False):
-                        break
                 except asyncio.TimeoutError:
                     # Heartbeat comment to keep SSE connection alive
                     yield ": ping\n\n"
@@ -207,7 +214,7 @@ async def stream_scan_progress(manga_id: str = Path(...)):
 @router.get("/manga/{manga_id}/panels/search")
 async def search_manga_panels(
     manga_id: str = Path(...),
-    q: str = Query(..., min_length=1, description="Keyword, dialogue phrase, or lemma"),
+    q: str = Query("", max_length=200, description="Keyword, dialogue phrase, or lemma"),
     chapter_id: Optional[str] = Query(None, description="Optional chapter filter"),
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -261,10 +268,11 @@ async def get_panel_crop(panel_id: str = Path(...)):
     try:
         def _get_bytes():
             resp = minio_service.client.get_object(minio_service.bucket, obj_key)
-            data = resp.read()
-            resp.close()
-            resp.release_conn()
-            return data
+            try:
+                return resp.read()
+            finally:
+                resp.close()
+                resp.release_conn()
 
         image_bytes = await asyncio.to_thread(_get_bytes)
     except Exception as e:
@@ -304,16 +312,20 @@ async def get_panel_page_raw(panel_id: str = Path(...)):
     try:
         def _get_bytes():
             resp = minio_service.client.get_object(minio_service.bucket, obj_key)
-            data = resp.read()
-            resp.close()
-            resp.release_conn()
-            return data
+            try:
+                return resp.read()
+            finally:
+                resp.close()
+                resp.release_conn()
 
         image_bytes = await asyncio.to_thread(_get_bytes)
         import io
+        from PIL import Image
+        with Image.open(io.BytesIO(image_bytes)) as original:
+            media_type = Image.MIME.get(original.format, "application/octet-stream")
         return StreamingResponse(
             io.BytesIO(image_bytes),
-            media_type="image/jpeg",
+            media_type=media_type,
             headers={"Cache-Control": "public, max-age=604800, immutable"},
         )
     except Exception as e:

@@ -2,11 +2,11 @@ import re
 import io
 import asyncio
 import logging
+import html
+from uuid import uuid4
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from bson import ObjectId
-import wordninja
-import spacy
 from PIL import Image
 
 from backend.database.connection import get_db
@@ -35,19 +35,8 @@ def normalize_comic_text(text: str) -> str:
     t = re.sub(r"-\s+", "", t)
     t = re.sub(r"\s+", " ", t).strip()
 
-    # 2. Segment words if OCR merged long letters without spaces
-    words = t.split()
-    segmented_words = []
-    for w in words:
-        alpha_only = re.sub(r"[^a-zA-Z]", "", w)
-        if len(alpha_only) >= 9:
-            splits = wordninja.split(alpha_only)
-            if len(splits) > 1:
-                segmented_words.extend(splits)
-                continue
-        segmented_words.append(w)
-
-    t = " ".join(segmented_words)
+    # Preserve words and punctuation. Length alone cannot distinguish a merged
+    # OCR token from a valid word/name (e.g. "understanding" or "Chainsawman").
 
     # 3. If entire text is UPPERCASE, convert to title/sentence case
     if t.isupper() and len(t) > 3:
@@ -93,6 +82,7 @@ class PanelScannerService:
     @property
     def nlp(self):
         if self._nlp is None:
+            import spacy
             logger.info("Loading spaCy model en_core_web_sm...")
             try:
                 self._nlp = spacy.load("en_core_web_sm")
@@ -119,6 +109,9 @@ class PanelScannerService:
             await col.create_index([("manga_id", 1)])
             await col.create_index([("lemmas", 1)])
             await col.create_index([("raw_text", "text"), ("cleaned_text", "text")])
+            await get_db().panel_scan_pages.create_index(
+                [("chapter_id", 1), ("page_number", 1)], unique=True
+            )
             logger.info("Manga panels indexes verified/created successfully.")
         except Exception as e:
             logger.warning(f"Error ensuring indexes for manga_panels: {e}")
@@ -140,7 +133,7 @@ class PanelScannerService:
         )
 
     def register_queue(self, manga_id: str) -> asyncio.Queue:
-        q = asyncio.Queue()
+        q = asyncio.Queue(maxsize=1)
         if manga_id not in self._scan_queues:
             self._scan_queues[manga_id] = []
         self._scan_queues[manga_id].append(q)
@@ -154,6 +147,8 @@ class PanelScannerService:
     async def _emit_progress(
         self, manga_id: str, stage: str, current: int, total: int, message: str
     ):
+        if stage in {"completed", "error", "cancelled"}:
+            self._active_scans[manga_id] = False
         percent = int((current / max(1, total)) * 100) if total > 0 else 0
         stat = {
             "stage": stage,
@@ -168,7 +163,9 @@ class PanelScannerService:
         queues = self._scan_queues.get(manga_id, [])
         for q in list(queues):
             try:
-                await q.put(stat)
+                if q.full():
+                    q.get_nowait()
+                q.put_nowait(stat)
             except Exception:
                 pass
 
@@ -177,7 +174,7 @@ class PanelScannerService:
         return dict(self._global_scan_status)
 
     def register_global_queue(self) -> asyncio.Queue:
-        q = asyncio.Queue()
+        q = asyncio.Queue(maxsize=1)
         self._global_scan_queues.append(q)
         return q
 
@@ -197,6 +194,8 @@ class PanelScannerService:
         panels_extracted: int,
         message: str,
     ):
+        if stage in {"completed", "error", "cancelled"}:
+            self._global_scan_active = False
         percent = int((current_page / max(1, total_pages)) * 100) if total_pages > 0 else 0
         stat = {
             "stage": stage,
@@ -215,7 +214,9 @@ class PanelScannerService:
 
         for q in list(self._global_scan_queues):
             try:
-                await q.put(stat)
+                if q.full():
+                    q.get_nowait()
+                q.put_nowait(stat)
             except Exception:
                 pass
 
@@ -225,7 +226,7 @@ class PanelScannerService:
         force_rescan: bool = False,
     ) -> Dict[str, Any]:
         """Trigger background scanning across the entire manga library or selected manga."""
-        if self._global_scan_active:
+        if self._global_scan_active or any(self._active_scans.values()):
             return {
                 "success": False,
                 "message": "Quá trình quét toàn bộ thư viện đang diễn ra.",
@@ -233,6 +234,7 @@ class PanelScannerService:
 
         self._global_scan_active = True
         self._cancel_global_scan = False
+        await self._emit_global_progress("starting", None, "", 0, 0, 0, 0, 0, "Đang khởi động quét...")
         asyncio.create_task(self._run_global_scan_task(manga_ids, force_rescan))
         return {
             "success": True,
@@ -253,13 +255,14 @@ class PanelScannerService:
         force_rescan: bool = False,
     ) -> Dict[str, Any]:
         """Trigger background scanning and feature extraction for a single manga."""
-        if self._active_scans.get(manga_id, False) or self._global_scan_active:
+        if any(self._active_scans.values()) or self._global_scan_active:
             return {
                 "success": False,
                 "message": "Quá trình quét và trích xuất đang diễn ra.",
             }
 
         self._active_scans[manga_id] = True
+        await self._emit_progress(manga_id, "starting", 0, 0, "Đang khởi động quét...")
         asyncio.create_task(self._run_scan_task(manga_id, chapter_ids, force_rescan))
         return {
             "success": True,
@@ -294,7 +297,7 @@ class PanelScannerService:
                 ("chapter_numeric", 1),
                 ("chapter_number", 1)
             ])
-            chapters = await chapters_cursor.to_list(length=2000)
+            chapters = await chapters_cursor.to_list(length=None)
 
             total_pages = sum(len(c.get("pages", [])) for c in chapters)
             if total_pages == 0:
@@ -328,11 +331,13 @@ class PanelScannerService:
 
                     # Check if already indexed
                     if not force_rescan:
-                        existing_count = await self._get_panels_col().count_documents({
+                        existing_count = await get_db().panel_scan_pages.find_one({
                             "chapter_id": c_id_str,
                             "page_number": page_num,
+                            "object_key": obj_key,
+                            "pipeline_version": 2,
                         })
-                        if existing_count > 0:
+                        if existing_count:
                             processed_pages += 1
                             if processed_pages % 10 == 0 or processed_pages == total_pages:
                                 await self._emit_progress(
@@ -356,8 +361,7 @@ class PanelScannerService:
                     # 1. Fetch image bytes from MinIO or disk
                     image_bytes = await self._fetch_page_bytes(manga_id, c_id_str, filename, obj_key, page)
                     if not image_bytes:
-                        processed_pages += 1
-                        continue
+                        raise RuntimeError(f"Không đọc được Ch.{chap_num}, trang {page_num}; dữ liệu cũ được giữ lại.")
 
                     # 2. Run vision pipeline in thread pool to prevent blocking event loop
                     extracted_panels = await asyncio.to_thread(
@@ -373,16 +377,8 @@ class PanelScannerService:
                         chap_title,
                     )
 
-                    # 3. Save panels to MongoDB
-                    if force_rescan:
-                        await self._get_panels_col().delete_many({
-                            "chapter_id": c_id_str,
-                            "page_number": page_num,
-                        })
-
-                    if extracted_panels:
-                        await self._get_panels_col().insert_many(extracted_panels)
-                        panels_extracted_total += len(extracted_panels)
+                    await self._save_page_panels(manga_id, c_id_str, page_num, obj_key, extracted_panels)
+                    panels_extracted_total += len(extracted_panels)
 
                     processed_pages += 1
                     await self._emit_progress(
@@ -460,7 +456,7 @@ class PanelScannerService:
                 chaps = await db.chapters.find({"manga_id": mid}).sort([
                     ("chapter_numeric", 1),
                     ("chapter_number", 1)
-                ]).to_list(2000)
+                ]).to_list(None)
                 manga_chapters_map[mid] = chaps
                 for c in chaps:
                     total_library_pages += len(c.get("pages", []))
@@ -521,11 +517,13 @@ class PanelScannerService:
                         obj_key = page.get("object_key") or f"chapters/{mid}/{c_id_str}/{filename}"
 
                         if not force_rescan:
-                            existing_count = await self._get_panels_col().count_documents({
-                                "chapter_id": c_id_str,
-                                "page_number": page_num,
-                            })
-                            if existing_count > 0:
+                            existing_count = await get_db().panel_scan_pages.find_one({
+                            "chapter_id": c_id_str,
+                            "page_number": page_num,
+                            "object_key": obj_key,
+                            "pipeline_version": 2,
+                        })
+                            if existing_count:
                                 total_processed_pages += 1
                                 if total_processed_pages % 10 == 0 or total_processed_pages == total_library_pages:
                                     await self._emit_global_progress(
@@ -555,8 +553,7 @@ class PanelScannerService:
 
                         image_bytes = await self._fetch_page_bytes(mid, c_id_str, filename, obj_key, page)
                         if not image_bytes:
-                            total_processed_pages += 1
-                            continue
+                            raise RuntimeError(f"Không đọc được {manga_title}, Ch.{chap_num}, trang {page_num}; dữ liệu cũ được giữ lại.")
 
                         extracted_panels = await asyncio.to_thread(
                             self._analyze_page_image,
@@ -571,15 +568,8 @@ class PanelScannerService:
                             chap_title,
                         )
 
-                        if force_rescan:
-                            await self._get_panels_col().delete_many({
-                                "chapter_id": c_id_str,
-                                "page_number": page_num,
-                            })
-
-                        if extracted_panels:
-                            await self._get_panels_col().insert_many(extracted_panels)
-                            total_panels_extracted += len(extracted_panels)
+                        await self._save_page_panels(mid, c_id_str, page_num, obj_key, extracted_panels)
+                        total_panels_extracted += len(extracted_panels)
 
                         total_processed_pages += 1
                         await self._emit_global_progress(
@@ -596,15 +586,15 @@ class PanelScannerService:
                         await asyncio.sleep(0.01)
 
             await self._emit_global_progress(
-                stage="completed",
+                stage="cancelled" if self._cancel_global_scan else "completed",
                 current_manga_id=None,
                 current_manga_title="",
-                mangas_scanned=total_mangas,
+                mangas_scanned=m_idx + (0 if self._cancel_global_scan else 1),
                 total_mangas=total_mangas,
                 current_page=total_processed_pages,
                 total_pages=total_library_pages,
                 panels_extracted=total_panels_extracted,
-                message=f"Hoàn thành! Đã quét {total_processed_pages} trang qua {total_mangas} bộ manga, trích xuất thành công {total_panels_extracted} panels.",
+                message=f"{'Đã dừng.' if self._cancel_global_scan else 'Hoàn thành!'} Đã quét {total_processed_pages} trang qua {total_mangas} bộ manga, trích xuất thành công {total_panels_extracted} panels.",
             )
 
         except Exception as e:
@@ -623,6 +613,34 @@ class PanelScannerService:
         finally:
             self._global_scan_active = False
 
+    async def _save_page_panels(self, manga_id, chapter_id, page_number, object_key, panels):
+        if self._global_scan_active and self._cancel_global_scan:
+            return
+        chapter_key = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
+        chapter = await self._get_chapters_col().find_one({"_id": chapter_key, "manga_id": manga_id})
+        if not chapter or not any(
+            p.get("page_number") == page_number and
+            (p.get("object_key") or f"chapters/{manga_id}/{chapter_id}/{p.get('filename', str(page_number) + '.jpg')}") == object_key
+            for p in chapter.get("pages", [])
+        ):
+            raise ValueError("Trang truyện đã thay đổi hoặc bị xóa trong lúc quét. Hãy quét lại.")
+        selector = {"chapter_id": chapter_id, "page_number": page_number}
+        generation = uuid4().hex
+        for panel in panels:
+            panel["scan_generation"] = generation
+        col = self._get_panels_col()
+        try:
+            if panels:
+                await col.insert_many(panels)
+        except Exception:
+            await col.delete_many({**selector, "scan_generation": generation})
+            raise
+        await col.delete_many({**selector, "scan_generation": {"$ne": generation}})
+        await get_db().panel_scan_pages.update_one(selector, {"$set": {
+            "manga_id": manga_id, "object_key": object_key,
+            "pipeline_version": 2, "scanned_at": datetime.utcnow(),
+        }}, upsert=True)
+
     async def _fetch_page_bytes(
         self,
         manga_id: str,
@@ -636,10 +654,11 @@ class PanelScannerService:
         try:
             def _get_minio():
                 resp = minio_service.client.get_object(minio_service.bucket, obj_key)
-                data = resp.read()
-                resp.close()
-                resp.release_conn()
-                return data
+                try:
+                    return resp.read()
+                finally:
+                    resp.close()
+                    resp.release_conn()
 
             return await asyncio.to_thread(_get_minio)
         except Exception as e:
@@ -650,10 +669,11 @@ class PanelScannerService:
             alt_key = f"chapters/{manga_id}/{chapter_id}/{filename}"
             def _get_alt_minio():
                 resp = minio_service.client.get_object(minio_service.bucket, alt_key)
-                data = resp.read()
-                resp.close()
-                resp.release_conn()
-                return data
+                try:
+                    return resp.read()
+                finally:
+                    resp.close()
+                    resp.release_conn()
 
             return await asyncio.to_thread(_get_alt_minio)
         except Exception:
@@ -688,7 +708,7 @@ class PanelScannerService:
         """Decode image, segment panels, run OCR, NLP tokenize, lemmatize."""
         img = vision_service.decode_image_bytes(image_bytes)
         if img is None:
-            return []
+            raise ValueError("Trang truyện không phải ảnh hợp lệ hoặc đã hỏng")
 
         height, width = img.shape[:2]
 
@@ -706,7 +726,7 @@ class PanelScannerService:
 
         for p_idx, (nx1, ny1, nx2, ny2) in enumerate(panels):
             assigned_texts = panel_texts_list[p_idx]
-            raw_text = " ".join(d["text"] for d in assigned_texts).strip()
+            raw_text = "\n".join(d["text"] for d in assigned_texts).strip()
             cleaned_text = normalize_comic_text(raw_text)
 
             lemmas = []
@@ -715,7 +735,7 @@ class PanelScannerService:
             if cleaned_text:
                 doc = self.nlp(cleaned_text)
                 lemmas = [
-                    token.lemma_.lower()
+                    (token.lemma_ or token.text).lower()
                     for token in doc
                     if not token.is_punct and not token.is_space
                 ]
@@ -725,7 +745,7 @@ class PanelScannerService:
                 for token in doc:
                     if token.is_punct or token.is_space or len(token.text) <= 1:
                         continue
-                    lemma = token.lemma_.lower()
+                    lemma = (token.lemma_ or token.text).lower()
                     if lemma not in vocab_counts:
                         vocab_counts[lemma] = {
                             "term": token.text,
@@ -781,8 +801,6 @@ class PanelScannerService:
         Returns ranked panels with highlighted snippets and rich origin metadata.
         """
         clean_q = query.strip()
-        if not clean_q:
-            return {"total": 0, "limit": limit, "offset": offset, "results": [], "query": ""}
 
         # Base filter: if manga_id is provided and not "all", filter by manga
         base_filter: Dict[str, Any] = {}
@@ -792,9 +810,9 @@ class PanelScannerService:
             base_filter["chapter_id"] = chapter_id
 
         # Analyze query lemmas with spaCy
-        q_doc = self.nlp(clean_q)
+        q_doc = await asyncio.to_thread(lambda: self.nlp(clean_q))
         query_lemmas = [
-            token.lemma_.lower()
+            (token.lemma_ or token.text).lower()
             for token in q_doc
             if not token.is_punct and not token.is_space
         ]
@@ -815,7 +833,8 @@ class PanelScannerService:
             token_ands = [{"cleaned_text": {"$regex": re.escape(t), "$options": "i"}} for t in tokens]
             search_or.append({"$and": token_ands})
 
-        base_filter["$or"] = search_or
+        if clean_q:
+            base_filter["$or"] = search_or
 
         col = self._get_panels_col()
         total = await col.count_documents(base_filter)
@@ -826,6 +845,7 @@ class PanelScannerService:
             ("chapter_number", 1),
             ("page_number", 1),
             ("panel_index", 1),
+            ("_id", 1),
         ]).skip(offset).limit(limit)
 
         raw_docs = await cursor.to_list(length=limit)
@@ -887,20 +907,16 @@ class PanelScannerService:
 
     def _highlight_text(self, text: str, tokens: List[str]) -> str:
         """Surround matching terms with <mark> tag for rich display."""
-        if not text or not tokens:
-            return text
-
-        pattern = "|".join(re.escape(t) for t in tokens if t)
-        if not pattern:
-            return text
-
-        def _repl(m):
-            return f'<mark class="bg-amber-400/30 text-amber-300 font-bold px-1 rounded border-b border-amber-400">{m.group(0)}</mark>'
-
-        try:
-            return re.sub(pattern, _repl, text, flags=re.IGNORECASE)
-        except Exception:
-            return text
+        pattern = "|".join(re.escape(t) for t in sorted(set(tokens), key=len, reverse=True) if t)
+        if not text or not pattern:
+            return html.escape(text or "")
+        pieces, end = [], 0
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            pieces.extend([html.escape(text[end:match.start()]),
+                           "<mark>" + html.escape(match.group()) + "</mark>"])
+            end = match.end()
+        pieces.append(html.escape(text[end:]))
+        return "".join(pieces)
 
     async def get_manga_stats(self, manga_id: str) -> Dict[str, Any]:
         """Return total panels, indexed pages, distinct vocabulary for a single manga."""
@@ -985,7 +1001,7 @@ class PanelScannerService:
 
         mangas = await db.mangas.find({
             "$or": [{"_id": {"$in": obj_ids}}, {"_id": {"$in": str_ids}}]
-        }).to_list(1000)
+        }).to_list(None)
 
         results = []
         for m in mangas:
@@ -1008,6 +1024,7 @@ class PanelScannerService:
     async def delete_panels_for_chapter(self, chapter_id: str):
         """Cascading delete constraint: called when chapter is deleted."""
         try:
+            await get_db().panel_scan_pages.delete_many({"chapter_id": chapter_id})
             res = await self._get_panels_col().delete_many({"chapter_id": chapter_id})
             logger.info(f"Cascading deletion: deleted {res.deleted_count} panels for chapter {chapter_id}")
         except Exception as e:
@@ -1016,25 +1033,25 @@ class PanelScannerService:
     async def delete_panels_for_pages(self, chapter_id: str, page_numbers: List[int]):
         """Cascading delete constraint: called when specific pages are deleted."""
         try:
-            res = await self._get_panels_col().delete_many({
-                "chapter_id": chapter_id,
-                "page_number": {"$in": page_numbers}
-            })
+            selector = {"chapter_id": chapter_id, "page_number": {"$in": page_numbers}}
+            await get_db().panel_scan_pages.delete_many(selector)
+            res = await self._get_panels_col().delete_many(selector)
             logger.info(f"Cascading deletion: deleted {res.deleted_count} panels for deleted pages in chapter {chapter_id}")
         except Exception as e:
             logger.error(f"Error deleting panels for pages in chapter {chapter_id}: {e}")
 
     async def renumber_panels_for_chapter(self, chapter_id: str, old_to_new_pages: Dict[int, int]):
         """Cascading update constraint: update page numbers after pages were renumbered."""
-        try:
+        for collection in (self._get_panels_col(), get_db().panel_scan_pages):
             for old_p, new_p in old_to_new_pages.items():
                 if old_p != new_p:
-                    await self._get_panels_col().update_many(
+                    await collection.update_many(
                         {"chapter_id": chapter_id, "page_number": old_p},
-                        {"$set": {"page_number": new_p}}
-                    )
-        except Exception as e:
-            logger.error(f"Error renumbering panels for chapter {chapter_id}: {e}")
+                        {"$set": {"page_number": -new_p}})
+            for new_p in old_to_new_pages.values():
+                await collection.update_many(
+                    {"chapter_id": chapter_id, "page_number": -new_p},
+                    {"$set": {"page_number": new_p}})
 
 
 panel_scanner_service = PanelScannerService()

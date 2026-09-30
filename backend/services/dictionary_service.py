@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
+from urllib.parse import quote
 import httpx
 from backend.database.connection import get_db
 
@@ -31,13 +32,14 @@ class DictionaryService:
         # 1. Check local MongoDB cache
         try:
             cached = await self._get_cache_col().find_one({"word": clean_word})
-            if cached:
+            if cached and cached.get("cached_at", datetime.min) > datetime.utcnow() - timedelta(days=30):
                 return {
                     "word": cached.get("word", clean_word),
                     "phonetic": cached.get("phonetic", ""),
                     "audio_url": cached.get("audio_url", ""),
                     "meanings": cached.get("meanings", []),
                     "cached": True,
+                    "status": cached.get("status", "ok"),
                 }
         except Exception as e:
             logger.warning(f"Error checking dictionary cache for '{clean_word}': {e}")
@@ -45,12 +47,13 @@ class DictionaryService:
         # 2. Query Free Dictionary API with short timeout and fallback
         try:
             async with httpx.AsyncClient(timeout=2.5) as client:
-                url = DICTIONARY_API_URL.format(word=clean_word)
+                url = DICTIONARY_API_URL.format(word=quote(clean_word, safe=""))
                 resp = await client.get(url, headers=self.headers)
 
                 if resp.status_code == 200:
                     data = resp.json()
                     parsed = self._parse_api_response(clean_word, data)
+                    parsed["status"] = "ok"
                     await self._save_to_cache(clean_word, parsed)
                     return parsed
                 elif resp.status_code == 404:
@@ -58,13 +61,8 @@ class DictionaryService:
                         "word": clean_word,
                         "phonetic": "",
                         "audio_url": "",
-                        "meanings": [
-                            {
-                                "part_of_speech": "dialogue token",
-                                "definition": f"Thuật ngữ '{clean_word}' trích xuất từ hội thoại truyện tranh.",
-                                "example": "",
-                            }
-                        ],
+                        "meanings": [],
+                        "status": "not_found",
                     }
                     await self._save_to_cache(clean_word, fallback)
                     return fallback
@@ -76,13 +74,8 @@ class DictionaryService:
             "word": clean_word,
             "phonetic": "",
             "audio_url": "",
-            "meanings": [
-                {
-                    "part_of_speech": "general",
-                    "definition": f"Offline mode: could not reach dictionary service for '{clean_word}'.",
-                    "example": "",
-                }
-            ],
+            "meanings": [],
+            "status": "unavailable",
         }
 
     def _parse_api_response(self, word: str, data: list) -> Dict[str, Any]:
@@ -143,6 +136,7 @@ class DictionaryService:
                         "audio_url": data.get("audio_url", ""),
                         "meanings": data.get("meanings", []),
                         "cached_at": datetime.utcnow(),
+                        "status": data.get("status", "ok"),
                     }
                 },
                 upsert=True,

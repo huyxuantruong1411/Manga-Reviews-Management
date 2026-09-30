@@ -227,6 +227,8 @@ class VisionService:
         Fallback to minimum Euclidean distance between centers.
         Returns a list of text lists, one per panel, sorted in natural reading order.
         """
+        if not panels:
+            return []
         panel_texts: List[List[Dict[str, Any]]] = [[] for _ in panels]
 
         for det in text_detections:
@@ -302,7 +304,7 @@ class VisionService:
             else:
                 cropped = img.crop((px1, py1, px2, py2))
 
-            if cropped.mode in ("RGBA", "P"):
+            if cropped.mode != "RGB":
                 cropped = cropped.convert("RGB")
 
             buffer = io.BytesIO()
