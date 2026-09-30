@@ -7,7 +7,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import client from "../../api/client";
+import client, { apiUrl } from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import type { PanelResult, PanelStats, PanelScanStatus } from "../../types/panel";
 import type { Chapter } from "../../types/chapter";
@@ -84,7 +84,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 
     // Keyboard shortcut '/' to focus search
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && document.activeElement !== searchInputRef.current) {
+      if (e.key === "/" && !(e.target instanceof HTMLElement && (e.target.closest("input, textarea, select") || e.target.isContentEditable))) {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
@@ -104,7 +104,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
       const queryParam = q.trim() || "";
       const res = await client.get(`/api/manga/${mangaId}/panels/search`, {
         params: {
-          q: queryParam || "a", // default wildcard query to load initial panels if empty
+          q: queryParam,
           chapter_id: chapId === "all" ? undefined : chapId,
           limit: 36,
           offset: 0,
@@ -136,7 +136,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
   const startListeningProgress = () => {
     if (sseRef.current) sseRef.current.close();
 
-    const url = `${client.defaults.baseURL || "http://localhost:8000"}/api/manga/${mangaId}/scan-progress`;
+    const url = apiUrl(`/api/manga/${mangaId}/scan-progress`);
     const es = new EventSource(url);
     sseRef.current = es;
 
@@ -145,7 +145,9 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
         const data: PanelScanStatus = json_parse_safe(event.data);
         if (data) {
           setScanStatus(data);
-          if (data.stage === "completed" || data.stage === "error") {
+          if (["completed", "error", "cancelled"].includes(data.stage) && !data.is_scanning) {
+            es.close();
+            sseRef.current = null;
             fetchStats();
             performSearch(searchQuery, selectedChapterId);
             if (data.stage === "completed") {
@@ -591,7 +593,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 
       {/* Full Page Modal with Golden Focus Frame */}
       {fullPagePanel && (
-        <FullPageModal
+        <FullPageModal key={fullPagePanel?.panel_id}
           panel={fullPagePanel}
           onClose={() => setFullPagePanel(null)}
         />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Volume2, X, BookOpen, Sparkles, CheckCircle2 } from "lucide-react";
 import type { WordDefinition } from "../../types/panel";
 import client from "../../api/client";
@@ -17,6 +17,17 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
   const [definition, setDefinition] = useState<WordDefinition | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      audioRef.current?.pause();
+      window.speechSynthesis?.cancel();
+    };
+  }, [onClose, word]);
 
   useEffect(() => {
     let isMounted = true;
@@ -36,12 +47,8 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
             word,
             phonetic: "",
             audio_url: "",
-            meanings: [
-              {
-                part_of_speech: "term",
-                definition: `Từ "${word}" trích xuất từ khung thoại truyện tranh.`,
-              },
-            ],
+            meanings: [],
+            status: "unavailable",
           });
           setLoading(false);
         }
@@ -68,6 +75,8 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
     if (definition?.audio_url) {
       setIsPlayingAudio(true);
       const audio = new Audio(definition.audio_url);
+      audioRef.current?.pause();
+      audioRef.current = audio;
       audio.onended = () => setIsPlayingAudio(false);
       audio.onerror = () => {
         setIsPlayingAudio(false);
@@ -80,19 +89,24 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
   };
 
   // Keep popover within screen viewport
-  const popoverWidth = 340;
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 768;
+  const popoverWidth = Math.min(340, viewportWidth - 32);
   let left = position.x - popoverWidth / 2;
   if (left < 16) left = 16;
   if (left + popoverWidth > viewportWidth - 16) left = viewportWidth - popoverWidth - 16;
 
   return (
     <div
+      role="dialog"
+      aria-label={`Tra từ ${word}`}
       className="fixed z-50 rounded-2xl shadow-2xl p-4 border border-amber-500/30 text-left bg-zinc-950/95 backdrop-blur-xl text-zinc-100 animate-in fade-in zoom-in-95 duration-200"
       style={{
-        top: `${position.y + 12}px`,
+        top: `${Math.max(16, Math.min(position.y + 12, viewportHeight - 380))}px`,
         left: `${left}px`,
         width: `${popoverWidth}px`,
+        maxHeight: "calc(100dvh - 32px)",
+        overflowY: "auto",
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -125,6 +139,7 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
         <button
           type="button"
           onClick={onClose}
+          aria-label="Đóng từ điển"
           className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
         >
           <X size={15} />
@@ -161,7 +176,7 @@ export const WordPopover: React.FC<WordPopoverProps> = ({
           ))
         ) : (
           <div className="py-4 text-center text-xs text-zinc-400">
-            Không tìm thấy định nghĩa chi tiết cho từ này.
+            {definition?.status === "unavailable" ? "Chưa kết nối được từ điển. Vui lòng thử lại." : "Không tìm thấy định nghĩa tiếng Anh cho từ này."}
           </div>
         )}
       </div>

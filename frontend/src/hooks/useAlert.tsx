@@ -69,7 +69,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <AlertContext.Provider value={{ showAlert, hideAlert, showToast }}>
       {children}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
           <div 
             className="relative w-full max-w-md p-6 overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-2xl transform scale-100 transition-all duration-300 animate-in fade-in zoom-in-95 duration-200"
           >

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { apiUrl } from "../../api/client";
+import React, { useState, useEffect, useRef } from "react";
 import { X, ZoomIn, ZoomOut, RotateCcw, BookOpen } from "lucide-react";
 import type { PanelResult } from "../../types/panel";
 
@@ -12,6 +13,20 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
   onClose,
 }) => {
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [imageError, setImageError] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!panel) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [panel?.panel_id]);
 
   const zoomIn = () => {
     if (zoomLevel < 2.5) setZoomLevel((prev) => Math.min(2.5, prev + 0.25));
@@ -35,7 +50,7 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
 
   if (!panel) return null;
 
-  const rawPageUrl = `/api/panels/${panel.panel_id}/page-image`;
+  const rawPageUrl = apiUrl(`/api/panels/${panel.panel_id}/page-image`);
   const [x1, y1, x2, y2] = panel.coords;
 
   const frameStyle: React.CSSProperties = {
@@ -54,6 +69,22 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
     >
       {/* Modal Container */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Xem toàn trang truyện"
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])");
+          const visible = Array.from(buttons || []).filter(button => button.offsetParent !== null);
+          const first = visible[0], last = visible[visible.length - 1];
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+            event.preventDefault(); last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault(); first?.focus();
+          }
+        }}
         className="relative w-full max-w-5xl h-[92vh] flex flex-col bg-[#0b0f19] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -123,23 +154,24 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
         </div>
 
         {/* Viewport with Golden Focus Frame */}
-        <div className="relative flex-1 overflow-auto bg-black/70 flex items-center justify-center p-4">
+        <div className="relative flex-1 overflow-auto bg-black/70 p-4">
           <div
-            className="relative inline-block transition-transform duration-200"
+            className="relative mx-auto"
             style={{
-              transform: `scale(${zoomLevel})`,
-              transformOrigin: "center center",
+              width: `${zoomLevel * 100}%`,
             }}
           >
             {/* Full Manga Page */}
             <img
               src={rawPageUrl}
               alt={panel.manga_title}
-              className="max-h-[75vh] w-auto object-contain block rounded-lg shadow-2xl"
+              onError={() => setImageError(true)}
+              className="w-full h-auto block rounded-lg shadow-2xl"
             />
+            {imageError && <p role="alert" className="p-6 text-red-300">Không tải được ảnh gốc. Trang có thể đã bị xóa hoặc kho ảnh chưa kết nối.</p>}
 
             {/* Golden Focus Bounding Box around Panel */}
-            <div
+            {!imageError && <div
               style={frameStyle}
               className="border-3 border-amber-400 ring-4 ring-amber-400/40 shadow-[0_0_25px_rgba(251,191,36,0.7)] rounded animate-pulse"
             >
@@ -147,7 +179,7 @@ export const FullPageModal: React.FC<FullPageModalProps> = ({
               <div className="absolute -top-7 left-0 px-2 py-0.5 rounded bg-amber-500 text-zinc-950 font-black text-[10px] uppercase tracking-wider shadow-md whitespace-nowrap">
                 Panel {panel.panel_index + 1}
               </div>
-            </div>
+            </div>}
           </div>
         </div>
 

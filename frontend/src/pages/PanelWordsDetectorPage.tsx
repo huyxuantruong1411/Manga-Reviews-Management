@@ -16,7 +16,8 @@ import {
   StopCircle,
   Check,
 } from "lucide-react";
-import client from "../api/client";
+import client, { apiUrl, apiErrorMessage } from "../api/client";
+import type { Chapter } from "../types/chapter";
 import { useAlert } from "../hooks/useAlert";
 import type {
   PanelResult,
@@ -56,7 +57,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [stats, setStats] = useState<GlobalPanelStats | null>(null);
   const [mangaList, setMangaList] = useState<ScannedMangaItem[]>([]);
-  const [chapterList, setChapterList] = useState<any[]>([]);
+  const [chapterList, setChapterList] = useState<Chapter[]>([]);
 
   // Scanning states
   const [scanStatus, setScanStatus] = useState<GlobalScanStatus | null>(null);
@@ -71,6 +72,11 @@ export const PanelWordsDetectorPage: React.FC = () => {
   const [popoverWord, setPopoverWord] = useState<string | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
 
+  const [loadError, setLoadError] = useState("");
+  const searchRequestRef = useRef<AbortController | null>(null);
+  const searchSequenceRef = useRef(0);
+  useEffect(() => () => { searchRequestRef.current?.abort(); }, []);
+
   // SSE ref
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -81,10 +87,11 @@ export const PanelWordsDetectorPage: React.FC = () => {
         client.get("/api/panels/stats"),
         client.get("/api/panels/mangas"),
       ]);
+      setLoadError("");
       setStats(statsRes.data);
       setMangaList(mangasRes.data || []);
     } catch (err) {
-      console.error("Failed to load global panel telemetry:", err);
+      setLoadError(apiErrorMessage(err, "Không tải được thống kê detector. Hãy thử lại."));
     }
   }, []);
 
@@ -100,16 +107,22 @@ export const PanelWordsDetectorPage: React.FC = () => {
       return;
     }
 
+    const controller = new AbortController();
+    setChapterList([]);
+    setSelectedChapterId("all");
     const fetchChapters = async () => {
       try {
-        const res = await client.get(`/api/manga/${selectedMangaId}/chapters`);
-        setChapterList(res.data.chapters || res.data || []);
+        const res = await client.get(`/api/manga/${selectedMangaId}/chapters`, { signal: controller.signal });
+        if (!controller.signal.aborted) setChapterList(res.data.chapters || []);
       } catch (err) {
-        console.error("Failed to fetch chapters for manga:", err);
-        setChapterList([]);
+        if (!controller.signal.aborted) {
+          setLoadError(apiErrorMessage(err, "Không tải được danh sách chương."));
+          setChapterList([]);
+        }
       }
     };
     fetchChapters();
+    return () => controller.abort();
   }, [selectedMangaId]);
 
   // Real-time SSE Scan Progress Listener
@@ -119,7 +132,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
         eventSourceRef.current.close();
       }
 
-      const sse = new EventSource("/api/panels/scan-progress");
+      const sse = new EventSource(apiUrl("/api/panels/scan-progress"));
       eventSourceRef.current = sse;
 
       sse.onmessage = (event) => {
@@ -127,7 +140,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
           const data: GlobalScanStatus = JSON.parse(event.data);
           setScanStatus(data);
 
-          if (data.stage === "completed" && !data.is_scanning) {
+          if (["completed", "cancelled", "error"].includes(data.stage) && !data.is_scanning) {
             fetchTelemetry();
             // Refresh current search results if active
             if (activeQuery) {
@@ -151,15 +164,20 @@ export const PanelWordsDetectorPage: React.FC = () => {
         eventSourceRef.current.close();
       }
     };
-  }, [fetchTelemetry, activeQuery, pageOffset, selectedMangaId, selectedChapterId]);
+  }, [fetchTelemetry, activeQuery, pageOffset, selectedMangaId, selectedChapterId, pageLimit]);
 
   // Search execution
   const executeSearch = async (
     query: string,
     offset: number = 0,
     mangaId: string = selectedMangaId,
-    chapterId: string = selectedChapterId
+    chapterId: string = selectedChapterId,
+    limit: number = pageLimit
   ) => {
+    searchRequestRef.current?.abort();
+    const controller = new AbortController();
+    searchRequestRef.current = controller;
+    const sequence = ++searchSequenceRef.current;
     const trimmed = query.trim();
     if (!trimmed) {
       setResults([]);
@@ -172,9 +190,9 @@ export const PanelWordsDetectorPage: React.FC = () => {
       setLoading(true);
       setActiveQuery(trimmed);
 
-      const params: any = {
+      const params: Record<string, string | number> = {
         q: trimmed,
-        limit: pageLimit,
+        limit,
         offset: offset,
       };
 
@@ -185,19 +203,23 @@ export const PanelWordsDetectorPage: React.FC = () => {
         params.chapter_id = chapterId;
       }
 
-      const res = await client.get("/api/panels/search", { params });
+      const res = await client.get("/api/panels/search", { params, signal: controller.signal });
+      if (sequence !== searchSequenceRef.current || controller.signal.aborted) return;
       setResults(res.data.results || []);
       setTotalResults(res.data.total || 0);
       setPageOffset(offset);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (sequence !== searchSequenceRef.current || controller.signal.aborted) return;
+      setResults([]);
+      setTotalResults(0);
       console.error("Search failed:", err);
       showAlert({
         title: "Lỗi tìm kiếm",
-        message: err.response?.data?.detail || "Không thể thực hiện tìm kiếm panels.",
+        message: apiErrorMessage(err, "Không thể thực hiện tìm kiếm panels."),
         type: "error",
       });
     } finally {
-      setLoading(false);
+      if (sequence === searchSequenceRef.current) setLoading(false);
     }
   };
 
@@ -208,6 +230,9 @@ export const PanelWordsDetectorPage: React.FC = () => {
   };
 
   const handleClearSearch = () => {
+    searchRequestRef.current?.abort();
+    ++searchSequenceRef.current;
+    setLoading(false);
     setSearchQuery("");
     setActiveQuery("");
     setResults([]);
@@ -243,7 +268,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
   const handleStartScan = async () => {
     try {
       setStartingScan(true);
-      const payload: any = {
+      const payload: { force_rescan: boolean; manga_ids?: string[] } = {
         force_rescan: scanForceRescan,
       };
       if (scanTargetMangaIds.length > 0) {
@@ -251,17 +276,19 @@ export const PanelWordsDetectorPage: React.FC = () => {
       }
 
       await client.post("/api/panels/scan", payload);
+      const status = await client.get("/api/panels/scan-status");
+      setScanStatus(status.data);
       setIsScanModalOpen(false);
       showAlert({
         title: "Bắt đầu quét",
         message: "Hệ thống đang tiến hành nhận diện thị giác & trích xuất lời thoại.",
         type: "info",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to start scan:", err);
       showAlert({
         title: "Khởi động quét thất bại",
-        message: err.response?.data?.detail || "Không thể khởi động tác vụ quét.",
+        message: apiErrorMessage(err, "Không thể khởi động tác vụ quét."),
         type: "error",
       });
     } finally {
@@ -279,7 +306,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
         message: "Đã gửi yêu cầu dừng quét thư viện.",
         type: "warning",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to cancel scan:", err);
     } finally {
       setCancellingScan(false);
@@ -289,7 +316,10 @@ export const PanelWordsDetectorPage: React.FC = () => {
   const isScanning = Boolean(scanStatus?.is_scanning);
 
   return (
-    <div className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
+    <div className="flex-1 p-0 sm:p-4 md:p-6 max-w-7xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
+      {loadError && <div role="alert" className="rounded-xl border border-red-500/40 p-4 text-red-500">
+        {loadError} <button type="button" onClick={fetchTelemetry} className="underline">Thử lại</button>
+      </div>}
       {/* 1. Header Banner & Telemetry Hero */}
       <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-amber-500/10 via-zinc-900/40 to-amber-500/5 border border-amber-500/20 p-6 md:p-8 backdrop-blur-md shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -302,9 +332,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
               Panel Words <span className="text-amber-500">Detector</span>
             </h1>
             <p className="text-sm text-[var(--text-secondary)] max-w-2xl leading-relaxed">
-              Trích xuất tự động khung tranh (OpenCV), nhận diện hội thoại (RapidOCR PP-OCRv4),
-              bóc tách từ vựng & bổ đề (spaCy NLP) và tra cứu ngữ cảnh trực quan trên toàn bộ trang
-              truyện của hệ thống.
+              Tìm lời thoại trong các trang truyện đã tải, xem khung tranh chứa câu nói và tra từ ngay trong ngữ cảnh. Tra từ và phân tích từ vựng hiện hỗ trợ tiếng Anh; kết quả nhận diện có thể cần đối chiếu với ảnh gốc.
             </p>
           </div>
 
@@ -502,6 +530,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
               value={selectedMangaId}
               onChange={(e) => {
                 setSelectedMangaId(e.target.value);
+                setSelectedChapterId("all");
                 setPageOffset(0);
                 if (searchQuery.trim()) {
                   executeSearch(searchQuery, 0, e.target.value, "all");
@@ -534,7 +563,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
               >
                 <option value="all">Tất cả Chapter ({chapterList.length})</option>
                 {chapterList.map((c) => (
-                  <option key={c._id || c.id} value={c._id || c.id}>
+                  <option key={c.id} value={c.id}>
                     Ch. {c.chapter_number}
                     {c.title ? ` - ${c.title}` : ""}
                   </option>
@@ -602,7 +631,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
                   onClick={() => {
                     setPageLimit(lim);
                     setPageOffset(0);
-                    executeSearch(activeQuery, 0);
+                    executeSearch(activeQuery, 0, selectedMangaId, selectedChapterId, lim);
                   }}
                   className={`px-2 py-0.5 rounded-md font-mono transition cursor-pointer ${
                     pageLimit === lim
@@ -893,7 +922,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
 
       {/* 7. Full Page Modal with Golden Focus Frame */}
       {selectedFullPagePanel && (
-        <FullPageModal
+        <FullPageModal key={selectedFullPagePanel?.panel_id}
           panel={selectedFullPagePanel}
           onClose={() => setSelectedFullPagePanel(null)}
         />

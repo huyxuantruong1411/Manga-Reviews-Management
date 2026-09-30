@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History, ScanSearch } from "lucide-react";
+import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History, ScanSearch, Menu } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
 import client from "../../api/client";
@@ -9,6 +9,7 @@ import { useMangaBlur, type BlurSettings } from "../../hooks/useMangaBlur";
 import { GroupedTagSelector } from "../ui/GroupedTagSelector";
 
 export const Layout: React.FC = () => {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [basePath, setBasePath] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -85,8 +86,9 @@ export const Layout: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      {mobileNavOpen && <button type="button" aria-label="Đóng menu" onClick={() => setMobileNavOpen(false)} className="fixed inset-0 z-30 bg-black/60 md:hidden" />}
       {/* Sidebar */}
-      <aside className="w-64 bg-[var(--bg-card)] border-r border-[var(--border-primary)] flex flex-col fixed h-full z-10">
+      <aside id="main-navigation" className={`w-64 bg-[var(--bg-card)] border-r border-[var(--border-primary)] flex flex-col fixed h-full z-40 transition-transform md:translate-x-0 md:visible ${mobileNavOpen ? "translate-x-0 visible" : "-translate-x-full invisible"}`}>
         {/* Brand */}
         <div className="p-6 border-b border-[var(--border-primary)] flex items-center space-x-3">
           <BookOpen className="text-[var(--brand-orange)]" size={28} />
@@ -96,7 +98,7 @@ export const Layout: React.FC = () => {
         </div>
         
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav aria-label="Điều hướng chính" onClick={() => setMobileNavOpen(false)} className="flex-1 p-4 space-y-2 overflow-y-auto">
           <NavLink
             to="/"
             className={({ isActive }) =>
@@ -217,9 +219,10 @@ export const Layout: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-w-0 flex flex-col ml-64 min-h-screen">
+      <div className="flex-1 min-w-0 flex flex-col md:ml-64 min-h-screen">
         {/* Header */}
-        <header className="h-16 bg-[var(--bg-card)] border-b border-[var(--border-primary)] px-8 flex items-center justify-between sticky top-0 z-20">
+        <header className="h-16 bg-[var(--bg-card)] border-b border-[var(--border-primary)] px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20">
+          <button type="button" aria-label="Mở menu" aria-controls="main-navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(!mobileNavOpen)} className="p-2 md:hidden"><Menu size={22} /></button>
           <h2 className="font-spartan text-lg font-semibold tracking-tight text-[var(--text-primary)]">
             Dashboard
           </h2>
@@ -245,7 +248,7 @@ export const Layout: React.FC = () => {
         </header>
 
         {/* Page View */}
-        <main className="flex-1 min-w-0 p-8">
+        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-8">
           <Outlet />
         </main>
       </div>

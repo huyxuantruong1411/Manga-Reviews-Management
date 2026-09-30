@@ -82,4 +82,5 @@ export interface WordDefinition {
   audio_url: string;
   meanings: WordMeaning[];
   cached?: boolean;
+  status?: "ok" | "not_found" | "unavailable";
 }

@@ -1,3 +1,4 @@
+import { apiUrl } from "../../api/client";
 import React, { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Maximize2, BookOpen, Layers, ExternalLink, Sparkles } from "lucide-react";
@@ -17,7 +18,7 @@ export const PanelCard: React.FC<PanelCardProps> = ({
   onWordClick,
 }) => {
   const navigate = useNavigate();
-  const cropUrl = `/api/panels/${panel.panel_id}/crop`;
+  const cropUrl = apiUrl(`/api/panels/${panel.panel_id}/crop`);
 
   // Tokenize text into words while keeping punctuation and whitespace
   const tokens = useMemo(() => {
@@ -36,7 +37,7 @@ export const PanelCard: React.FC<PanelCardProps> = ({
       const cleanWord = part.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1EA0-\u1EF9]/g, "").toLowerCase();
       const isMatch =
         cleanWord.length > 0 &&
-        queryTokens.some((q) => cleanWord.includes(q) || q.includes(cleanWord));
+        queryTokens.some((q) => cleanWord.includes(q));
 
       return {
         raw: part,
@@ -123,7 +124,7 @@ export const PanelCard: React.FC<PanelCardProps> = ({
         />
 
         {/* Hover Quick Actions Overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2.5 backdrop-blur-[2px] p-3">
+        <div className="absolute inset-0 bg-black/60 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2.5 backdrop-blur-[2px] p-3">
           <button
             type="button"
             onClick={() => onOpenFullPage(panel)}
