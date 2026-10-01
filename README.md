@@ -200,13 +200,13 @@ The API will be available at `http://localhost:8000` (Docs: `http://localhost:80
 
 ```bash
 cd frontend
-npm install
+pnpm install
 ```
 
 2. Start the Vite development server:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Open your browser at `http://localhost:5173`.
