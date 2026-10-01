@@ -327,11 +327,14 @@ export const PanelWordsDetectorPage: React.FC = () => {
 		try {
 			setStartingScan(true);
 			setScanStatus({
+				total_mangas: scanTargetMangaIds.length,
 				total_manga: scanTargetMangaIds.length,
+				mangas_scanned: 0,
 				current_manga_index: 0,
 				current_manga_title: "Đang khởi tạo tác vụ quét...",
 				total_pages: 0,
 				current_page: 0,
+				panels_extracted: 0,
 				percent: 0,
 				stage: "initializing",
 				message: "Đang khởi tạo worker và chuẩn bị quét...",

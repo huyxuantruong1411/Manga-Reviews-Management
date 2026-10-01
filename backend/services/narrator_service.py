@@ -46,13 +46,12 @@ class MangaNarratorService:
 
     def is_available(self) -> bool:
         """Check if torch and transformers are installed and can run visual reasoning."""
-        try:
-            import torch  # noqa: F401
-            import transformers  # noqa: F401
+        import importlib.util
 
-            return True
-        except ImportError:
-            return False
+        return (
+            importlib.util.find_spec("torch") is not None
+            and importlib.util.find_spec("transformers") is not None
+        )
 
     async def _ensure_model_loaded(self):
         """Lazy loader for moondream2 model (vikhyatk/moondream2) to avoid memory impact at startup."""
@@ -64,8 +63,12 @@ class MangaNarratorService:
                 return
 
             def _load():
-                import torch
-                from transformers import AutoModelForCausalLM, AutoTokenizer
+                import importlib
+
+                torch = importlib.import_module("torch")
+                transformers = importlib.import_module("transformers")
+                auto_model_cls = transformers.AutoModelForCausalLM
+                auto_tokenizer_cls = transformers.AutoTokenizer
 
                 if torch.cuda.is_available():
                     device = "cuda"
@@ -81,8 +84,8 @@ class MangaNarratorService:
                 revision = "2024-08-26"
                 logger.info(f"Loading visual narrator model {model_id} onto device: {device}...")
 
-                tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-                model = AutoModelForCausalLM.from_pretrained(
+                tokenizer = auto_tokenizer_cls.from_pretrained(model_id, revision=revision)
+                model = auto_model_cls.from_pretrained(
                     model_id,
                     trust_remote_code=True,
                     torch_dtype=dtype,
@@ -106,7 +109,9 @@ class MangaNarratorService:
         await self._ensure_model_loaded()
 
         def _infer():
-            import torch
+            import importlib
+
+            torch = importlib.import_module("torch")
 
             image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             with torch.no_grad():

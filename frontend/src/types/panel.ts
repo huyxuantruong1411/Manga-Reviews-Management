@@ -30,6 +30,7 @@ export interface PanelScanStatus {
 	percent: number;
 	message: string;
 	is_scanning: boolean;
+	manga_id?: string;
 }
 
 export interface GlobalScanStatus {
@@ -38,6 +39,8 @@ export interface GlobalScanStatus {
 	current_manga_title: string;
 	mangas_scanned: number;
 	total_mangas: number;
+	total_manga?: number;
+	current_manga_index?: number;
 	current_page: number;
 	total_pages: number;
 	panels_extracted: number;
