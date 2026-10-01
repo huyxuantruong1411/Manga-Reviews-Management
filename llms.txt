@@ -1,0 +1,13 @@
+# Manga Reviews Management
+
+> An advanced self-hosted personal Manga Library, Interactive Review Editor, MangaDex Reader, and Computer Vision & Dialogue Search Platform.
+
+## Core Documentation for AI & Developers
+
+- [AI Context & Orientation](docs/ai-context.md): Primary entry point covering system purpose, tech stack truth, entrypoints, and the two async OCR mechanisms.
+- [Architecture & Data Flow](docs/architecture.md): Visual topology diagrams, in-process vs ARQ async sequence flows, and MongoDB collection relationships.
+- [Code Map & File Directory](docs/code-map.md): Task-to-files lookup table across all 16 backend routers, 20 services, and frontend pages.
+- [Development & Operations](docs/development.md): Step-by-step local setup, Docker dependencies, test execution commands, and troubleshooting.
+- [Coding Guidelines for Agents](AGENTS.md): Governance rules for AI agents, including TDD workflow, layer boundaries, and linting standards.
+- [Security & Scope Policy](SECURITY.md): Local/trusted environment scope and data classification boundaries.
+- [Project Readme](README.md): Human-oriented project presentation and feature overview.

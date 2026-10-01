@@ -1,0 +1,45 @@
+# Code Map & Module Directory
+
+> **Purpose**: Fast, token-efficient file locator for coding agents and contributors.  
+> **Rule**: Use this map to navigate directly to the relevant files for your task.
+
+---
+
+## 1. Domain Task to Files Navigation
+
+| Domain / Task | Frontend Entry / Components | Backend Router & DTOs | Domain Services | Models & Storage | Verification Tests |
+|---|---|---|---|---|---|
+| **Manga Library & Filtering** | [`frontend/src/pages/MangaListPage.tsx`](../frontend/src/pages/MangaListPage.tsx)<br>[`frontend/src/pages/MangaDetailPage.tsx`](../frontend/src/pages/MangaDetailPage.tsx) | [`backend/routers/manga.py`](../backend/routers/manga.py) | [`backend/services/manga_service.py`](../backend/services/manga_service.py) | [`backend/models/manga.py`](../backend/models/manga.py) | [`backend/tests/test_system_regressions.py`](../backend/tests/test_system_regressions.py) |
+| **Chapter Storage & Reader** | [`frontend/src/pages/MangaReaderPage.tsx`](../frontend/src/pages/MangaReaderPage.tsx)<br>[`frontend/src/components/manga/MangaReader.tsx`](../frontend/src/components/manga/MangaReader.tsx)<br>[`frontend/src/components/manga/ChapterStorageManager.tsx`](../frontend/src/components/manga/ChapterStorageManager.tsx) | [`backend/routers/chapters.py`](../backend/routers/chapters.py) | [`backend/services/chapter_service.py`](../backend/services/chapter_service.py) | [`backend/services/minio_service.py`](../backend/services/minio_service.py) | [`backend/tests/test_storage_integration.py`](../backend/tests/test_storage_integration.py) |
+| **Review Editor & Media** | [`frontend/src/components/editor/ReviewEditor.tsx`](../frontend/src/components/editor/ReviewEditor.tsx)<br>[`frontend/src/components/editor/EditorToolbar.tsx`](../frontend/src/components/editor/EditorToolbar.tsx) | [`backend/routers/reviews.py`](../backend/routers/reviews.py)<br>*(Direct DB queries, no separate service)* | Direct S3 via [`backend/services/minio_service.py`](../backend/services/minio_service.py) | [`backend/models/review.py`](../backend/models/review.py) | [`backend/tests/test_system_regressions.py`](../backend/tests/test_system_regressions.py) |
+| **Vision Scanner & OCR Search** | [`frontend/src/pages/PanelWordsDetectorPage.tsx`](../frontend/src/pages/PanelWordsDetectorPage.tsx)<br>[`frontend/src/components/manga/PanelLexisTab.tsx`](../frontend/src/components/manga/PanelLexisTab.tsx) | [`backend/routers/vision.py`](../backend/routers/vision.py) | [`backend/services/panel_scanner_service.py`](../backend/services/panel_scanner_service.py)<br>[`backend/services/manga_ocr_service.py`](../backend/services/manga_ocr_service.py)<br>[`backend/services/vision_service.py`](../backend/services/vision_service.py) | MongoDB `manga_panels`<br>[`frontend/src/types/panel.ts`](../frontend/src/types/panel.ts) | [`backend/tests/test_panel_regressions.py`](../backend/tests/test_panel_regressions.py)<br>[`backend/tests/test_manga_ocr_service.py`](../backend/tests/test_manga_ocr_service.py) |
+| **Async Task Worker & Cache** | *Standalone API / Worker* | [`backend/routers/tasks.py`](../backend/routers/tasks.py) | [`backend/tasks/worker.py`](../backend/tasks/worker.py)<br>[`backend/tasks/ocr.py`](../backend/tasks/ocr.py) | [`backend/core/redis.py`](../backend/core/redis.py) | [`backend/tests/test_redis_cache_and_worker.py`](../backend/tests/test_redis_cache_and_worker.py) |
+| **Chapter Downloads** | [`frontend/src/pages/DownloadsPage.tsx`](../frontend/src/pages/DownloadsPage.tsx)<br>[`frontend/src/components/ui/DownloadWidget.tsx`](../frontend/src/components/ui/DownloadWidget.tsx)<br>[`frontend/src/hooks/useDownload.tsx`](../frontend/src/hooks/useDownload.tsx) | [`backend/routers/downloads.py`](../backend/routers/downloads.py) | [`backend/services/download_service.py`](../backend/services/download_service.py) | MinIO S3 & Local Temp | *Manual integration test* |
+| **MangaDex Sync & Tags** | [`frontend/src/pages/SyncManagerPage.tsx`](../frontend/src/pages/SyncManagerPage.tsx)<br>[`frontend/src/pages/TagsPage.tsx`](../frontend/src/pages/TagsPage.tsx) | [`backend/routers/sync_manager.py`](../backend/routers/sync_manager.py)<br>[`backend/routers/mangadex.py`](../backend/routers/mangadex.py)<br>[`backend/routers/tags.py`](../backend/routers/tags.py) | [`backend/services/sync_manager_service.py`](../backend/services/sync_manager_service.py)<br>[`backend/services/mangadex_service.py`](../backend/services/mangadex_service.py) | MongoDB `tags`<br>[`backend/models/tag.py`](../backend/models/tag.py) | [`backend/tests/test_system_regressions.py`](../backend/tests/test_system_regressions.py) |
+| **Creators & Artists** | [`frontend/src/pages/AuthorDetailPage.tsx`](../frontend/src/pages/AuthorDetailPage.tsx)<br>[`frontend/src/components/ui/CreatorMultiSelect.tsx`](../frontend/src/components/ui/CreatorMultiSelect.tsx) | [`backend/routers/creators.py`](../backend/routers/creators.py) | [`backend/services/creator_service.py`](../backend/services/creator_service.py) | MongoDB `creators` | *Manual verification* |
+| **Analytics & Audit Logs** | [`frontend/src/pages/AnalyticsPage.tsx`](../frontend/src/pages/AnalyticsPage.tsx)<br>[`frontend/src/pages/AuditLogsPage.tsx`](../frontend/src/pages/AuditLogsPage.tsx) | [`backend/routers/analytics.py`](../backend/routers/analytics.py)<br>[`backend/routers/audit_logs.py`](../backend/routers/audit_logs.py) | [`backend/services/analytics_service.py`](../backend/services/analytics_service.py)<br>[`backend/services/audit_service.py`](../backend/services/audit_service.py) | MongoDB `audit_logs` | *Manual verification* |
+| **Cover Art Gallery** | [`frontend/src/components/manga/CoverArtGallery.tsx`](../frontend/src/components/manga/CoverArtGallery.tsx) | [`backend/routers/cover_arts.py`](../backend/routers/cover_arts.py) | [`backend/services/cover_art_service.py`](../backend/services/cover_art_service.py) | MinIO S3 Covers | *Manual verification* |
+| **Image & Color Tools** | [`frontend/src/pages/ImageToolsPage.tsx`](../frontend/src/pages/ImageToolsPage.tsx) | [`backend/routers/image_tools.py`](../backend/routers/image_tools.py) | [`backend/services/image_tools_service.py`](../backend/services/image_tools_service.py) | Image processing | *Manual verification* |
+| **AI Text, Narrator & Reports** | [`frontend/src/components/editor/AIConfirmModal.tsx`](../frontend/src/components/editor/AIConfirmModal.tsx) | [`backend/routers/ai.py`](../backend/routers/ai.py) | [`backend/services/ai_service.py`](../backend/services/ai_service.py)<br>[`backend/services/narrator_service.py`](../backend/services/narrator_service.py)<br>[`backend/services/panel_report_service.py`](../backend/services/panel_report_service.py) | Gemini API / Whisper | [`backend/tests/test_panel_report.py`](../backend/tests/test_panel_report.py) |
+| **Recommendations** | [`frontend/src/components/manga/RecommendationsPanel.tsx`](../frontend/src/components/manga/RecommendationsPanel.tsx) | [`backend/routers/recommendations.py`](../backend/routers/recommendations.py) | [`backend/services/recommendation_service.py`](../backend/services/recommendation_service.py) | Vector / Tag similarity | *Manual verification* |
+
+---
+
+## 2. Navigating Key Large Files
+
+When modifying these large core files, target these specific symbols rather than ingesting the full content:
+
+- **[`backend/services/panel_scanner_service.py`](../backend/services/panel_scanner_service.py)** (~66KB):
+  - `_analyze_page_image(...)`: Main OCR and panel segmentation pipeline.
+  - `trigger_scan(...)` / `trigger_global_scan(...)`: In-process scan coordinators.
+  - `get_progress(...)`: SSE progress subscriber generator.
+- **[`backend/services/chapter_service.py`](../backend/services/chapter_service.py)** (~49KB):
+  - `import_local_chapter(...)`: S3 upload and metadata ingestion.
+  - `delete_chapter(...)`: Cascading delete of MinIO pages and `manga_panels`.
+- **[`backend/services/manga_service.py`](../backend/services/manga_service.py)** (~48KB):
+  - `get_manga_detail(...)`: Cache-aside lookup using Redis key `manga:detail:{id}`.
+  - `update_manga(...)` / `delete_manga(...)`: Cache invalidation triggers.
+- **[`frontend/src/pages/MangaDetailPage.tsx`](../frontend/src/pages/MangaDetailPage.tsx)** (~990KB minified bundle):
+  - Review section, Chapter list, Cover gallery, and Recommendation tabs.
+- **[`frontend/src/components/manga/MangaReader.tsx`](../frontend/src/components/manga/MangaReader.tsx)**:
+  - Reading layout engines (Long-strip, Single-page, Double-page RTL/LTR).

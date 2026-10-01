@@ -1,0 +1,50 @@
+name: Documentation & Route Integrity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'SECURITY.md'
+      - 'llms.txt'
+      - 'backend/main.py'
+      - 'backend/routers/**'
+      - 'scripts/check_docs.py'
+      - 'scripts/generate_api_routes.py'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'SECURITY.md'
+      - 'llms.txt'
+      - 'backend/main.py'
+      - 'backend/routers/**'
+      - 'scripts/check_docs.py'
+      - 'scripts/generate_api_routes.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate Documentation Integrity & Links
+        run: python scripts/check_docs.py
+
+      - name: Verify API Route Reference Synchronization
+        run: python scripts/generate_api_routes.py --check
