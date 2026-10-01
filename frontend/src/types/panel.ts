@@ -21,6 +21,10 @@ export interface PanelResult {
 		pos_tag: string;
 		frequency: number;
 	}>;
+	width?: number;
+	height?: number;
+	narration?: string | Record<string, unknown>;
+	created_at?: string;
 }
 
 export interface PanelScanStatus {

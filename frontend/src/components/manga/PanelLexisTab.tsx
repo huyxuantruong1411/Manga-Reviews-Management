@@ -1,5 +1,6 @@
 import {
 	AlertTriangle,
+	FileSpreadsheet,
 	Layers,
 	Loader2,
 	Search,
@@ -28,6 +29,8 @@ import type {
 } from "../../types/panel";
 import { FullPageModal } from "./FullPageModal";
 import { PanelCard } from "./PanelCard";
+import { PanelDetailModal } from "./PanelDetailModal";
+import { PanelReportModal } from "./PanelReportModal";
 import { WordPopover } from "./WordPopover";
 
 interface PanelLexisTabProps {
@@ -79,6 +82,9 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 		position: { x: number; y: number };
 	} | null>(null);
 	const [fullPagePanel, setFullPagePanel] = useState<PanelResult | null>(null);
+	const [selectedDetailPanel, setSelectedDetailPanel] =
+		useState<PanelResult | null>(null);
+	const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -352,6 +358,21 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 
 					{/* Action Buttons & Live Progress Badge */}
 					<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+						<button
+							type="button"
+							onClick={() => setIsReportModalOpen(true)}
+							disabled={
+								scanStatus?.is_scanning ||
+								stats?.is_scanning ||
+								(!stats?.total_panels && results.length === 0)
+							}
+							className="px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center space-x-2 transition border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+							title="Xuất báo cáo trích xuất khung tranh & AI Audit độc lập (HTML kèm Base64, JSON, in PDF)"
+						>
+							<FileSpreadsheet size={16} />
+							<span>Xuất báo cáo AI</span>
+						</button>
+
 						<button
 							type="button"
 							onClick={() => setShowDeleteConfirm(true)}
@@ -671,6 +692,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 							searchQuery={activeQuery}
 							onOpenFullPage={setFullPagePanel}
 							onWordClick={handleWordClick}
+							onOpenDetail={setSelectedDetailPanel}
 						/>
 					))}
 				</div>
@@ -996,6 +1018,31 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 					onClose={() => setFullPagePanel(null)}
 				/>
 			)}
+
+			{/* Panel Detail Zoom & Inspection Modal */}
+			{selectedDetailPanel && (
+				<PanelDetailModal
+					key={selectedDetailPanel?.panel_id}
+					panel={selectedDetailPanel}
+					onClose={() => setSelectedDetailPanel(null)}
+					onOpenFullPage={(p) => {
+						setSelectedDetailPanel(null);
+						setFullPagePanel(p);
+					}}
+					onWordClick={(word, e) => handleWordClick(word, e)}
+				/>
+			)}
+
+			{/* Panel Extraction Report Export Modal */}
+			<PanelReportModal
+				mangaId={mangaId}
+				mangaTitle={mangaTitle}
+				chapters={chapters}
+				selectedChapterId={selectedChapterId}
+				filterScanMode={filterScanMode}
+				isOpen={isReportModalOpen}
+				onClose={() => setIsReportModalOpen(false)}
+			/>
 		</div>
 	);
 };

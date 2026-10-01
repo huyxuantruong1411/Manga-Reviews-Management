@@ -1,16 +1,19 @@
 import asyncio
 import json
 import logging
+import re
+from datetime import datetime
 from typing import List, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Body, HTTPException, Path, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.database.connection import get_db
 from backend.services.dictionary_service import dictionary_service
 from backend.services.minio_service import minio_service
+from backend.services.panel_report_service import panel_report_service
 from backend.services.panel_scanner_service import panel_scanner_service
 from backend.services.vision_service import vision_service
 
@@ -321,6 +324,99 @@ async def get_manga_panels_stats(manga_id: str = Path(...)):
     except Exception as e:
         logger.error(f"Error fetching panel stats for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manga/{manga_id}/panels/report")
+async def generate_manga_panels_report(
+    manga_id: str = Path(...),
+    chapter_id: Optional[str] = Query(None, description="Optional chapter filter: ID or 'all'"),
+    scan_mode: Optional[str] = Query(None, description="Optional scan mode filter: panel, bubble, fullpage"),
+    format: str = Query("html", regex="^(html|json)$", description="Report format: html or json"),
+    include_images: bool = Query(True, description="Embed base64 images in report"),
+    limit: int = Query(100, ge=1, le=500, description="Max panels to include in report"),
+    download: bool = Query(False, description="Trigger browser download attachment"),
+):
+    """
+    Generate a comprehensive technical extraction and AI audit report for a manga's scene panels.
+    Outputs a standalone, self-contained HTML (with embedded Base64 images and printable CSS) or structured JSON.
+    """
+    try:
+        report_data = await panel_report_service.generate_report_data(
+            manga_id=manga_id,
+            chapter_id=chapter_id,
+            scan_mode=scan_mode,
+            include_images=include_images,
+            limit=limit,
+        )
+
+        title_slug = re.sub(r"[^a-zA-Z0-9_\-]+", "_", report_data["manga"]["title"])[:30]
+        chap_slug = f"ch_{report_data['chapter_context']['number']}" if report_data.get("chapter_context") else "all"
+
+        if format == "json":
+            json_str = json.dumps(report_data, ensure_ascii=False, indent=2)
+            headers = {}
+            if download:
+                filename = f"report_{title_slug}_{chap_slug}.json"
+                headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return Response(content=json_str, media_type="application/json", headers=headers)
+
+        html_content = panel_report_service.render_html_report(report_data)
+        headers = {}
+        if download:
+            filename = f"report_{title_slug}_{chap_slug}.html"
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return HTMLResponse(content=html_content, headers=headers)
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error generating panels report for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/panels/{panel_id}")
+async def get_panel_detail(panel_id: str = Path(...)):
+    """Get full structured metadata and extraction detail for a single panel."""
+    filter_q = {"_id": ObjectId(panel_id)} if ObjectId.is_valid(panel_id) else {"_id": panel_id}
+    panel = await get_db().manga_panels.find_one(filter_q)
+    if not panel:
+        raise HTTPException(status_code=404, detail="Panel not found")
+
+    manga_id = panel.get("manga_id")
+    manga_cover_url = None
+    if manga_id:
+        m_filter = {"_id": ObjectId(manga_id)} if ObjectId.is_valid(manga_id) else {"_id": manga_id}
+        manga = await get_db().mangas.find_one(m_filter, {"minio_cover_key": 1})
+        if manga and manga.get("minio_cover_key"):
+            manga_cover_url = minio_service.get_presigned_url(manga["minio_cover_key"])
+
+    return {
+        "panel_id": str(panel["_id"]),
+        "manga_id": panel.get("manga_id"),
+        "manga_title": panel.get("manga_title", ""),
+        "manga_cover_url": manga_cover_url,
+        "chapter_id": str(panel.get("chapter_id", "")),
+        "chapter_number": panel.get("chapter_number", ""),
+        "chapter_title": panel.get("chapter_title", ""),
+        "volume": panel.get("volume"),
+        "page_number": panel.get("page_number", 1),
+        "panel_index": panel.get("panel_index", 0),
+        "coords": panel.get("coords", [0.0, 0.0, 1.0, 1.0]),
+        "width": panel.get("width"),
+        "height": panel.get("height"),
+        "raw_text": panel.get("raw_text", ""),
+        "cleaned_text": panel.get("cleaned_text", ""),
+        "language": panel.get("language", "en"),
+        "scan_mode": panel.get("scan_mode", "panel"),
+        "lemmas": panel.get("lemmas", []),
+        "vocabulary": panel.get("vocabulary", []),
+        "narration": panel.get("narration"),
+        "created_at": (
+            panel.get("created_at").isoformat()
+            if isinstance(panel.get("created_at"), datetime)
+            else str(panel.get("created_at", ""))
+        ),
+    }
 
 
 @router.get("/panels/{panel_id}/crop")
