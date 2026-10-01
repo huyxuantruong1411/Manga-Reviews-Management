@@ -950,16 +950,25 @@ class MangaService:
                     local_tag_ids.append(tag_id_str)
 
         # Download & update cover
-        minio_cover_key = manga.get("minio_cover_key") or f"covers/{manga_id}.jpg"
+        default_cover_key = f"covers/{manga_id}.jpg"
+        minio_cover_key = manga.get("minio_cover_key") or default_cover_key
         cover_url = details.get("cover_url")
         if cover_url:
             cover_bytes = await mangadex_service.download_image_bytes(cover_url)
             if cover_bytes:
                 minio_service.upload_cover(minio_cover_key, cover_bytes)
+            elif not manga.get("minio_cover_key") and minio_service.object_exists(default_cover_key):
+                minio_cover_key = default_cover_key
             else:
-                minio_cover_key = manga.get("minio_cover_key")
+                minio_cover_key = manga.get("minio_cover_key") or (
+                    default_cover_key if minio_service.object_exists(default_cover_key) else None
+                )
+        elif not manga.get("minio_cover_key") and minio_service.object_exists(default_cover_key):
+            minio_cover_key = default_cover_key
         else:
-            minio_cover_key = manga.get("minio_cover_key")
+            minio_cover_key = manga.get("minio_cover_key") or (
+                default_cover_key if minio_service.object_exists(default_cover_key) else None
+            )
 
         existing_alts = manga.get("alt_titles") or []
         new_alts = details.get("alt_titles") or []
@@ -1003,6 +1012,24 @@ class MangaService:
         synced_manga = await coll.find_one({"_id": ObjectId(manga_id)})
         if synced_manga.get("minio_cover_key"):
             synced_manga["cover_url"] = minio_service.get_presigned_url(synced_manga["minio_cover_key"])
+        elif minio_service.object_exists(default_cover_key):
+            synced_manga["minio_cover_key"] = default_cover_key
+            await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": {"minio_cover_key": default_cover_key}})
+            synced_manga["cover_url"] = minio_service.get_presigned_url(default_cover_key)
+        elif synced_manga.get("mangadex_id"):
+            recovered_url = await self._try_recover_cover(str(synced_manga["_id"]), synced_manga["mangadex_id"])
+            if recovered_url:
+                synced_manga["cover_url"] = recovered_url
+                synced_manga["minio_cover_key"] = default_cover_key
+
+        if not synced_manga.get("cover_url"):
+            # Check if any cover art was already synced for this manga
+            ca = await self._get_mangas_collection().database.cover_arts.find_one({"manga_id": manga_id})
+            if ca and ca.get("minio_key"):
+                synced_manga["minio_cover_key"] = ca["minio_key"]
+                await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": {"minio_cover_key": ca["minio_key"]}})
+                synced_manga["cover_url"] = minio_service.get_presigned_url(ca["minio_key"])
+
         return serialize_doc(synced_manga)
 
     async def enrich_manga_tracker_metadata(

@@ -53,6 +53,18 @@ class MinioService:
             logger.error(f"Error generating presigned URL for {object_name}: {e}")
             return ""
 
+    def object_exists(self, object_name: str) -> bool:
+        """
+        Check if an object exists in the MinIO bucket.
+        """
+        if not object_name:
+            return False
+        try:
+            self.client.stat_object(self.bucket, object_name)
+            return True
+        except Exception:
+            return False
+
     def upload_chapter_page(
         self, manga_id: str, chapter_id: str, filename: str, data: bytes, content_type: str = "image/jpeg"
     ) -> tuple:

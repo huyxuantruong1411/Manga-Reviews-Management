@@ -48,10 +48,7 @@ class MangaNarratorService:
         """Check if torch and transformers are installed and can run visual reasoning."""
         import importlib.util
 
-        return (
-            importlib.util.find_spec("torch") is not None
-            and importlib.util.find_spec("transformers") is not None
-        )
+        return importlib.util.find_spec("torch") is not None and importlib.util.find_spec("transformers") is not None
 
     async def _ensure_model_loaded(self):
         """Lazy loader for moondream2 model (vikhyatk/moondream2) to avoid memory impact at startup."""

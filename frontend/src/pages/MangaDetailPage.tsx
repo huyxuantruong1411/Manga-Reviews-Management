@@ -1853,7 +1853,11 @@ export const MangaDetailPage: React.FC = () => {
 			// Step 1: Metadata
 			addLog("Step 1: Synchronizing catalog metadata...");
 			const metaRes = await client.post(`/api/manga/${manga._id}/sync`);
-			setManga(metaRes.data);
+			setManga((prev) => ({
+				...prev,
+				...metaRes.data,
+				cover_url: metaRes.data.cover_url || prev?.cover_url || null,
+			}));
 			setSyncProgress(30);
 			setSyncSteps((prev) => ({
 				...prev,
@@ -1978,6 +1982,20 @@ export const MangaDetailPage: React.FC = () => {
 			} catch (err) {
 				console.error("Error reloading recommendations count:", err);
 			}
+
+			// Reload fresh manga details so any new covers/metadata are loaded immediately
+			try {
+				const freshMangaRes = await client.get(`/api/manga/${id}`);
+				if (freshMangaRes.data) {
+					setManga((prev) => ({
+						...prev,
+						...freshMangaRes.data,
+						cover_url: freshMangaRes.data.cover_url || prev?.cover_url || null,
+					}));
+				}
+			} catch (mErr) {
+				console.error("Error refreshing manga after sync:", mErr);
+			}
 		} catch (err) {
 			if (progressInterval) clearInterval(progressInterval);
 			console.error("Metadata sync failed:", err);
@@ -1999,7 +2017,11 @@ export const MangaDetailPage: React.FC = () => {
 			const res = await client.post(
 				`/api/manga/${manga._id}/enrich-trackers?force_refresh=true`,
 			);
-			setManga(res.data);
+			setManga((prev) => ({
+				...prev,
+				...res.data,
+				cover_url: res.data.cover_url || prev?.cover_url || null,
+			}));
 			// Reload history
 			const historyRes = await client.get(`/api/manga/${id}/history`);
 			setHistory(historyRes.data);
@@ -2055,7 +2077,11 @@ export const MangaDetailPage: React.FC = () => {
 				headers: { "Content-Type": "multipart/form-data" },
 			});
 
-			setManga(res.data);
+			setManga((prev) => ({
+				...prev,
+				...res.data,
+				cover_url: res.data.cover_url || prev?.cover_url || null,
+			}));
 			// Refresh history
 			const historyRes = await client.get(`/api/manga/${id}/history`);
 			setHistory(historyRes.data);
@@ -2205,7 +2231,11 @@ export const MangaDetailPage: React.FC = () => {
 				headers: { "Content-Type": "multipart/form-data" },
 			});
 
-			setManga(res.data);
+			setManga((prev) => ({
+				...prev,
+				...res.data,
+				cover_url: res.data.cover_url || prev?.cover_url || null,
+			}));
 			setIsEditingAltTitles(false);
 
 			// Reload history
