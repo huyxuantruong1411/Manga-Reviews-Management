@@ -23,3 +23,5 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, Agent **B�
    - Luôn dùng `codegraph impact <symbol>` / `codegraph_explore` phân tích blast radius trước khi sửa đổi.
 5. **`tooling-ecosystem`**:
    - Tự động chạy `ruff check --fix` + `ruff format` (Python) và `biome check --write` (TS/TSX) sau mỗi lần sửa file.
+6. **`ui-ux-design`**:
+   - Khi nhận bất kỳ yêu cầu nào liên quan đến phát triển Frontend, Component, Page, hoặc sửa đổi Layout/UX, agent **BẮT BUỘC** phải đọc và tuân thủ `.antigravity/skills/ui-ux-design.md`, ưu tiên dùng shadcn CLI để lấy component trước khi tự viết mới.

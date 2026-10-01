@@ -24,19 +24,20 @@ export const subscribeTaskNotification = (
 	};
 };
 
-export const requestDesktopNotificationPermission = async (): Promise<boolean> => {
-	if (!("Notification" in window)) {
+export const requestDesktopNotificationPermission =
+	async (): Promise<boolean> => {
+		if (!("Notification" in window)) {
+			return false;
+		}
+		if (Notification.permission === "granted") {
+			return true;
+		}
+		if (Notification.permission !== "denied") {
+			const res = await Notification.requestPermission();
+			return res === "granted";
+		}
 		return false;
-	}
-	if (Notification.permission === "granted") {
-		return true;
-	}
-	if (Notification.permission !== "denied") {
-		const res = await Notification.requestPermission();
-		return res === "granted";
-	}
-	return false;
-};
+	};
 
 export const notifyTaskCompleted = (payload: TaskNotificationPayload) => {
 	// 1. Broadcast to in-app Steam-style toast listeners

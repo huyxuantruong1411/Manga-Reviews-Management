@@ -1,8 +1,9 @@
 import { CheckCircle2, Sparkles, X, Zap } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import {
-	type TaskNotificationPayload,
 	subscribeTaskNotification,
+	type TaskNotificationPayload,
 } from "../../services/notificationService";
 
 export const SteamNotification: React.FC = () => {

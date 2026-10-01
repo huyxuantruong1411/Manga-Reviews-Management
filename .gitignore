@@ -44,6 +44,7 @@ Thumbs.db
 # Project specifics & Temporary dumps
 downloads/
 backend/minio_data/
+backend/redis_data/
 backend/scratch/
 ref/
 note.txt
@@ -70,3 +71,4 @@ repomix-output.*
 .biome/
 .ruff_cache/
 .ast-grep-cache/
+*visual-snapshots/
