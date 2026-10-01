@@ -357,7 +357,7 @@ export const MangaListPage: React.FC = () => {
 		}
 		return (
 			<span
-				className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-xs ${colorClass}`}
+				className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-xs w-fit ${colorClass}`}
 			>
 				{status}
 			</span>
@@ -1995,12 +1995,12 @@ export const MangaListPage: React.FC = () => {
 								<thead>
 									<tr className="border-b border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
 										<th className="py-4 px-6 text-center w-20">Cover</th>
-										<th className="py-4 px-4">Title</th>
-										<th className="py-4 px-4">Author / Artist</th>
-										<th className="py-4 px-4">Year / Status</th>
-										<th className="py-4 px-4">Demographic</th>
-										<th className="py-4 px-4">Rating</th>
-										<th className="py-4 px-4">Read Status</th>
+										<th className="py-4 px-4 text-left">Title</th>
+										<th className="py-4 px-4 text-left">Author / Artist</th>
+										<th className="py-4 px-4 text-left">Year / Status</th>
+										<th className="py-4 px-4 text-left">Demographic</th>
+										<th className="py-4 px-4 text-left">Rating</th>
+										<th className="py-4 px-4 text-left">Read Status</th>
 										<th className="py-4 px-6 text-right">Actions</th>
 									</tr>
 								</thead>
@@ -2108,8 +2108,10 @@ export const MangaListPage: React.FC = () => {
 												</div>
 											</td>
 											<td className="py-3 px-4 text-[var(--text-secondary)] font-semibold">
-												<div className="flex flex-col">
-													<span>{manga.year || "N/A"}</span>
+												<div className="flex flex-col items-start gap-1">
+													<span className="text-xs font-semibold text-[var(--text-primary)]">
+														{manga.year || "N/A"}
+													</span>
 													{manga.status &&
 														renderPublicationStatusBadge(manga.status)}
 												</div>
