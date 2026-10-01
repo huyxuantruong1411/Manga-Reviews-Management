@@ -135,26 +135,10 @@ docker compose up -d
 
 ```bash
 cd backend
-python -m venv .venv
+uv sync
 ```
 
-Activate the virtual environment:
-- **Windows (PowerShell)**: `.\.venv\Scripts\Activate.ps1`
-- **Linux/macOS**: `source .venv/bin/activate`
-
-2. Install dependencies:
-
-```bash
-pip install -r pyproject.toml
-# Or using uv:
-# uv pip install -e .
-```
-
-3. Download the spaCy English NLP model:
-
-```bash
-python -m spacy download en_core_web_sm
-```
+`uv sync` automatically manages the virtual environment (`.venv`), resolves lockfile (`uv.lock`), and installs all dependencies including the spaCy `en-core-web-sm` model in seconds.
 
 4. Configure environment variables:
 
@@ -187,7 +171,7 @@ python seed_mangadex_tags.py
 6. Start the FastAPI development server:
 
 ```bash
-python -m uvicorn backend.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 The API will be available at `http://localhost:8000` (Docs: `http://localhost:8000/docs`).
