@@ -54,3 +54,10 @@ backend/scrape_site.py
 backend/test_all_mangas.py
 backend/test_serialization.py
 scraped_*.txt
+
+# Code Knowledge Graph & Index Caches
+.codegraph/
+graphify-out/
+*.db-shm
+*.db-wal
+.graphify*
