@@ -474,32 +474,41 @@ export const PanelWordsDetectorPage: React.FC = () => {
 							<span>Xóa toàn bộ dữ liệu quét</span>
 						</button>
 
-						<button
-							type="button"
-							onClick={() => {
-								setScanTargetMangaIds(mangaList.map((m) => m.manga_id));
-								setScanForceRescan(false);
-								setIsScanModalOpen(true);
-							}}
-							disabled={isScanning}
-							className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all cursor-pointer ${
-								isScanning
-									? "bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed"
-									: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/25 hover:scale-[1.02] active:scale-[0.98]"
-							}`}
-						>
-							{isScanning ? (
-								<>
-									<Loader2 size={16} className="animate-spin" />
+						{isScanning ? (
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									disabled
+									className="flex items-center gap-2 px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-not-allowed"
+								>
+									<Loader2 size={16} className="animate-spin text-amber-400" />
 									<span>Đang quét thư viện...</span>
-								</>
-							) : (
-								<>
-									<RotateCw size={16} />
-									<span>Quét & Trích xuất Thư viện</span>
-								</>
-							)}
-						</button>
+								</button>
+								<button
+									type="button"
+									onClick={handleCancelScan}
+									disabled={cancellingScan}
+									className="flex items-center gap-1.5 px-4 py-3 rounded-2xl font-bold text-xs border border-red-500/50 bg-red-500/20 hover:bg-red-500/30 text-red-300 transition cursor-pointer shadow-sm disabled:opacity-40"
+									title="Dừng tác vụ quét thư viện hiện tại"
+								>
+									<StopCircle size={16} />
+									<span>{cancellingScan ? "Đang dừng..." : "Hủy quét"}</span>
+								</button>
+							</div>
+						) : (
+							<button
+								type="button"
+								onClick={() => {
+									setScanTargetMangaIds(mangaList.map((m) => m.manga_id));
+									setScanForceRescan(false);
+									setIsScanModalOpen(true);
+								}}
+								className="flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/25 hover:scale-[1.02] active:scale-[0.98]"
+							>
+								<RotateCw size={16} />
+								<span>Quét & Trích xuất Thư viện</span>
+							</button>
+						)}
 					</div>
 				</div>
 
@@ -547,10 +556,11 @@ export const PanelWordsDetectorPage: React.FC = () => {
 				</div>
 			</div>
 
-			{/* 2. Real-time Scan Progress Card (Shows when scanning or just completed) */}
+			{/* 2. Real-time Scan Progress Card (Shows when scanning, completed, cancelled, or error) */}
 			{scanStatus &&
 				(isScanning ||
 					scanStatus.stage === "completed" ||
+					scanStatus.stage === "cancelled" ||
 					scanStatus.stage === "error") && (
 					<div
 						className={`p-5 rounded-2xl border transition-all duration-300 shadow-md ${
@@ -558,7 +568,9 @@ export const PanelWordsDetectorPage: React.FC = () => {
 								? "bg-amber-500/5 border-amber-500/30"
 								: scanStatus.stage === "completed"
 									? "bg-emerald-500/5 border-emerald-500/30"
-									: "bg-red-500/5 border-red-500/30"
+									: scanStatus.stage === "cancelled"
+										? "bg-amber-500/10 border-amber-500/30"
+										: "bg-red-500/5 border-red-500/30"
 						}`}
 					>
 						<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -570,6 +582,10 @@ export const PanelWordsDetectorPage: React.FC = () => {
 								) : scanStatus.stage === "completed" ? (
 									<div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400">
 										<CheckCircle2 size={18} />
+									</div>
+								) : scanStatus.stage === "cancelled" ? (
+									<div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
+										<StopCircle size={18} />
 									</div>
 								) : (
 									<div className="p-2.5 rounded-xl bg-red-500/20 text-red-400">
@@ -586,7 +602,9 @@ export const PanelWordsDetectorPage: React.FC = () => {
 													? "Đang lập chỉ mục Database"
 													: scanStatus.stage === "completed"
 														? "Hoàn tất quét toàn bộ"
-														: "Trạng thái tác vụ"}
+														: scanStatus.stage === "cancelled"
+															? "Đã dừng quét"
+															: "Trạng thái tác vụ"}
 										</span>
 										{scanStatus.current_manga_title && (
 											<span className="text-xs font-semibold text-[var(--text-primary)] px-2 py-0.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-primary)]">
@@ -633,7 +651,9 @@ export const PanelWordsDetectorPage: React.FC = () => {
 										? "bg-amber-500"
 										: scanStatus.stage === "completed"
 											? "bg-emerald-500"
-											: "bg-red-500"
+											: scanStatus.stage === "cancelled"
+												? "bg-amber-400"
+												: "bg-red-500"
 								}`}
 								style={{ width: `${scanStatus.percent}%` }}
 							/>

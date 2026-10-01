@@ -36,6 +36,26 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((await self.service.trigger_global_scan())["success"])
         self.assertFalse((await self.service.trigger_scan("m"))["success"])
 
+    def test_cancel_scan_inactive(self):
+        result = self.service.cancel_scan("non_existent_manga")
+        self.assertFalse(result["success"])
+        self.assertIn("Không có tác vụ quét nào", result["message"])
+
+    def test_cancel_scan_active(self):
+        self.service._active_scans["manga_123"] = True
+        result = self.service.cancel_scan("manga_123")
+        self.assertTrue(result["success"])
+        self.assertTrue(self.service._cancel_scan.get("manga_123"))
+
+    async def test_emit_progress_cancelled_sets_not_scanning(self):
+        self.service._active_scans["manga_123"] = True
+        queue = self.service.register_queue("manga_123")
+        await self.service._emit_progress("manga_123", "cancelled", 5, 20, "Quét đã dừng")
+        self.assertFalse(self.service._active_scans.get("manga_123"))
+        event = await queue.get()
+        self.assertEqual(event["stage"], "cancelled")
+        self.assertFalse(event["is_scanning"])
+
     async def test_empty_query_browses_without_letter_filter(self):
         cursor = MagicMock()
         cursor.sort.return_value = cursor

@@ -219,6 +219,17 @@ async def trigger_manga_scan(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/manga/{manga_id}/scan-panels/cancel")
+@router.post("/manga/{manga_id}/scan/cancel")
+async def cancel_manga_panels_scan(manga_id: str = Path(...)):
+    """Cancel ongoing scan for a specific manga."""
+    try:
+        return panel_scanner_service.cancel_scan(manga_id)
+    except Exception as e:
+        logger.error(f"Error cancelling manga panels scan for {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/manga/{manga_id}/panels")
 async def delete_manga_panels(
     manga_id: str = Path(...),

@@ -245,6 +245,7 @@ class PanelScannerService:
     def __init__(self):
         self._nlp = None
         self._active_scans: Dict[str, bool] = {}  # manga_id -> is_scanning
+        self._cancel_scan: Dict[str, bool] = {}  # manga_id -> cancel requested
         self._scan_stats: Dict[str, Dict[str, Any]] = {}
         self._scan_queues: Dict[str, List[asyncio.Queue]] = {}
 
@@ -530,6 +531,13 @@ class PanelScannerService:
         self._cancel_global_scan = True
         return {"success": True, "message": "Đã gửi yêu cầu dừng quét hệ thống."}
 
+    def cancel_scan(self, manga_id: str) -> Dict[str, Any]:
+        """Cancel ongoing scan for a specific manga."""
+        if not self._active_scans.get(manga_id):
+            return {"success": False, "message": "Không có tác vụ quét nào đang chạy cho manga này."}
+        self._cancel_scan[manga_id] = True
+        return {"success": True, "message": "Đã gửi yêu cầu dừng quét manga."}
+
     async def trigger_scan(
         self,
         manga_id: str,
@@ -550,6 +558,7 @@ class PanelScannerService:
             }
 
         self._active_scans[manga_id] = True
+        self._cancel_scan[manga_id] = False
         await self._emit_progress(manga_id, "starting", 0, 0, "Đang khởi động quét...")
         asyncio.create_task(
             self._run_scan_task(
@@ -624,6 +633,8 @@ class PanelScannerService:
             seen_credit_hashes: Dict[str, int] = {}
 
             for chap in chapters:
+                if self._cancel_scan.get(manga_id):
+                    break
                 c_id_str = str(chap["_id"])
                 chap_num = str(chap.get("chapter_number", "1"))
                 chap_title = chap.get("title", "")
@@ -631,6 +642,8 @@ class PanelScannerService:
                 pages = chap.get("pages", [])
 
                 for page in pages:
+                    if self._cancel_scan.get(manga_id):
+                        break
                     page_num = page.get("page_number", 1)
                     filename = page.get("filename", f"{page_num}.jpg")
                     obj_key = page.get("object_key") or f"chapters/{manga_id}/{c_id_str}/{filename}"
@@ -723,6 +736,9 @@ class PanelScannerService:
                         reading_direction,
                     )
 
+                    if self._cancel_scan.get(manga_id):
+                        break
+
                     await self._save_page_panels(
                         manga_id, c_id_str, page_num, obj_key, extracted_panels, page.get("md5_hash")
                     )
@@ -740,19 +756,29 @@ class PanelScannerService:
                     # Cooperative sleep
                     await asyncio.sleep(0.01)
 
-            await self._emit_progress(
-                manga_id,
-                "completed",
-                processed_pages,
-                total_pages,
-                f"Hoàn thành! Đã quét {processed_pages} trang và trích xuất thành công {panels_extracted_total} panels.",
-            )
+            if self._cancel_scan.get(manga_id):
+                await self._emit_progress(
+                    manga_id,
+                    "cancelled",
+                    processed_pages,
+                    total_pages,
+                    f"Đã dừng tác vụ quét theo yêu cầu. Đã quét {processed_pages}/{total_pages} trang và trích xuất {panels_extracted_total} panels.",
+                )
+            else:
+                await self._emit_progress(
+                    manga_id,
+                    "completed",
+                    processed_pages,
+                    total_pages,
+                    f"Hoàn thành! Đã quét {processed_pages} trang và trích xuất thành công {panels_extracted_total} panels.",
+                )
 
         except Exception as e:
             logger.error(f"Error during manga panels scan for {manga_id}: {e}", exc_info=True)
             await self._emit_progress(manga_id, "error", 0, 0, f"Đã xảy ra lỗi khi quét: {str(e)}")
         finally:
             self._active_scans[manga_id] = False
+            self._cancel_scan[manga_id] = False
 
     async def _run_global_scan_task(
         self,
@@ -1020,7 +1046,7 @@ class PanelScannerService:
             self._global_scan_active = False
 
     async def _save_page_panels(self, manga_id, chapter_id, page_number, object_key, panels, expected_hash=None):
-        if self._global_scan_active and self._cancel_global_scan:
+        if (self._global_scan_active and self._cancel_global_scan) or self._cancel_scan.get(manga_id):
             return False
         chapter_key = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
         chapter = await self._get_chapters_col().find_one({"_id": chapter_key, "manga_id": manga_id})

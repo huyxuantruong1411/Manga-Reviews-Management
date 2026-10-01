@@ -4,6 +4,7 @@ import {
 	Loader2,
 	Search,
 	Sparkles,
+	StopCircle,
 	Trash2,
 	X,
 	Zap,
@@ -69,6 +70,7 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 		useState<boolean>(true);
 	const [isDeletingPanels, setIsDeletingPanels] = useState<boolean>(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+	const [isCancellingScan, setIsCancellingScan] = useState<boolean>(false);
 	const sseRef = useRef<EventSource | null>(null);
 
 	// Popover & Modal state
@@ -143,6 +145,13 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 					message: `Manga "${mangaTitle || "Manga"}" đã phân tích xong khung tranh & từ vựng.`,
 					badge: "QUÉT HOÀN TẤT",
 					type: "success",
+				});
+			} else if (data.stage === "cancelled") {
+				notifyTaskCompleted({
+					title: "Đã dừng quét OCR",
+					message: `Tác vụ quét cho "${mangaTitle || "Manga"}" đã được dừng theo yêu cầu.`,
+					badge: "ĐÃ DỪNG",
+					type: "info",
 				});
 			}
 			client
@@ -251,6 +260,26 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 		}
 	};
 
+	const handleCancelScan = async () => {
+		try {
+			setIsCancellingScan(true);
+			await client.post(`/api/manga/${mangaId}/scan-panels/cancel`);
+			showAlert({
+				title: "Dừng tác vụ quét",
+				message: "Đã gửi yêu cầu dừng quét đặc trưng & OCR.",
+				type: "warning",
+			});
+		} catch (error) {
+			showAlert({
+				title: "Lỗi",
+				message: apiErrorMessage(error, "Không thể gửi yêu cầu dừng quét."),
+				type: "error",
+			});
+		} finally {
+			setIsCancellingScan(false);
+		}
+	};
+
 	const handleDeletePanels = async () => {
 		setIsDeletingPanels(true);
 		try {
@@ -338,28 +367,37 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 							<span>Xóa dữ liệu quét</span>
 						</button>
 
-						<button
-							type="button"
-							onClick={() => setIsScanModalOpen(true)}
-							disabled={scanStatus?.is_scanning || stats?.is_scanning}
-							className={`px-5 py-3 rounded-2xl font-black text-sm flex items-center justify-center space-x-2.5 transition shadow-md cursor-pointer ${
-								scanStatus?.is_scanning || stats?.is_scanning
-									? "bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse"
-									: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/20"
-							}`}
-						>
-							{scanStatus?.is_scanning || stats?.is_scanning ? (
-								<>
-									<Loader2 size={18} className="animate-spin text-amber-400" />
-									<span>Đang quét đặc trưng ({scanStatus?.percent || 0}%)</span>
-								</>
-							) : (
-								<>
-									<Sparkles size={18} />
-									<span>Quét đặc trưng & OCR</span>
-								</>
-							)}
-						</button>
+						{scanStatus?.is_scanning || stats?.is_scanning ? (
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									disabled
+									className="px-4 py-3 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center space-x-2 transition shadow-md bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse"
+								>
+									<Loader2 size={16} className="animate-spin text-amber-400" />
+									<span>Đang quét ({scanStatus?.percent || 0}%)</span>
+								</button>
+								<button
+									type="button"
+									onClick={handleCancelScan}
+									disabled={isCancellingScan}
+									className="px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-red-500/50 bg-red-500/20 hover:bg-red-500/30 text-red-300 shadow-sm cursor-pointer disabled:opacity-40"
+									title="Dừng tác vụ quét ngay lập tức"
+								>
+									<StopCircle size={16} />
+									<span>{isCancellingScan ? "Đang dừng..." : "Hủy quét"}</span>
+								</button>
+							</div>
+						) : (
+							<button
+								type="button"
+								onClick={() => setIsScanModalOpen(true)}
+								className="px-5 py-3 rounded-2xl font-black text-sm flex items-center justify-center space-x-2.5 transition shadow-md cursor-pointer bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/20"
+							>
+								<Sparkles size={18} />
+								<span>Quét đặc trưng & OCR</span>
+							</button>
+						)}
 					</div>
 				</div>
 
@@ -368,12 +406,24 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 					<div className="mt-5 p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/30 space-y-2 animate-in fade-in duration-200">
 						<div className="flex items-center justify-between text-xs font-bold">
 							<span className="text-amber-400 flex items-center gap-2">
-								<Loader2 size={13} className="animate-spin" />
-								{scanStatus.message}
+								<Loader2 size={13} className="animate-spin shrink-0" />
+								<span>{scanStatus.message}</span>
 							</span>
-							<span className="text-white font-mono">
-								{scanStatus.percent}%
-							</span>
+							<div className="flex items-center gap-2 shrink-0">
+								<span className="text-white font-mono">
+									{scanStatus.percent}%
+								</span>
+								<button
+									type="button"
+									onClick={handleCancelScan}
+									disabled={isCancellingScan}
+									className="px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition border border-red-500/40 bg-red-500/20 hover:bg-red-500/30 text-red-300 cursor-pointer disabled:opacity-40"
+									title="Dừng quét OCR ngay lập tức"
+								>
+									<StopCircle size={13} />
+									<span>{isCancellingScan ? "Đang dừng..." : "Dừng lại"}</span>
+								</button>
+							</div>
 						</div>
 						<div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
 							<div
@@ -389,6 +439,21 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 						</div>
 					</div>
 				)}
+
+				{/* Cancelled scan banner */}
+				{!scanStatus?.is_scanning &&
+					!stats?.is_scanning &&
+					scanStatus?.stage === "cancelled" && (
+						<div className="mt-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs animate-in fade-in duration-200">
+							<span className="text-amber-400 font-semibold flex items-center gap-2">
+								<StopCircle size={16} />
+								{scanStatus.message || "Tác vụ quét đã được dừng theo yêu cầu."}
+							</span>
+							<span className="text-zinc-400 font-mono text-[11px]">
+								Đã quét: {scanStatus.current} / {scanStatus.total} trang
+							</span>
+						</div>
+					)}
 
 				{/* Feature Stats Badges */}
 				<div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-[var(--border-primary)]/60">
