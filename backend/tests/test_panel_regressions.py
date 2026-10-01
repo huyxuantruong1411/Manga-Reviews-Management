@@ -1,10 +1,12 @@
 """Read/write isolation: all persistence and external storage are mocked."""
+
 import io
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from PIL import Image
+
 from backend.services.panel_scanner_service import PanelScannerService, normalize_comic_text
 from backend.services.vision_service import VisionService
 
@@ -60,7 +62,10 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_insert_does_not_delete_previous_scan(self):
         col = SimpleNamespace(insert_many=AsyncMock(side_effect=RuntimeError("db failed")), delete_many=AsyncMock())
         chapters = SimpleNamespace(find_one=AsyncMock(return_value={"pages": [{"page_number": 1, "object_key": "k"}]}))
-        with patch.object(self.service, "_get_panels_col", return_value=col), patch.object(self.service, "_get_chapters_col", return_value=chapters):
+        with (
+            patch.object(self.service, "_get_panels_col", return_value=col),
+            patch.object(self.service, "_get_chapters_col", return_value=chapters),
+        ):
             with self.assertRaises(RuntimeError):
                 await self.service._save_page_panels("m", "c", 1, "k", [{}])
         selector = col.delete_many.call_args.args[0]
@@ -74,7 +79,9 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
                 await self.service._save_page_panels("m", "c", 1, "k", [{}])
 
     async def test_replaced_image_cannot_receive_stale_ocr(self):
-        chapters = SimpleNamespace(find_one=AsyncMock(return_value={"pages": [{"page_number": 1, "object_key": "k", "md5_hash": "new"}]}))
+        chapters = SimpleNamespace(
+            find_one=AsyncMock(return_value={"pages": [{"page_number": 1, "object_key": "k", "md5_hash": "new"}]})
+        )
         with patch.object(self.service, "_get_chapters_col", return_value=chapters):
             with self.assertRaises(ValueError):
                 await self.service._save_page_panels("m", "c", 1, "k", [{}], "old")
@@ -88,10 +95,17 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
             mangas=SimpleNamespace(find_one=AsyncMock(return_value={"title": "M"})),
         )
         self.service._global_scan_active = True
+
         def analyze(*args):
             self.service._cancel_global_scan = True
             return []
-        with patch("backend.services.panel_scanner_service.get_db", return_value=db), patch.object(self.service, "ensure_indexes", AsyncMock()), patch.object(self.service, "_fetch_page_bytes", AsyncMock(return_value=b"image")), patch.object(self.service, "_analyze_page_image", analyze):
+
+        with (
+            patch("backend.services.panel_scanner_service.get_db", return_value=db),
+            patch.object(self.service, "ensure_indexes", AsyncMock()),
+            patch.object(self.service, "_fetch_page_bytes", AsyncMock(return_value=b"image")),
+            patch.object(self.service, "_analyze_page_image", analyze),
+        ):
             await self.service._run_global_scan_task(None, True)
         status = self.service.get_global_scan_status()
         self.assertEqual(status["stage"], "cancelled")
@@ -124,8 +138,129 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
             with Image.open(output) as image:
                 self.assertEqual(image.format, "JPEG")
 
-    def test_no_panels_does_not_crash_text_assignment(self):
-        self.assertEqual(VisionService().associate_text_with_panels([], [{}]), [])
+    def test_vietnamese_text_normalization_preserves_accents_and_casing(self):
+        # Vietnamese text should normalize case cleanly without English wordninja corruption
+        self.assertEqual(
+            normalize_comic_text("CHÚNG TA PHẢI CHIẾN ĐẤU!", language="vi"),
+            "Chúng ta phải chiến đấu!",
+        )
+        self.assertEqual(
+            normalize_comic_text("CỐ-\nLÊN NÀO BẠN ƠI!", language="vi"),
+            "Cố lên nào bạn ơi!",
+        )
+
+    def test_cluster_text_into_bubbles_groups_adjacent_lines(self):
+        vision = VisionService()
+        detections = [
+            {
+                "text": "First line of bubble",
+                "norm_box": (0.60, 0.10, 0.75, 0.14),
+                "center": (0.675, 0.12),
+                "confidence": 0.95,
+            },
+            {
+                "text": "Second line of bubble",
+                "norm_box": (0.58, 0.15, 0.78, 0.19),
+                "center": (0.68, 0.17),
+                "confidence": 0.92,
+            },
+            {
+                "text": "Far away dialogue",
+                "norm_box": (0.10, 0.80, 0.30, 0.85),
+                "center": (0.20, 0.825),
+                "confidence": 0.88,
+            },
+        ]
+        bubbles = vision.cluster_text_into_bubbles(detections, reading_direction="rtl")
+        self.assertEqual(len(bubbles), 2)
+        # Bubble with first two lines
+        bubble_texts = [" ".join(d["text"] for d in b["detections"]) for b in bubbles]
+        self.assertIn("First line of bubble Second line of bubble", bubble_texts)
+        self.assertIn("Far away dialogue", bubble_texts)
+
+    def test_reading_order_sorting_rtl_vs_ltr(self):
+        vision = VisionService()
+        # Box A is top-right, Box B is top-left
+        boxes = [
+            {"bbox": (0.10, 0.10, 0.40, 0.30), "id": "left"},
+            {"bbox": (0.60, 0.10, 0.90, 0.30), "id": "right"},
+        ]
+        sorted_rtl = vision.sort_elements_by_reading_order(boxes, reading_direction="rtl")
+        self.assertEqual(sorted_rtl[0]["id"], "right")
+        self.assertEqual(sorted_rtl[1]["id"], "left")
+
+        sorted_ltr = vision.sort_elements_by_reading_order(boxes, reading_direction="ltr")
+        self.assertEqual(sorted_ltr[0]["id"], "left")
+        self.assertEqual(sorted_ltr[1]["id"], "right")
+
+    def test_outside_panel_text_preserved(self):
+        vision = VisionService()
+        panels = [(0.1, 0.1, 0.5, 0.5)]
+        detections = [
+            {"text": "Inside", "norm_box": (0.2, 0.2, 0.3, 0.3), "center": (0.25, 0.25)},
+            {"text": "Outside narration", "norm_box": (0.8, 0.8, 0.95, 0.9), "center": (0.875, 0.85)},
+        ]
+        results = vision.associate_text_with_panels(panels, detections, preserve_outside_text=True)
+        # Should return texts for panel 0 PLUS an extra outside bubble panel
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0][0]["text"], "Inside")
+        self.assertEqual(results[1][0]["text"], "Outside narration")
+
+    def test_vietnamese_feature_extraction_generates_unaccented_lemmas(self):
+        lemmas, vocab = self.service.extract_language_features("Chiến binh dũng cảm", language="vi")
+        # Should have both accented and unaccented search lemmas
+        self.assertIn("chiến", lemmas)
+        self.assertIn("chien", lemmas)
+        self.assertIn("dũng", lemmas)
+        self.assertIn("dung", lemmas)
+        # Common stopword filtering
+        lemmas_stop, _ = self.service.extract_language_features("Tôi là một người bạn của cậu", language="vi")
+        self.assertNotIn("là", lemmas_stop)
+        self.assertNotIn("của", lemmas_stop)
+        self.assertIn("người", lemmas_stop)
+
+    def test_analyze_page_image_bubble_and_fullpage_modes(self):
+        fake_img = MagicMock()
+        fake_img.shape = (1000, 800, 3)
+        detections = [
+            {"text": "Bong bóng thoại 1", "norm_box": (0.6, 0.1, 0.8, 0.2), "confidence": 0.95, "center": (0.7, 0.15)},
+            {"text": "Bong bóng thoại 2", "norm_box": (0.1, 0.7, 0.3, 0.8), "confidence": 0.90, "center": (0.2, 0.75)},
+        ]
+
+        with (
+            patch("backend.services.panel_scanner_service.vision_service.decode_image_bytes", return_value=fake_img),
+            patch("backend.services.panel_scanner_service.vision_service.detect_text", return_value=detections),
+        ):
+            # 1. Bubble mode
+            bubble_docs = self.service._analyze_page_image(
+                b"fake", "m", "Manga Title", "c", "1", None, 1, "k", language="vi", scan_mode="bubble"
+            )
+            self.assertEqual(len(bubble_docs), 2)
+            self.assertEqual(bubble_docs[0]["scan_mode"], "bubble")
+            self.assertEqual(bubble_docs[0]["language"], "vi")
+            self.assertIn("thoại", bubble_docs[0]["lemmas"])
+
+            # 2. Fullpage mode
+            full_docs = self.service._analyze_page_image(
+                b"fake", "m", "Manga Title", "c", "1", None, 1, "k", language="vi", scan_mode="fullpage"
+            )
+            self.assertEqual(len(full_docs), 1)
+            self.assertEqual(full_docs[0]["coords"], [0.0, 0.0, 1.0, 1.0])
+            self.assertEqual(full_docs[0]["scan_mode"], "fullpage")
+
+    async def test_search_panels_with_language_and_scan_mode_filters(self):
+        cursor = MagicMock()
+        cursor.sort.return_value = cursor.skip.return_value = cursor.limit.return_value = cursor
+        cursor.to_list = AsyncMock(return_value=[])
+        col = SimpleNamespace(count_documents=AsyncMock(return_value=0), find=MagicMock(return_value=cursor))
+        self.service._nlp = lambda _: []
+
+        with patch.object(self.service, "_get_panels_col", return_value=col):
+            await self.service.search_panels("chiến đấu", language="vi", scan_mode="bubble")
+
+        query = col.count_documents.call_args.args[0]
+        self.assertEqual(query["language"], "vi")
+        self.assertEqual(query["scan_mode"], "bubble")
 
 
 if __name__ == "__main__":

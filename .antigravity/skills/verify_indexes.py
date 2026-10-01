@@ -2,6 +2,7 @@
 Verify Database Indexes Script
 Kiểm tra tính đầy đủ của các index bắt buộc (Foreign Keys, Sort keys) trên MongoDB.
 """
+
 import asyncio
 import logging
 import os
@@ -21,7 +22,9 @@ MANDATORY_INDEXES = {
     "chapters": ["manga_id", "created_at"],
     "audit_logs": ["timestamp"],
     "reading_progress": ["manga_id"],
+    "manga_panels": ["manga_id", "chapter_id", "language", "scan_mode", "lemmas"],
 }
+
 
 async def verify():
     logger.info("Verifying mandatory database indexes...")
@@ -50,6 +53,7 @@ async def verify():
         return False
     logger.info("All mandatory indexes are present and healthy!")
     return True
+
 
 if __name__ == "__main__":
     success = asyncio.run(verify())

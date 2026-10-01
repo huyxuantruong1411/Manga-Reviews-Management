@@ -1,17 +1,18 @@
-import json
 import asyncio
+import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import List, Optional
+
 from bson import ObjectId
-from fastapi import APIRouter, Path, Query, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.database.connection import get_db
-from backend.services.vision_service import vision_service
-from backend.services.panel_scanner_service import panel_scanner_service
 from backend.services.dictionary_service import dictionary_service
 from backend.services.minio_service import minio_service
+from backend.services.panel_scanner_service import panel_scanner_service
+from backend.services.vision_service import vision_service
 
 logger = logging.getLogger("vision_router")
 router = APIRouter(prefix="/api", tags=["vision"])
@@ -20,22 +21,35 @@ router = APIRouter(prefix="/api", tags=["vision"])
 class ScanPanelsRequest(BaseModel):
     chapter_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
+    language: Optional[str] = Field("en", description="Target language: en (English) or vi (Vietnamese)")
+    scan_mode: Optional[str] = Field("panel", description="Extraction mode: panel, bubble, or fullpage")
+    reading_direction: Optional[str] = Field(
+        "rtl", description="Reading direction: rtl (Manga) or ltr (Webtoon/Comics)"
+    )
 
 
 class GlobalScanRequest(BaseModel):
     manga_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
+    language: Optional[str] = Field("en", description="Target language: en (English) or vi (Vietnamese)")
+    scan_mode: Optional[str] = Field("panel", description="Extraction mode: panel, bubble, or fullpage")
+    reading_direction: Optional[str] = Field(
+        "rtl", description="Reading direction: rtl (Manga) or ltr (Webtoon/Comics)"
+    )
 
 
 # ==========================================
 # Global System-Wide Endpoints
 # ==========================================
 
+
 @router.get("/panels/search")
 async def search_all_panels(
     q: str = Query("", max_length=200, description="Keyword, dialogue phrase, or lemma"),
     manga_id: Optional[str] = Query(None, description="Optional manga filter"),
     chapter_id: Optional[str] = Query(None, description="Optional chapter filter"),
+    language: Optional[str] = Query(None, description="Optional language filter: en, vi"),
+    scan_mode: Optional[str] = Query(None, description="Optional scan mode filter: panel, bubble, fullpage"),
     limit: int = Query(36, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -48,6 +62,8 @@ async def search_all_panels(
             query=q,
             manga_id=manga_id,
             chapter_id=chapter_id,
+            language=language,
+            scan_mode=scan_mode,
             limit=limit,
             offset=offset,
         )
@@ -87,6 +103,9 @@ async def trigger_global_library_scan(
         res = await panel_scanner_service.trigger_global_scan(
             manga_ids=payload.manga_ids,
             force_rescan=payload.force_rescan,
+            language=payload.language,
+            scan_mode=payload.scan_mode or "panel",
+            reading_direction=payload.reading_direction or "rtl",
         )
         if not res["success"]:
             raise HTTPException(status_code=409, detail=res["message"])
@@ -148,6 +167,7 @@ async def stream_global_scan_progress():
 # Single Manga Endpoints (Backwards Compatible)
 # ==========================================
 
+
 @router.post("/manga/{manga_id}/scan-panels")
 async def trigger_manga_scan(
     manga_id: str = Path(...),
@@ -162,6 +182,9 @@ async def trigger_manga_scan(
             manga_id=manga_id,
             chapter_ids=payload.chapter_ids,
             force_rescan=payload.force_rescan,
+            language=payload.language,
+            scan_mode=payload.scan_mode or "panel",
+            reading_direction=payload.reading_direction or "rtl",
         )
         if not res["success"]:
             raise HTTPException(status_code=409, detail=res["message"])
@@ -216,6 +239,8 @@ async def search_manga_panels(
     manga_id: str = Path(...),
     q: str = Query("", max_length=200, description="Keyword, dialogue phrase, or lemma"),
     chapter_id: Optional[str] = Query(None, description="Optional chapter filter"),
+    language: Optional[str] = Query(None, description="Optional language filter: en, vi"),
+    scan_mode: Optional[str] = Query(None, description="Optional scan mode filter: panel, bubble, fullpage"),
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -228,6 +253,8 @@ async def search_manga_panels(
             query=q,
             manga_id=manga_id,
             chapter_id=chapter_id,
+            language=language,
+            scan_mode=scan_mode,
             limit=limit,
             offset=offset,
         )
@@ -266,6 +293,7 @@ async def get_panel_crop(panel_id: str = Path(...)):
 
     # Fetch original page image bytes from MinIO in thread pool
     try:
+
         def _get_bytes():
             resp = minio_service.client.get_object(minio_service.bucket, obj_key)
             try:
@@ -310,6 +338,7 @@ async def get_panel_page_raw(panel_id: str = Path(...)):
         raise HTTPException(status_code=404, detail="Original page key not associated")
 
     try:
+
         def _get_bytes():
             resp = minio_service.client.get_object(minio_service.bucket, obj_key)
             try:
@@ -320,7 +349,9 @@ async def get_panel_page_raw(panel_id: str = Path(...)):
 
         image_bytes = await asyncio.to_thread(_get_bytes)
         import io
+
         from PIL import Image
+
         with Image.open(io.BytesIO(image_bytes)) as original:
             media_type = Image.MIME.get(original.format, "application/octet-stream")
         return StreamingResponse(

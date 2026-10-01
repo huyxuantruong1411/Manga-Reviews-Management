@@ -1,7 +1,8 @@
 import io
-import math
 import logging
-from typing import List, Tuple, Dict, Any, Optional
+import math
+from typing import Any, Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
 from PIL import Image
@@ -32,9 +33,7 @@ class VisionService:
             logger.error(f"Error decoding image bytes: {e}")
             return None
 
-    def segment_panels(
-        self, img: np.ndarray
-    ) -> List[Tuple[float, float, float, float]]:
+    def segment_panels(self, img: np.ndarray) -> List[Tuple[float, float, float, float]]:
         """
         Segment comic/manga page into individual scene panels using morphological operations.
         Returns a list of normalized bounding boxes: [(norm_x1, norm_y1, norm_x2, norm_y2), ...]
@@ -62,15 +61,11 @@ class VisionService:
 
         # 3. Morphological closing to seal breaks in panel outlines
         kernel_size = max(5, int(min(width, height) * 0.008))
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_RECT, (kernel_size, kernel_size)
-        )
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
 
         # 4. Find external/ccomp contours
-        contours, _ = cv2.findContours(
-            closed, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(closed, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
         raw_boxes = []
         for cnt in contours:
@@ -119,9 +114,7 @@ class VisionService:
         norm_panels.sort(key=lambda p: (round(p[1], 1), p[0]))
         return norm_panels
 
-    def _merge_overlapping_boxes(
-        self, boxes: List[Tuple[int, int, int, int]]
-    ) -> List[Tuple[int, int, int, int]]:
+    def _merge_overlapping_boxes(self, boxes: List[Tuple[int, int, int, int]]) -> List[Tuple[int, int, int, int]]:
         """Merge bounding boxes where intersection over smaller box exceeds 0.85."""
         if not boxes:
             return []
@@ -154,10 +147,7 @@ class VisionService:
                     if ix2 > ix1 and iy2 > iy1:
                         inter_area = (ix2 - ix1) * (iy2 - iy1)
                         smaller_area = min(area_a, area_b)
-                        if (
-                            smaller_area > 0
-                            and (inter_area / smaller_area) >= 0.85
-                        ):
+                        if smaller_area > 0 and (inter_area / smaller_area) >= 0.85:
                             x1_a = min(x1_a, x1_b)
                             y1_a = min(y1_a, y1_b)
                             x2_a = max(x2_a, x2_b)
@@ -216,20 +206,213 @@ class VisionService:
 
         return detections
 
+    def sort_elements_by_reading_order(
+        self,
+        elements: List[Any],
+        reading_direction: str = "rtl",
+    ) -> List[Any]:
+        """
+        Sort boxes/elements according to comic/manga reading direction.
+        - rtl: Right-to-Left, Top-to-Bottom (Japanese Manga standard)
+        - ltr: Left-to-Right, Top-to-Bottom (Western Comics / Webtoons)
+        Groups elements into horizontal bands (rows) and sorts within each row.
+        """
+        if not elements:
+            return []
+
+        is_rtl = (reading_direction or "rtl").lower() == "rtl"
+
+        def _extract_box(item):
+            if isinstance(item, dict):
+                if "bbox" in item:
+                    return item["bbox"]
+                if "norm_box" in item:
+                    return item["norm_box"]
+                if "coords" in item:
+                    return item["coords"]
+            if isinstance(item, (list, tuple)) and len(item) >= 4:
+                return item[:4]
+            return (0.0, 0.0, 0.0, 0.0)
+
+        enriched = []
+        for idx, item in enumerate(elements):
+            x1, y1, x2, y2 = _extract_box(item)
+            cx = (x1 + x2) / 2.0
+            cy = (y1 + y2) / 2.0
+            h = max(0.005, y2 - y1)
+            w = max(0.005, x2 - x1)
+            enriched.append(
+                {
+                    "orig": item,
+                    "box": (x1, y1, x2, y2),
+                    "cx": cx,
+                    "cy": cy,
+                    "h": h,
+                    "w": w,
+                    "y1": y1,
+                    "y2": y2,
+                    "x1": x1,
+                    "x2": x2,
+                    "idx": idx,
+                }
+            )
+
+        # Sort initially by y1
+        enriched.sort(key=lambda e: (e["y1"], e["cy"]))
+
+        # Group into reading bands (rows)
+        bands: List[List[Dict[str, Any]]] = []
+        for item in enriched:
+            placed = False
+            for band in bands:
+                band_y1 = min(b["y1"] for b in band)
+                band_y2 = max(b["y2"] for b in band)
+                band_cy = (band_y1 + band_y2) / 2.0
+
+                inter_y = max(0.0, min(item["y2"], band_y2) - max(item["y1"], band_y1))
+                min_h = min(item["h"], band_y2 - band_y1)
+
+                # Vertical overlap >= 25% or centers Y very close (< 0.05)
+                if (min_h > 0 and (inter_y / min_h) >= 0.25) or abs(item["cy"] - band_cy) < 0.05:
+                    band.append(item)
+                    placed = True
+                    break
+            if not placed:
+                bands.append([item])
+
+        # Sort each band based on reading direction
+        result = []
+        for band in bands:
+            if is_rtl:
+                # Right to Left: larger x (rightmost) comes first
+                band.sort(key=lambda e: -e["cx"])
+            else:
+                # Left to Right: smaller x (leftmost) comes first
+                band.sort(key=lambda e: e["cx"])
+            for e in band:
+                result.append(e["orig"])
+
+        return result
+
+    def cluster_text_into_bubbles(
+        self,
+        detections: List[Dict[str, Any]],
+        reading_direction: str = "rtl",
+        pad_ratio: float = 0.015,
+    ) -> List[Dict[str, Any]]:
+        """
+        Cluster adjacent OCR text lines into speech bubbles (MangaTranslator architecture).
+        Returns a list of speech bubbles:
+        {
+            "bbox": (x1, y1, x2, y2),
+            "detections": [...],
+            "center": (cx, cy)
+        }
+        sorted in natural comic reading order.
+        """
+        if not detections:
+            return []
+
+        n = len(detections)
+        parent = list(range(n))
+
+        def find(i):
+            if parent[i] == i:
+                return i
+            parent[i] = find(parent[i])
+            return parent[i]
+
+        def union(i, j):
+            root_i = find(i)
+            root_j = find(j)
+            if root_i != root_j:
+                parent[root_i] = root_j
+
+        for i in range(n):
+            box_a = detections[i]["norm_box"]
+            ha = max(0.005, box_a[3] - box_a[1])
+
+            for j in range(i + 1, n):
+                box_b = detections[j]["norm_box"]
+                hb = max(0.005, box_b[3] - box_b[1])
+
+                # Vertical distance between lines
+                dist_y = max(0.0, max(box_a[1], box_b[1]) - min(box_a[3], box_b[3]))
+                # Horizontal intersection
+                inter_x = min(box_a[2], box_b[2]) - max(box_a[0], box_b[0])
+
+                # Proximity rule: consecutive lines in speech bubble
+                close_vertical = dist_y <= (1.6 * min(ha, hb) + 0.02)
+                has_x_alignment = inter_x > -0.05 or (max(box_a[0], box_b[0]) - min(box_a[2], box_b[2]) <= 0.05)
+
+                inter_area = max(0.0, min(box_a[2], box_b[2]) - max(box_a[0], box_b[0])) * max(
+                    0.0, min(box_a[3], box_b[3]) - max(box_a[1], box_b[1])
+                )
+
+                if inter_area > 0 or (close_vertical and has_x_alignment):
+                    union(i, j)
+
+        clusters: Dict[int, List[Dict[str, Any]]] = {}
+        for i in range(n):
+            root = find(i)
+            if root not in clusters:
+                clusters[root] = []
+            clusters[root].append(detections[i])
+
+        bubble_list = []
+        for _root, group in clusters.items():
+            group.sort(key=lambda d: (round(d["norm_box"][1], 2), round(d["norm_box"][0], 2)))
+
+            min_x = min(d["norm_box"][0] for d in group)
+            min_y = min(d["norm_box"][1] for d in group)
+            max_x = max(d["norm_box"][2] for d in group)
+            max_y = max(d["norm_box"][3] for d in group)
+
+            w = max_x - min_x
+            h = max_y - min_y
+            px = max(pad_ratio, w * 0.08)
+            py = max(pad_ratio, h * 0.08)
+
+            bx1 = max(0.0, min_x - px)
+            by1 = max(0.0, min_y - py)
+            bx2 = min(1.0, max_x + px)
+            by2 = min(1.0, max_y + py)
+
+            bubble_list.append(
+                {
+                    "bbox": (bx1, by1, bx2, by2),
+                    "detections": group,
+                    "center": ((bx1 + bx2) / 2.0, (by1 + by2) / 2.0),
+                }
+            )
+
+        return self.sort_elements_by_reading_order(bubble_list, reading_direction=reading_direction)
+
     def associate_text_with_panels(
         self,
         panels: List[Tuple[float, float, float, float]],
         text_detections: List[Dict[str, Any]],
+        preserve_outside_text: bool = False,
+        reading_direction: str = "rtl",
     ) -> List[List[Dict[str, Any]]]:
         """
         Assign each text detection to a panel using Containment Ratio:
-        Containment = Area(Text ∩ Panel) / Area(Text) >= 0.5.
-        Fallback to minimum Euclidean distance between centers.
-        Returns a list of text lists, one per panel, sorted in natural reading order.
+        Containment = Area(Text ∩ Panel) / Area(Text) >= 0.35.
+        If preserve_outside_text is True:
+            Unassigned text detections outside all panels are clustered into
+            independent speech bubbles and returned as additional panel text groups.
+        Otherwise:
+            Fallback to minimum Euclidean distance between centers.
+        Returns a list of text lists, one per panel (plus outside bubbles if preserved).
         """
         if not panels:
+            if preserve_outside_text and text_detections:
+                bubbles = self.cluster_text_into_bubbles(text_detections, reading_direction=reading_direction)
+                return [b["detections"] for b in bubbles]
             return []
+
         panel_texts: List[List[Dict[str, Any]]] = [[] for _ in panels]
+        unassigned_detections: List[Dict[str, Any]] = []
 
         for det in text_detections:
             tx1, ty1, tx2, ty2 = det["norm_box"]
@@ -251,21 +434,28 @@ class VisionService:
                         best_containment = containment
                         best_panel_idx = p_idx
 
-            if best_panel_idx != -1 and best_containment >= 0.5:
+            cx, cy = det["center"]
+            point_inside = False
+            if best_panel_idx != -1:
+                pp = panels[best_panel_idx]
+                point_inside = pp[0] <= cx <= pp[2] and pp[1] <= cy <= pp[3]
+
+            if best_panel_idx != -1 and (best_containment >= 0.35 or point_inside):
                 panel_texts[best_panel_idx].append(det)
             else:
-                # Euclidean distance fallback
-                tc_x, tc_y = det["center"]
-                min_dist = float("inf")
-                fallback_idx = 0
-                for p_idx, (px1, py1, px2, py2) in enumerate(panels):
-                    pc_x = (px1 + px2) / 2.0
-                    pc_y = (py1 + py2) / 2.0
-                    dist = math.hypot(tc_x - pc_x, tc_y - pc_y)
-                    if dist < min_dist:
-                        min_dist = dist
-                        fallback_idx = p_idx
-                panel_texts[fallback_idx].append(det)
+                if preserve_outside_text:
+                    unassigned_detections.append(det)
+                else:
+                    min_dist = float("inf")
+                    fallback_idx = 0
+                    for p_idx, (px1, py1, px2, py2) in enumerate(panels):
+                        pc_x = (px1 + px2) / 2.0
+                        pc_y = (py1 + py2) / 2.0
+                        dist = math.hypot(cx - pc_x, cy - pc_y)
+                        if dist < min_dist:
+                            min_dist = dist
+                            fallback_idx = p_idx
+                    panel_texts[fallback_idx].append(det)
 
         for p_idx in range(len(panel_texts)):
             panel_texts[p_idx].sort(
@@ -274,6 +464,13 @@ class VisionService:
                     round(d["norm_box"][0], 2),
                 )
             )
+
+        if preserve_outside_text and unassigned_detections:
+            outside_bubbles = self.cluster_text_into_bubbles(unassigned_detections, reading_direction=reading_direction)
+            for ob in outside_bubbles:
+                for d in ob["detections"]:
+                    d["outside_bubble_bbox"] = ob["bbox"]
+                panel_texts.append(ob["detections"])
 
         return panel_texts
 
