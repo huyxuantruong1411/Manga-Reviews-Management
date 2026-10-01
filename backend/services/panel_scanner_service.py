@@ -10,6 +10,7 @@ from uuid import uuid4
 from bson import ObjectId
 
 from backend.database.connection import get_db
+from backend.services.manga_ocr_service import manga_ocr_service
 from backend.services.minio_service import minio_service
 from backend.services.vision_service import vision_service
 
@@ -1215,8 +1216,11 @@ class PanelScannerService:
 
         for p_idx, (nx1, ny1, nx2, ny2) in enumerate(panels_coords):
             assigned_texts = panel_texts_list[p_idx] if p_idx < len(panel_texts_list) else []
-            raw_text = "\n".join(d["text"] for d in assigned_texts).strip()
-            cleaned_text = normalize_comic_text(raw_text, language=language)
+
+            # Use enhanced MangaOCRService for structured post-processing
+            ocr_result = manga_ocr_service.process_detections(assigned_texts, language=language)
+            raw_text = ocr_result["raw_text"]
+            cleaned_text = ocr_result["clean_text"]
 
             lemmas, vocab_list = self.extract_language_features(cleaned_text, language=language)
 
