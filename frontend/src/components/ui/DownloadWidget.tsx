@@ -212,7 +212,7 @@ export const DownloadWidget: React.FC = () => {
                             {task.status}
                           </span>
                           <span className="text-[9px] font-bold text-zinc-400">
-                            {task.completed_chapters}/{task.total_chapters} chapters
+                            {task.completed_chapters}/{task.total_chapters} chapters (còn lại {Math.max(0, task.total_chapters - task.completed_chapters)})
                           </span>
                         </div>
                       </div>
@@ -256,19 +256,24 @@ export const DownloadWidget: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Progress Bar */}
+                    {/* IDM Segmented Multi-Thread Progress Bar */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
-                        <span>Overall Progress</span>
-                        <span className="font-extrabold text-[var(--brand-orange)]">
+                        <span className="flex items-center gap-1 text-amber-500">
+                          <Zap size={10} className="animate-pulse" />
+                          <span>IDM Multi-Stream</span>
+                        </span>
+                        <span className="font-extrabold text-[var(--brand-orange)] font-mono">
                           {Math.round(task.progress * 100)}%
                         </span>
                       </div>
-                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden shadow-inner">
+                      <div className="relative w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner">
                         <div
-                          className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300"
-                          style={{ width: `${task.progress * 100}%` }}
-                        />
+                          className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 relative overflow-hidden"
+                          style={{ width: `${Math.min(100, Math.round(task.progress * 100))}%` }}
+                        >
+                          <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.25)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.25)_50%,rgba(255,255,255,0.25)_75%,transparent_75%,transparent)] bg-[length:12px_12px] animate-[move-stripes_1s_linear_infinite]" />
+                        </div>
                       </div>
                     </div>
 

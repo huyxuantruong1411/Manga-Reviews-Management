@@ -1,26 +1,25 @@
 import logging
-from typing import List, Optional, Dict, Any, Literal
-from fastapi import APIRouter, Path, Query, Body, HTTPException, status
+from typing import List, Literal, Optional
+
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.models.chapter import DeletePagesRequest, FolderImportRequest, FolderScanResponse, StorageDuplicateGroup
 from backend.services.chapter_service import chapter_service
-from backend.models.chapter import (
-    DeletePagesRequest,
-    FolderImportRequest,
-    FolderScanResponse,
-    StorageDuplicateGroup
-)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chapters & Reader"])
 
+
 class ScanFolderPayload(BaseModel):
     folder_path: str
 
+
 class DuplicateCleanupPayload(BaseModel):
     object_keys: List[str]
+
 
 class ReadingProgressPayload(BaseModel):
     chapter_id: str
@@ -31,11 +30,10 @@ class ReadingProgressPayload(BaseModel):
     mark_as_read: bool = False
     language: Optional[str] = None
 
+
 @router.get("/manga/{manga_id}/chapters")
 async def get_manga_chapters(
-    manga_id: str = Path(...),
-    lang: Optional[str] = Query(None),
-    group: Optional[str] = Query(None)
+    manga_id: str = Path(...), lang: Optional[str] = Query(None), group: Optional[str] = Query(None)
 ):
     """Retrieve all stored chapters for a manga."""
     try:
@@ -44,6 +42,7 @@ async def get_manga_chapters(
     except Exception as e:
         logger.error(f"Error fetching chapters for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/chapters/{chapter_id}")
 async def get_chapter(chapter_id: str = Path(...)):
@@ -59,6 +58,7 @@ async def get_chapter(chapter_id: str = Path(...)):
         logger.error(f"Error fetching chapter {chapter_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.delete("/chapters/{chapter_id}")
 async def delete_chapter(chapter_id: str = Path(...)):
     """Delete a chapter and all its stored pages."""
@@ -73,6 +73,7 @@ async def delete_chapter(chapter_id: str = Path(...)):
         logger.error(f"Error deleting chapter {chapter_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/chapters/sync-metadata")
 async def sync_manga_chapters_metadata(manga_id: str = Path(...)):
     """Synchronize missing metadata (volume, group_name, uploader, publish_at) from MangaDex for all stored chapters."""
@@ -85,10 +86,7 @@ async def sync_manga_chapters_metadata(manga_id: str = Path(...)):
 
 
 @router.post("/chapters/{chapter_id}/delete-pages")
-async def delete_chapter_pages(
-    chapter_id: str = Path(...),
-    payload: DeletePagesRequest = Body(...)
-):
+async def delete_chapter_pages(chapter_id: str = Path(...), payload: DeletePagesRequest = Body(...)):
     """Delete specific page numbers from a chapter and renumber remaining pages."""
     try:
         res = await chapter_service.delete_pages(chapter_id, payload.page_numbers)
@@ -99,11 +97,9 @@ async def delete_chapter_pages(
         logger.error(f"Error deleting pages for chapter {chapter_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/scan-folder", response_model=FolderScanResponse)
-async def scan_local_folder(
-    manga_id: str = Path(...),
-    payload: ScanFolderPayload = Body(...)
-):
+async def scan_local_folder(manga_id: str = Path(...), payload: ScanFolderPayload = Body(...)):
     """Scan a local folder to preview chapters, page counts, and duplicate conflicts before import."""
     try:
         res = await chapter_service.scan_local_folder(payload.folder_path, manga_id)
@@ -112,11 +108,9 @@ async def scan_local_folder(
         logger.error(f"Error scanning folder: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/import-folder")
-async def import_local_folder(
-    manga_id: str = Path(...),
-    payload: FolderImportRequest = Body(...)
-):
+async def import_local_folder(manga_id: str = Path(...), payload: FolderImportRequest = Body(...)):
     """Import chapters and pages from a local directory into system storage."""
     try:
         res = await chapter_service.import_local_folder(
@@ -125,7 +119,7 @@ async def import_local_folder(
             conflict_strategy=payload.conflict_strategy,
             default_language=payload.default_language,
             default_group=payload.default_group,
-            selected_folders=payload.selected_folders
+            selected_folders=payload.selected_folders,
         )
         return res
     except ValueError as ve:
@@ -134,11 +128,9 @@ async def import_local_folder(
         logger.error(f"Error importing folder for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/import-folder-stream")
-async def import_local_folder_stream(
-    manga_id: str = Path(...),
-    payload: FolderImportRequest = Body(...)
-):
+async def import_local_folder_stream(manga_id: str = Path(...), payload: FolderImportRequest = Body(...)):
     """Import chapters and pages with granular, real-time SSE progress streaming."""
     try:
         generator = chapter_service.stream_import_local_folder(
@@ -147,18 +139,16 @@ async def import_local_folder_stream(
             conflict_strategy=payload.conflict_strategy,
             default_language=payload.default_language,
             default_group=payload.default_group,
-            selected_folders=payload.selected_folders
+            selected_folders=payload.selected_folders,
         )
         return StreamingResponse(generator, media_type="text/event-stream")
     except Exception as e:
         logger.error(f"Error starting import stream for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/manga/{manga_id}/storage-duplicates", response_model=List[StorageDuplicateGroup])
-async def get_storage_duplicates(
-    manga_id: str = Path(...),
-    chapter_id: Optional[str] = Query(None)
-):
+async def get_storage_duplicates(manga_id: str = Path(...), chapter_id: Optional[str] = Query(None)):
     """Scan stored pages for identical images (MD5 matching) and return visual preview groups."""
     try:
         groups = await chapter_service.scan_storage_duplicates(manga_id, chapter_id)
@@ -167,11 +157,9 @@ async def get_storage_duplicates(
         logger.error(f"Error scanning storage duplicates for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/storage-duplicates/cleanup")
-async def cleanup_storage_duplicates(
-    manga_id: str = Path(...),
-    payload: DuplicateCleanupPayload = Body(...)
-):
+async def cleanup_storage_duplicates(manga_id: str = Path(...), payload: DuplicateCleanupPayload = Body(...)):
     """Delete selected duplicate pages from MinIO and chapter documents."""
     try:
         res = await chapter_service.delete_storage_duplicate_pages(manga_id, payload.object_keys)
@@ -179,6 +167,7 @@ async def cleanup_storage_duplicates(
     except Exception as e:
         logger.error(f"Error cleaning up duplicate pages for manga {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/manga/{manga_id}/reading-progress")
 async def get_reading_progress(manga_id: str = Path(...)):
@@ -189,11 +178,9 @@ async def get_reading_progress(manga_id: str = Path(...)):
         logger.error(f"Error fetching reading progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/reading-progress")
-async def save_reading_progress(
-    manga_id: str = Path(...),
-    payload: ReadingProgressPayload = Body(...)
-):
+async def save_reading_progress(manga_id: str = Path(...), payload: ReadingProgressPayload = Body(...)):
     """Save user's current chapter, page, reading mode, and fit mode."""
     try:
         return await chapter_service.save_reading_progress(
@@ -204,7 +191,7 @@ async def save_reading_progress(
             reading_mode=payload.reading_mode,
             fit_mode=payload.fit_mode,
             mark_as_read=payload.mark_as_read,
-            language=payload.language
+            language=payload.language,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -212,11 +199,9 @@ async def save_reading_progress(
         logger.error(f"Error saving reading progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/manga/{manga_id}/cleanup-latest-chapter")
-async def cleanup_latest_chapter(
-    manga_id: str = Path(...),
-    lang: Optional[str] = Query(None)
-):
+async def cleanup_latest_chapter(manga_id: str = Path(...), lang: Optional[str] = Query(None)):
     """
     Find and delete the most recently downloaded / highest chapter for a manga,
     optionally filtered by language, cleaning it up from MongoDB, MinIO, and local disk.
@@ -230,4 +215,3 @@ async def cleanup_latest_chapter(
     except Exception as e:
         logger.error(f"Error cleaning up latest chapter for {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

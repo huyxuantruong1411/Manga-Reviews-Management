@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Path, HTTPException, Query
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
-from backend.services.sync_manager_service import sync_manager_service
+
 from backend.database.connection import get_db
+from backend.services.sync_manager_service import sync_manager_service
 
 router = APIRouter(prefix="/api/sync", tags=["Sync Manager"])
+
 
 # Request/Response schemas
 class SyncOptions(BaseModel):
@@ -13,6 +16,7 @@ class SyncOptions(BaseModel):
     sync_trackers: bool = False
     sync_covers: bool = False
     sync_recommendations: bool = False
+
 
 class SyncPoolFilters(BaseModel):
     read_statuses: List[str] = Field(default_factory=list)
@@ -24,9 +28,11 @@ class SyncPoolFilters(BaseModel):
     exclude_tags: List[str] = Field(default_factory=list)
     original_languages: List[str] = Field(default_factory=list)
 
+
 class SyncPoolSchedule(BaseModel):
     type: str = "manual"  # manual | interval
     interval_hours: Optional[int] = None
+
 
 class SyncPoolCreate(BaseModel):
     name: str
@@ -36,16 +42,20 @@ class SyncPoolCreate(BaseModel):
     sync_options: SyncOptions
     schedule: SyncPoolSchedule
 
+
 class SingleSyncRequest(BaseModel):
     manga_id: str
     options: SyncOptions
+
 
 class BatchSyncRequest(BaseModel):
     manga_ids: List[str]
     options: SyncOptions
 
+
 class SystemSettingsUpdate(BaseModel):
     cover_resolution: str  # original | 512 | 256
+
 
 class SyncRunCreate(BaseModel):
     name: str
@@ -53,12 +63,14 @@ class SyncRunCreate(BaseModel):
     total_count: int
     sync_options: Dict[str, bool]
 
+
 class SyncRunUpdate(BaseModel):
     status: str  # running | completed | failed | cancelled
     completed_count: int
     failed_count: int
     logs: List[str]
     items: List[Dict[str, Any]]
+
 
 # Settings Endpoints
 @router.get("/settings")
@@ -73,6 +85,7 @@ async def get_system_settings():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving settings: {e}")
 
+
 @router.put("/settings")
 async def update_system_settings(req: SystemSettingsUpdate):
     """Update global sync settings."""
@@ -81,13 +94,12 @@ async def update_system_settings(req: SystemSettingsUpdate):
     try:
         db = get_db()
         await db.settings.update_one(
-            {"key": "system_settings"},
-            {"$set": {"value": {"cover_resolution": req.cover_resolution}}},
-            upsert=True
+            {"key": "system_settings"}, {"$set": {"value": {"cover_resolution": req.cover_resolution}}}, upsert=True
         )
         return {"cover_resolution": req.cover_resolution}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating settings: {e}")
+
 
 # Pool Management Endpoints
 @router.get("/pools")
@@ -98,6 +110,7 @@ async def get_pools():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting sync pools: {e}")
 
+
 @router.post("/pools")
 async def create_pool(req: SyncPoolCreate):
     """Create a new sync pool configuration."""
@@ -106,18 +119,22 @@ async def create_pool(req: SyncPoolCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating sync pool: {e}")
 
+
 @router.get("/pools/{pool_id}")
 async def get_pool(pool_id: str = Path(...)):
     """Retrieve a single sync pool."""
     db = get_db()
     from bson import ObjectId
+
     if not ObjectId.is_valid(pool_id):
         raise HTTPException(status_code=400, detail="Invalid pool ID format")
     pool = await db.sync_configs.find_one({"_id": ObjectId(pool_id)})
     if not pool:
         raise HTTPException(status_code=404, detail="Sync pool not found")
     from backend.services.manga_service import serialize_doc
+
     return serialize_doc(pool)
+
 
 @router.put("/pools/{pool_id}")
 async def update_pool(req: SyncPoolCreate, pool_id: str = Path(...)):
@@ -132,6 +149,7 @@ async def update_pool(req: SyncPoolCreate, pool_id: str = Path(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating sync pool: {e}")
 
+
 @router.delete("/pools/{pool_id}")
 async def delete_pool(pool_id: str = Path(...)):
     """Delete a sync pool configuration."""
@@ -143,6 +161,7 @@ async def delete_pool(pool_id: str = Path(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting sync pool: {e}")
 
+
 @router.post("/pools/{pool_id}/preview")
 async def preview_pool(pool_id: str = Path(...)):
     """Preview which mangas in the library match the sync pool filters."""
@@ -151,6 +170,7 @@ async def preview_pool(pool_id: str = Path(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error previewing sync pool: {e}")
 
+
 @router.post("/pools/{pool_id}/execute")
 async def execute_pool(pool_id: str = Path(...)):
     """Trigger the execution of a sync pool (queued in the background)."""
@@ -158,6 +178,7 @@ async def execute_pool(pool_id: str = Path(...)):
         return await sync_manager_service.execute_sync_pool(pool_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing sync pool: {e}")
+
 
 # Single / Batch Sync Trigger Endpoints
 @router.post("/single")
@@ -173,6 +194,7 @@ async def sync_single(req: SingleSyncRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing manga: {e}")
 
+
 @router.post("/batch")
 async def sync_batch(req: BatchSyncRequest):
     """Queue a batch of mangas to sync in the background."""
@@ -181,6 +203,7 @@ async def sync_batch(req: BatchSyncRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error triggering batch sync: {e}")
 
+
 @router.post("/abort-active")
 async def abort_active_syncs():
     """Cancel all active background synchronization tasks immediately."""
@@ -188,6 +211,7 @@ async def abort_active_syncs():
         return await sync_manager_service.cancel_all_active_syncs()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error cancelling sync tasks: {e}")
+
 
 # History Logs / Stats Endpoints
 @router.get("/logs")
@@ -198,6 +222,7 @@ async def get_logs(limit: int = Query(50, ge=1, le=200)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving logs: {e}")
 
+
 @router.get("/stats")
 async def get_stats():
     """Retrieve high-level synchronization statistics."""
@@ -205,6 +230,7 @@ async def get_stats():
         return await sync_manager_service.get_sync_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving sync statistics: {e}")
+
 
 @router.post("/runs")
 async def create_sync_run(req: SyncRunCreate):
@@ -222,7 +248,7 @@ async def create_sync_run(req: SyncRunCreate):
             "started_at": datetime.utcnow(),
             "completed_at": None,
             "logs": [],
-            "items": []
+            "items": [],
         }
         res = await db.sync_runs.insert_one(doc)
         doc["_id"] = str(res.inserted_id)
@@ -230,31 +256,34 @@ async def create_sync_run(req: SyncRunCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.put("/runs/{run_id}")
 async def update_sync_run(run_id: str, req: SyncRunUpdate):
     """Update logs, counts, status, and items for an active sync run."""
     try:
         db = get_db()
         from bson import ObjectId
+
         if not ObjectId.is_valid(run_id):
             raise HTTPException(status_code=400, detail="Invalid run ID")
-        
+
         update_data = {
             "status": req.status,
             "completed_count": req.completed_count,
             "failed_count": req.failed_count,
             "logs": req.logs,
             "items": req.items,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
-        
+
         if req.status in ["completed", "failed", "cancelled"]:
             update_data["completed_at"] = datetime.utcnow()
-            
+
         await db.sync_runs.update_one({"_id": ObjectId(run_id)}, {"$set": update_data})
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/runs")
 async def get_sync_runs(limit: int = Query(50, ge=1, le=100)):
@@ -264,6 +293,7 @@ async def get_sync_runs(limit: int = Query(50, ge=1, le=100)):
         cursor = db.sync_runs.find({}).sort("started_at", -1).limit(limit)
         runs = []
         from backend.services.manga_service import serialize_doc
+
         async for doc in cursor:
             runs.append(serialize_doc(doc))
         return runs

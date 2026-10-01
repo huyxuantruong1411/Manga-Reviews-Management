@@ -1,5 +1,6 @@
 import {
 	AlertCircle,
+	AlertTriangle,
 	Check,
 	CheckCircle2,
 	ChevronLeft,
@@ -13,6 +14,7 @@ import {
 	Search,
 	Sparkles,
 	StopCircle,
+	Trash2,
 	X,
 } from "lucide-react";
 import type React from "react";
@@ -28,6 +30,7 @@ import { FullPageModal } from "../components/manga/FullPageModal";
 import { PanelCard } from "../components/manga/PanelCard";
 import { WordPopover } from "../components/manga/WordPopover";
 import { useAlert } from "../hooks/useAlert";
+import { notifyTaskCompleted } from "../services/notificationService";
 import type { Chapter } from "../types/chapter";
 import type {
 	GlobalPanelStats,
@@ -85,8 +88,16 @@ export const PanelWordsDetectorPage: React.FC = () => {
 	const [scanLanguage, setScanLanguage] = useState<string>("en");
 	const [scanMode, setScanMode] = useState<string>("panel");
 	const [readingDirection, setReadingDirection] = useState<string>("rtl");
+	const [scanChapterLanguage, setScanChapterLanguage] = useState<string>("all");
+	const [skipBlankPages, setSkipBlankPages] = useState<boolean>(true);
+	const [skipDuplicateCredits, setSkipDuplicateCredits] =
+		useState<boolean>(true);
 	const [startingScan, setStartingScan] = useState(false);
 	const [cancellingScan, setCancellingScan] = useState(false);
+	const [isDeletingAllPanels, setIsDeletingAllPanels] =
+		useState<boolean>(false);
+	const [showDeleteAllConfirm, setShowDeleteAllConfirm] =
+		useState<boolean>(false);
 
 	// Modals & Popover states
 	const [selectedFullPagePanel, setSelectedFullPagePanel] =
@@ -234,6 +245,14 @@ export const PanelWordsDetectorPage: React.FC = () => {
 			["completed", "cancelled", "error"].includes(data.stage) &&
 			!data.is_scanning
 		) {
+			if (data.stage === "completed") {
+				notifyTaskCompleted({
+					title: "Quét thư viện hoàn tất!",
+					message: `Hệ thống đã phân tích xong ${data.total_pages || 0} trang trên toàn bộ thư viện.`,
+					badge: "QUÉT HOÀN TẤT",
+					type: "success",
+				});
+			}
 			void fetchTelemetry();
 			if (activeQuery)
 				void executeSearch(
@@ -307,17 +326,37 @@ export const PanelWordsDetectorPage: React.FC = () => {
 		if (!scanTargetMangaIds.length) return;
 		try {
 			setStartingScan(true);
+			setScanStatus({
+				total_manga: scanTargetMangaIds.length,
+				current_manga_index: 0,
+				current_manga_title: "Đang khởi tạo tác vụ quét...",
+				total_pages: 0,
+				current_page: 0,
+				percent: 0,
+				stage: "initializing",
+				message: "Đang khởi tạo worker và chuẩn bị quét...",
+				is_scanning: true,
+			});
+			setStats((prev) => (prev ? { ...prev, is_scanning: true } : prev));
+			setIsScanModalOpen(false);
+
 			const payload: {
 				force_rescan: boolean;
 				manga_ids?: string[];
 				language?: string;
 				scan_mode?: string;
 				reading_direction?: string;
+				chapter_language?: string;
+				skip_blank_pages?: boolean;
+				skip_duplicate_credits?: boolean;
 			} = {
 				force_rescan: scanForceRescan,
 				language: scanLanguage,
 				scan_mode: scanMode,
 				reading_direction: readingDirection,
+				chapter_language: scanChapterLanguage,
+				skip_blank_pages: skipBlankPages,
+				skip_duplicate_credits: skipDuplicateCredits,
 			};
 			if (scanTargetMangaIds.length > 0) {
 				payload.manga_ids = scanTargetMangaIds;
@@ -326,7 +365,6 @@ export const PanelWordsDetectorPage: React.FC = () => {
 			await client.post("/api/panels/scan", payload);
 			const status = await client.get("/api/panels/scan-status");
 			setScanStatus(status.data);
-			setIsScanModalOpen(false);
 			showAlert({
 				title: "Bắt đầu quét",
 				message:
@@ -340,8 +378,33 @@ export const PanelWordsDetectorPage: React.FC = () => {
 				message: apiErrorMessage(err, "Không thể khởi động tác vụ quét."),
 				type: "error",
 			});
+			setStats((prev) => (prev ? { ...prev, is_scanning: false } : prev));
 		} finally {
 			setStartingScan(false);
+		}
+	};
+
+	const handleDeleteAllPanels = async () => {
+		setIsDeletingAllPanels(true);
+		try {
+			await client.delete("/api/panels/all");
+			setShowDeleteAllConfirm(false);
+			showAlert({
+				title: "Thành công",
+				message: "Đã xóa toàn bộ metadata khung tranh trên toàn hệ thống.",
+				type: "success",
+			});
+			void fetchTelemetry();
+			setResults([]);
+			setTotalResults(0);
+		} catch (err) {
+			showAlert({
+				title: "Lỗi",
+				message: apiErrorMessage(err, "Không thể xóa toàn bộ dữ liệu panel."),
+				type: "error",
+			});
+		} finally {
+			setIsDeletingAllPanels(false);
 		}
 	};
 
@@ -396,7 +459,18 @@ export const PanelWordsDetectorPage: React.FC = () => {
 						</p>
 					</div>
 
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
+						<button
+							type="button"
+							onClick={() => setShowDeleteAllConfirm(true)}
+							disabled={isScanning || !stats?.total_panels}
+							className="flex items-center gap-2 px-4 py-3 rounded-2xl font-bold text-xs border border-red-500/30 text-red-400 hover:bg-red-500/10 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+							title="Xóa toàn bộ dữ liệu khung tranh đã quét của toàn bộ manga trên hệ thống"
+						>
+							<Trash2 size={16} />
+							<span>Xóa toàn bộ dữ liệu quét</span>
+						</button>
+
 						<button
 							type="button"
 							onClick={() => {
@@ -1021,6 +1095,24 @@ export const PanelWordsDetectorPage: React.FC = () => {
 								</label>
 							</div>
 
+							{/* Chapter Language Selection */}
+							<div className="pt-1">
+								<label className="text-xs font-bold text-[var(--text-primary)] block mb-1">
+									Lọc ngôn ngữ Chapter nguồn (Chapter Language Filter):
+									<select
+										value={scanChapterLanguage}
+										onChange={(e) => setScanChapterLanguage(e.target.value)}
+										className="w-full px-3 py-2 mt-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] text-xs font-bold text-[var(--text-primary)] focus:border-amber-500 transition cursor-pointer"
+									>
+										<option value="all">
+											Tất cả các ngôn ngữ (All Chapters)
+										</option>
+										<option value="en">Chỉ quét chapter tiếng Anh (en)</option>
+										<option value="vi">Chỉ quét chapter tiếng Việt (vi)</option>
+									</select>
+								</label>
+							</div>
+
 							{/* Force Rescan Checkbox */}
 							<label className="flex items-start gap-3 p-3.5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] cursor-pointer">
 								<input
@@ -1037,6 +1129,44 @@ export const PanelWordsDetectorPage: React.FC = () => {
 										Mặc định hệ thống sẽ tự động bỏ qua những trang đã có dữ
 										liệu trong Database để tiết kiệm tài nguyên. Bật tùy chọn
 										này nếu bạn muốn phân tích lại từ đầu.
+									</div>
+								</div>
+							</label>
+
+							{/* Skip Blank Pages */}
+							<label className="flex items-start gap-3 p-3.5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] cursor-pointer">
+								<input
+									type="checkbox"
+									checked={skipBlankPages}
+									onChange={(e) => setSkipBlankPages(e.target.checked)}
+									className="mt-0.5 rounded border-zinc-700 text-amber-500 focus:ring-amber-500 cursor-pointer"
+								/>
+								<div className="space-y-0.5">
+									<div className="font-semibold text-xs text-[var(--text-primary)]">
+										Tự động bỏ qua trang trắng / đen / đơn sắc
+									</div>
+									<div className="text-[11px] text-[var(--text-secondary)]">
+										Loại bỏ các trang chuyển cảnh hoặc trang không có nét vẽ /
+										lời thoại để tăng tốc quét.
+									</div>
+								</div>
+							</label>
+
+							{/* Skip Duplicate Credits */}
+							<label className="flex items-start gap-3 p-3.5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] cursor-pointer">
+								<input
+									type="checkbox"
+									checked={skipDuplicateCredits}
+									onChange={(e) => setSkipDuplicateCredits(e.target.checked)}
+									className="mt-0.5 rounded border-zinc-700 text-amber-500 focus:ring-amber-500 cursor-pointer"
+								/>
+								<div className="space-y-0.5">
+									<div className="font-semibold text-xs text-[var(--text-primary)]">
+										Khử trang credit nhóm dịch trùng lặp (Perceptual Hash)
+									</div>
+									<div className="text-[11px] text-[var(--text-secondary)]">
+										Tự động nhận diện và bỏ qua trang credit/watermark xuất hiện
+										lặp lại giữa các chapter.
 									</div>
 								</div>
 							</label>
@@ -1148,6 +1278,53 @@ export const PanelWordsDetectorPage: React.FC = () => {
 									<RotateCw size={14} />
 								)}
 								<span>Bắt đầu quét</span>
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* 6.5. Delete All Panels Confirmation Modal */}
+			{showDeleteAllConfirm && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+					<div className="relative w-full max-w-md p-6 rounded-3xl bg-[var(--bg-card)] border border-red-500/40 shadow-2xl space-y-4">
+						<div className="flex items-center space-x-3 text-red-500">
+							<AlertTriangle size={24} />
+							<h3 className="text-lg font-bold text-[var(--text-primary)]">
+								Xác nhận xóa toàn bộ dữ liệu quét
+							</h3>
+						</div>
+						<p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+							Hành động này sẽ xóa vĩnh viễn toàn bộ các khung tranh, dữ liệu
+							OCR và từ vựng đã trích xuất của tất cả manga trong toàn bộ hệ
+							thống. Bạn có chắc chắn muốn tiếp tục?
+						</p>
+						<div className="flex justify-end space-x-3 pt-2">
+							<button
+								type="button"
+								onClick={() => setShowDeleteAllConfirm(false)}
+								disabled={isDeletingAllPanels}
+								className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+							>
+								Hủy
+							</button>
+							<button
+								type="button"
+								onClick={handleDeleteAllPanels}
+								disabled={isDeletingAllPanels}
+								className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center space-x-2"
+							>
+								{isDeletingAllPanels ? (
+									<>
+										<Loader2 size={14} className="animate-spin" />
+										<span>Đang xóa...</span>
+									</>
+								) : (
+									<>
+										<Trash2 size={14} />
+										<span>Xóa toàn bộ thư viện</span>
+									</>
+								)}
 							</button>
 						</div>
 					</div>

@@ -1,4 +1,5 @@
 """Bounded public-image downloads; revalidate each redirect before following it."""
+
 import asyncio
 import io
 import ipaddress
@@ -17,7 +18,12 @@ async def validate_public_url(url: str) -> None:
         raise ValueError("Only public HTTP(S) image URLs without credentials are supported")
     if parsed.hostname.lower() == "localhost" or parsed.hostname.lower().endswith((".localhost", ".local")):
         raise ValueError("Local network image URLs are not allowed")
-    addresses = await asyncio.to_thread(socket.getaddrinfo, parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    addresses = await asyncio.to_thread(
+        socket.getaddrinfo,
+        parsed.hostname,
+        parsed.port or (443 if parsed.scheme == "https" else 80),
+        type=socket.SOCK_STREAM,
+    )
     if not addresses or any(not ipaddress.ip_address(address[4][0]).is_global for address in addresses):
         raise ValueError("Private, loopback and reserved network image URLs are not allowed")
 
@@ -45,7 +51,14 @@ async def fetch_public_image(url: str) -> tuple[bytes, str]:
                     if image.width * image.height > 40_000_000:
                         raise ValueError("Image dimensions exceed the supported limit")
                     content_type = Image.MIME.get(image.format)
-                    if content_type not in {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp", "image/tiff"}:
+                    if content_type not in {
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "image/gif",
+                        "image/bmp",
+                        "image/tiff",
+                    }:
                         raise ValueError("Unsupported image format")
                     image.verify()
                 return bytes(data), content_type

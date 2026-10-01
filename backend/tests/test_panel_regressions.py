@@ -262,6 +262,69 @@ class PanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["language"], "vi")
         self.assertEqual(query["scan_mode"], "bubble")
 
+    def test_side_by_side_bubbles_are_not_interleaved_in_panel(self):
+        """Regression test for Screenshot 4: Two side-by-side bubbles in a panel must not be interleaved line by line."""
+        vision = VisionService()
+        # Panel covering entire scene
+        panels = [(0.0, 0.0, 1.0, 1.0)]
+
+        # Left bubble detections (x from 0.05 to 0.40)
+        left_bubble_lines = [
+            {"text": "High", "norm_box": (0.08, 0.10, 0.35, 0.16), "center": (0.21, 0.13)},
+            {"text": "school", "norm_box": (0.07, 0.17, 0.36, 0.23), "center": (0.215, 0.20)},
+            {"text": "starts", "norm_box": (0.08, 0.24, 0.34, 0.30), "center": (0.21, 0.27)},
+            {"text": "in spring", "norm_box": (0.06, 0.31, 0.38, 0.37), "center": (0.22, 0.34)},
+            {"text": "and it's", "norm_box": (0.07, 0.38, 0.37, 0.44), "center": (0.22, 0.41)},
+            {"text": "a bit", "norm_box": (0.09, 0.45, 0.33, 0.51), "center": (0.21, 0.48)},
+            {"text": "far...", "norm_box": (0.10, 0.52, 0.30, 0.58), "center": (0.20, 0.55)},
+        ]
+
+        # Right bubble detections (x from 0.55 to 0.95)
+        right_bubble_lines = [
+            {"text": "Raise", "norm_box": (0.65, 0.11, 0.88, 0.17), "center": (0.76, 0.14)},
+            {"text": "your voice", "norm_box": (0.60, 0.18, 0.92, 0.24), "center": (0.76, 0.21)},
+            {"text": "a little more,", "norm_box": (0.58, 0.25, 0.95, 0.31), "center": (0.765, 0.28)},
+            {"text": "Kinomiya-san.", "norm_box": (0.57, 0.32, 0.94, 0.38), "center": (0.755, 0.35)},
+        ]
+
+        # Detections passed to association (shuffled/interleaved)
+        all_detections = left_bubble_lines + right_bubble_lines
+
+        panel_texts_list = vision.associate_text_with_panels(
+            panels, all_detections, preserve_outside_text=False, reading_direction="rtl"
+        )
+        self.assertEqual(len(panel_texts_list), 1)
+
+        assigned = panel_texts_list[0]
+        # In RTL comic reading order:
+        # All lines of Right bubble MUST appear together before Left bubble lines!
+        ordered_texts = [d["text"] for d in assigned]
+
+        # First 4 elements must belong to the right bubble
+        self.assertEqual(ordered_texts[:4], ["Raise", "your voice", "a little more,", "Kinomiya-san."])
+        # Following elements belong to left bubble
+        self.assertEqual(ordered_texts[4:], ["High", "school", "starts", "in spring", "and it's", "a bit", "far..."])
+
+    def test_english_word_segmentation_and_hyphenation(self):
+        """Regression test for Screenshots 3 & 5: Hyphenation, merged tokens, contractions, and proper names."""
+        # Screenshot 5: Iwas looking for onemore person.
+        self.assertEqual(
+            normalize_comic_text("Iwas looking for onemore person.", language="en"),
+            "I was looking for one more person.",
+        )
+
+        # Screenshot 4 text artifacts: inspring, andit's, abit
+        self.assertEqual(
+            normalize_comic_text("starts inspring andit's abit far.. Kinomiya-san.", language="en"),
+            "starts in spring and it's a bit far.. Kinomiya-san.",
+        )
+
+        # Screenshot 3: I'drecom- \nmenda multi-speed bike...
+        self.assertEqual(
+            normalize_comic_text("I'd recom-\nmend a multi-speed bike...", language="en"),
+            "I'd recommend a multi-speed bike...",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

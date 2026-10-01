@@ -1,11 +1,13 @@
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
+
 from backend.database.connection import get_db
 from backend.services.mangadex_service import mangadex_service
 
 logger = logging.getLogger(__name__)
+
 
 def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not doc:
@@ -14,6 +16,7 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if "_id" in doc:
         doc["_id"] = str(doc["_id"])
     return doc
+
 
 class CreatorService:
     def _get_creators_collection(self):
@@ -45,10 +48,12 @@ class CreatorService:
                     "youtube": details["youtube"],
                     "website": details["website"],
                     "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.utcnow(),
                 }
                 # Double-check case-insensitive before inserting, to avoid race conditions
-                race_check = await coll.find_one({"name": {"$regex": f"^{re.escape(details['name'])}$", "$options": "i"}})
+                race_check = await coll.find_one(
+                    {"name": {"$regex": f"^{re.escape(details['name'])}$", "$options": "i"}}
+                )
                 if not race_check:
                     await coll.insert_one(creator_doc)
                 else:
@@ -67,7 +72,7 @@ class CreatorService:
             "youtube": None,
             "website": None,
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
         await coll.insert_one(placeholder_doc)
         return serialize_doc(placeholder_doc)
@@ -78,7 +83,7 @@ class CreatorService:
         """
         coll = self._get_creators_collection()
         existing = await coll.find_one({"mangadex_id": dex_id})
-        
+
         try:
             details = await mangadex_service.get_creator_by_id(dex_id)
             if not details:
@@ -92,7 +97,7 @@ class CreatorService:
                 "pixiv": details["pixiv"],
                 "youtube": details["youtube"],
                 "website": details["website"],
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
             }
 
             if existing:
@@ -118,9 +123,9 @@ class CreatorService:
         """
         mangas_coll = get_db().mangas
         creators_coll = self._get_creators_collection()
-        
+
         names_set = set()
-        
+
         # 1. Fetch from mangas collection based on role
         if role == "author":
             authors_raw = await mangas_coll.distinct("author")
@@ -133,7 +138,7 @@ class CreatorService:
             artists_raw = await mangas_coll.distinct("artist")
             self._add_split_names(authors_raw, names_set)
             self._add_split_names(artists_raw, names_set)
-            
+
         # 2. Fetch from creators collection
         async for creator in creators_coll.find({}, {"name": 1}):
             name = creator.get("name")
@@ -141,17 +146,14 @@ class CreatorService:
                 clean = name.strip()
                 if clean and clean.lower() not in ["unknown", "n/a", ""]:
                     names_set.add(clean)
-                    
+
         # 3. Filter using name-swapping logic
         result = list(names_set)
         if query:
             query_words = [w.lower() for w in query.strip().split() if w]
             if query_words:
-                result = [
-                    name for name in result 
-                    if all(qw in name.lower() for qw in query_words)
-                ]
-                
+                result = [name for name in result if all(qw in name.lower() for qw in query_words)]
+
         # Sort alphabetically
         result.sort()
         return result
@@ -161,10 +163,11 @@ class CreatorService:
             if not raw_val:
                 continue
             # Split by comma or semicolon
-            parts = re.split(r'[,;]', raw_val)
+            parts = re.split(r"[,;]", raw_val)
             for p in parts:
                 clean = p.strip()
                 if clean and clean.lower() not in ["unknown", "n/a", "", "various", "various creators"]:
                     names_set.add(clean)
+
 
 creator_service = CreatorService()

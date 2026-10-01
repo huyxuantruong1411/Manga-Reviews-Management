@@ -1,7 +1,10 @@
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
+
 from backend.models.pyobjectid import PyObjectId
+
 
 class PageItem(BaseModel):
     page_number: int = Field(..., description="1-indexed page number")
@@ -12,6 +15,7 @@ class PageItem(BaseModel):
     height: Optional[int] = Field(None, description="Image height in pixels")
     md5_hash: Optional[str] = Field(None, description="MD5 hash for duplicate detection")
     url: Optional[str] = Field(None, description="Presigned URL for reading")
+
 
 class ChapterBase(BaseModel):
     manga_id: str = Field(..., description="Target manga ID")
@@ -30,8 +34,10 @@ class ChapterBase(BaseModel):
     readable_at: Optional[datetime] = Field(None, description="Readable date on source")
     external_url: Optional[str] = Field(None, description="External URL if hosted externally")
 
+
 class ChapterCreate(ChapterBase):
     pass
+
 
 class ChapterInDB(ChapterBase):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
@@ -40,9 +46,8 @@ class ChapterInDB(ChapterBase):
 
     class Config:
         populate_by_name = True
-        json_encoders = {
-            datetime: lambda dt: dt.isoformat()
-        }
+        json_encoders = {datetime: lambda dt: dt.isoformat()}
+
 
 class ReadingProgress(BaseModel):
     manga_id: str
@@ -53,6 +58,7 @@ class ReadingProgress(BaseModel):
     reading_mode: str = Field("long_strip", description="'long_strip' | 'single' | 'double_ltr' | 'double_rtl'")
     fit_mode: str = Field("width", description="'width' | 'height' | 'original'")
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
 
 # Request / Response Schemas
 class DetectedChapter(BaseModel):
@@ -68,6 +74,7 @@ class DetectedChapter(BaseModel):
     is_duplicate: bool = False
     existing_chapter_id: Optional[str] = None
 
+
 class FolderScanResponse(BaseModel):
     folder_path: str
     is_valid: bool
@@ -76,6 +83,7 @@ class FolderScanResponse(BaseModel):
     detected_chapters: List[DetectedChapter]
     unrecognized_folders: List[str] = []
 
+
 class FolderImportRequest(BaseModel):
     folder_path: str
     conflict_strategy: str = Field("skip", description="'skip' | 'overwrite' | 'keep_both'")
@@ -83,8 +91,10 @@ class FolderImportRequest(BaseModel):
     default_group: Optional[str] = Field(None, description="Default scanlation group")
     selected_folders: Optional[List[str]] = Field(None, description="Optional subset of folder names to import")
 
+
 class DeletePagesRequest(BaseModel):
     page_numbers: List[int] = Field(..., description="List of 1-indexed page numbers to delete")
+
 
 class StorageDuplicateItem(BaseModel):
     chapter_id: str
@@ -95,6 +105,7 @@ class StorageDuplicateItem(BaseModel):
     object_key: str
     file_size: int
     url: Optional[str] = None
+
 
 class StorageDuplicateGroup(BaseModel):
     md5_hash: str

@@ -22,20 +22,26 @@ class ScanPanelsRequest(BaseModel):
     chapter_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
     language: Optional[str] = Field("en", description="Target language: en (English) or vi (Vietnamese)")
+    chapter_language: Optional[str] = Field(None, description="Filter chapter source: 'en', 'vi', or 'all'")
     scan_mode: Optional[str] = Field("panel", description="Extraction mode: panel, bubble, or fullpage")
     reading_direction: Optional[str] = Field(
         "rtl", description="Reading direction: rtl (Manga) or ltr (Webtoon/Comics)"
     )
+    skip_blank_pages: bool = Field(True, description="Automatically skip blank/solid pages")
+    skip_duplicate_credits: bool = Field(True, description="Filter duplicate credit pages using perceptual hash")
 
 
 class GlobalScanRequest(BaseModel):
     manga_ids: Optional[List[str]] = Field(None, min_length=1, max_length=5000)
     force_rescan: bool = False
     language: Optional[str] = Field("en", description="Target language: en (English) or vi (Vietnamese)")
+    chapter_language: Optional[str] = Field(None, description="Filter chapter source: 'en', 'vi', or 'all'")
     scan_mode: Optional[str] = Field("panel", description="Extraction mode: panel, bubble, or fullpage")
     reading_direction: Optional[str] = Field(
         "rtl", description="Reading direction: rtl (Manga) or ltr (Webtoon/Comics)"
     )
+    skip_blank_pages: bool = Field(True, description="Automatically skip blank/solid pages")
+    skip_duplicate_credits: bool = Field(True, description="Filter duplicate credit pages using perceptual hash")
 
 
 # ==========================================
@@ -104,8 +110,11 @@ async def trigger_global_library_scan(
             manga_ids=payload.manga_ids,
             force_rescan=payload.force_rescan,
             language=payload.language,
+            chapter_language=payload.chapter_language,
             scan_mode=payload.scan_mode or "panel",
             reading_direction=payload.reading_direction or "rtl",
+            skip_blank_pages=payload.skip_blank_pages,
+            skip_duplicate_credits=payload.skip_duplicate_credits,
         )
         if not res["success"]:
             raise HTTPException(status_code=409, detail=res["message"])
@@ -114,6 +123,17 @@ async def trigger_global_library_scan(
         raise
     except Exception as e:
         logger.error(f"Error triggering global library scan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/panels/all")
+async def delete_all_panels():
+    """Delete all scanned panels and page index records across the entire library."""
+    try:
+        res = await panel_scanner_service.delete_all_panels()
+        return res
+    except Exception as e:
+        logger.error(f"Error deleting all panels: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -183,8 +203,11 @@ async def trigger_manga_scan(
             chapter_ids=payload.chapter_ids,
             force_rescan=payload.force_rescan,
             language=payload.language,
+            chapter_language=payload.chapter_language,
             scan_mode=payload.scan_mode or "panel",
             reading_direction=payload.reading_direction or "rtl",
+            skip_blank_pages=payload.skip_blank_pages,
+            skip_duplicate_credits=payload.skip_duplicate_credits,
         )
         if not res["success"]:
             raise HTTPException(status_code=409, detail=res["message"])
@@ -193,6 +216,20 @@ async def trigger_manga_scan(
         raise
     except Exception as e:
         logger.error(f"Error triggering manga panels scan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/manga/{manga_id}/panels")
+async def delete_manga_panels(
+    manga_id: str = Path(...),
+    chapter_id: Optional[str] = Query(None, description="Optional specific chapter ID to clear"),
+):
+    """Delete scanned panels and page index records for a given manga or chapter."""
+    try:
+        res = await panel_scanner_service.delete_manga_panels(manga_id, chapter_id)
+        return res
+    except Exception as e:
+        logger.error(f"Error deleting manga panels for {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -372,4 +409,31 @@ async def define_word(word: str = Path(...)):
         return res
     except Exception as e:
         logger.error(f"Error looking up definition for '{word}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class NarratePanelRequest(BaseModel):
+    mode: str = Field("scene", description="Extraction mode: scene, layout, or dialogue")
+    prompt: Optional[str] = Field(None, description="Optional custom prompt")
+
+
+@router.post("/panels/{panel_id}/narrate")
+async def narrate_panel(
+    panel_id: str = Path(...),
+    payload: NarratePanelRequest = Body(default_factory=NarratePanelRequest),
+):
+    """Enrich a manga scene panel with deep narrative or visual layout description using Moondream2."""
+    from backend.services.narrator_service import narrator_service
+
+    try:
+        res = await narrator_service.narrate_panel(
+            panel_id=panel_id,
+            mode=payload.mode,
+            custom_prompt=payload.prompt,
+        )
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error narrating panel {panel_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

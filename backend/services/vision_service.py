@@ -331,25 +331,42 @@ class VisionService:
         for i in range(n):
             box_a = detections[i]["norm_box"]
             ha = max(0.005, box_a[3] - box_a[1])
+            wa = max(0.005, box_a[2] - box_a[0])
+            cxa = (box_a[0] + box_a[2]) / 2.0
 
             for j in range(i + 1, n):
                 box_b = detections[j]["norm_box"]
                 hb = max(0.005, box_b[3] - box_b[1])
+                wb = max(0.005, box_b[2] - box_b[0])
+                cxb = (box_b[0] + box_b[2]) / 2.0
 
                 # Vertical distance between lines
                 dist_y = max(0.0, max(box_a[1], box_b[1]) - min(box_a[3], box_b[3]))
+                # Vertical intersection
+                inter_y = min(box_a[3], box_b[3]) - max(box_a[1], box_b[1])
                 # Horizontal intersection
                 inter_x = min(box_a[2], box_b[2]) - max(box_a[0], box_b[0])
 
+                # Heavy overlap check
+                inter_area = max(0.0, inter_x) * max(0.0, inter_y)
+                smaller_box_area = max(1e-6, min(wa * ha, wb * hb))
+                if inter_area > 0 and (inter_area / smaller_box_area) > 0.4:
+                    union(i, j)
+                    continue
+
+                # If they overlap vertically significantly but are horizontally separated columns,
+                # they belong to separate speech bubbles and MUST NOT be merged!
+                if inter_y > 0.3 * min(ha, hb) and inter_x <= 0:
+                    continue
+
                 # Proximity rule: consecutive lines in speech bubble
                 close_vertical = dist_y <= (1.6 * min(ha, hb) + 0.02)
-                has_x_alignment = inter_x > -0.05 or (max(box_a[0], box_b[0]) - min(box_a[2], box_b[2]) <= 0.05)
+                min_w = min(wa, wb)
+                max_w = max(wa, wb)
+                # Must have positive horizontal overlap or very close centers relative to width
+                has_x_alignment = (inter_x > 0 and (inter_x / min_w) >= 0.20) or (abs(cxa - cxb) <= 0.35 * max_w)
 
-                inter_area = max(0.0, min(box_a[2], box_b[2]) - max(box_a[0], box_b[0])) * max(
-                    0.0, min(box_a[3], box_b[3]) - max(box_a[1], box_b[1])
-                )
-
-                if inter_area > 0 or (close_vertical and has_x_alignment):
+                if close_vertical and has_x_alignment:
                     union(i, j)
 
         clusters: Dict[int, List[Dict[str, Any]]] = {}
@@ -458,12 +475,15 @@ class VisionService:
                     panel_texts[fallback_idx].append(det)
 
         for p_idx in range(len(panel_texts)):
-            panel_texts[p_idx].sort(
-                key=lambda d: (
-                    round(d["norm_box"][1], 2),
-                    round(d["norm_box"][0], 2),
-                )
-            )
+            if len(panel_texts[p_idx]) > 1:
+                # Group text detections in this panel into bubbles, ordered by reading direction
+                panel_bubbles = self.cluster_text_into_bubbles(panel_texts[p_idx], reading_direction=reading_direction)
+                ordered_dets = []
+                for b in panel_bubbles:
+                    ordered_dets.extend(b["detections"])
+                panel_texts[p_idx] = ordered_dets
+            elif len(panel_texts[p_idx]) == 1:
+                pass
 
         if preserve_outside_text and unassigned_detections:
             outside_bubbles = self.cluster_text_into_bubbles(unassigned_detections, reading_direction=reading_direction)
@@ -473,6 +493,35 @@ class VisionService:
                 panel_texts.append(ob["detections"])
 
         return panel_texts
+
+    def is_blank_or_uniform_page(self, img: np.ndarray, std_thresh: float = 6.0) -> bool:
+        """
+        Check if an image is blank, solid black/white, or contains almost zero visual information.
+        Avoids wasting OCR on empty spacer pages or corrupted frames.
+        """
+        if img is None:
+            return True
+        try:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+            _, stddev = cv2.meanStdDev(gray)
+            return float(stddev[0][0]) < std_thresh
+        except Exception as e:
+            logger.warning(f"Error checking blank page: {e}")
+            return False
+
+    def compute_image_phash(self, img: np.ndarray) -> Optional[str]:
+        """Compute perceptual hash (pHash) to detect duplicate credit pages across chapters."""
+        if img is None:
+            return None
+        try:
+            import imagehash
+
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
+            pil_img = Image.fromarray(rgb)
+            return str(imagehash.phash(pil_img))
+        except Exception as e:
+            logger.warning(f"Error computing pHash: {e}")
+            return None
 
     def get_panel_crop_stream(
         self,

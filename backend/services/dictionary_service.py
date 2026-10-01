@@ -1,8 +1,10 @@
 import logging
-from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
+from typing import Any, Dict
 from urllib.parse import quote
+
 import httpx
+
 from backend.database.connection import get_db
 
 logger = logging.getLogger("dictionary_service")

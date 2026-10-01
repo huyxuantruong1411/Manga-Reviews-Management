@@ -83,6 +83,22 @@ VIETNAMESE_STOPWORDS = {
 }
 
 
+_EN_VOCAB_STRINGS = None
+
+
+def get_english_vocab():
+    global _EN_VOCAB_STRINGS
+    if _EN_VOCAB_STRINGS is None:
+        try:
+            import spacy
+
+            nlp = spacy.load("en_core_web_sm")
+            _EN_VOCAB_STRINGS = nlp.vocab.strings
+        except Exception:
+            _EN_VOCAB_STRINGS = set()
+    return _EN_VOCAB_STRINGS
+
+
 def strip_vietnamese_accents(text: str) -> str:
     """Strip diacritics/accents from Vietnamese text for robust search fallback."""
     if not text:
@@ -96,11 +112,12 @@ def normalize_comic_text(text: str, language: str = "en") -> str:
     """
     Clean up comic-specific dialogue formatting:
     1. Rejoin hyphenated words split across lines:
-       - English: 'incredi-\\nble' -> 'incredible'
+       - English: 'recom-\\nmend' -> 'recommend', while preserving 'multi-speed'
        - Vietnamese: 'cố-\\nlên' -> 'cố lên' (Vietnamese monosyllabic words)
-    2. Segment merged words for English (wordninja)
-    3. Normalize ALL-CAPS text to natural sentence case for better NLP lemmatization
-    4. Collapse redundant whitespace
+    2. Split contractions stuck to words: 'andit's' -> 'and it's', 'I'drecom-' -> 'I'd recom-'
+    3. Segment squished English words caused by narrow comic fonts ('Iwas' -> 'I was', 'onemore' -> 'one more')
+    4. Normalize ALL-CAPS text to natural sentence case for better NLP lemmatization
+    5. Collapse redundant whitespace
     """
     if not text:
         return ""
@@ -116,21 +133,94 @@ def normalize_comic_text(text: str, language: str = "en") -> str:
         t = re.sub(r"-\s+", " ", t)
         t = re.sub(r"\s+", " ", t).strip()
     else:
-        t = HYPHEN_REGEX.sub(r"\1\2", text)
-        t = re.sub(r"-\s+", "", t)
+        vocab = get_english_vocab()
+
+        def _resolve_hyphen(m):
+            w1 = m.group(1)
+            w2 = m.group(2)
+            joined = (w1 + w2).lower()
+            if joined in vocab:
+                return w1 + w2
+            return f"{w1}-{w2}"
+
+        t = HYPHEN_REGEX.sub(_resolve_hyphen, text)
+        t = re.sub(r"-\s*\n\s*", "-", t)
         t = re.sub(r"\s+", " ", t).strip()
 
-    # 2. Only repair long ALL-CAPS English OCR runs
+    # 2. English contractions and word segmentation
     if not is_vi:
         import wordninja
 
-        def split_run(match):
+        # Separate contractions glued to adjacent words:
+        # e.g., andit's -> and it's, butit's -> but it's
+        t = re.sub(
+            r"\b(and|but|or|if|so|that|for|with)(it's|i'm|i'd|i'll|you're|we're|they're)\b",
+            r"\1 \2",
+            t,
+            flags=re.IGNORECASE,
+        )
+        # e.g., I'drecommend -> I'd recommend
+        t = re.sub(r"\b([A-Za-z]+'(?:d|m|ll|re|ve|s|t))([A-Za-z]{2,})\b", r"\1 \2", t)
+
+        vocab = get_english_vocab()
+        tokens = t.split()
+        repaired_tokens = []
+
+        for token in tokens:
+            # Strip leading/trailing punctuation for analysis
+            match = re.match(r"^([^A-Za-z]*)([A-Za-z'-]+)([^A-Za-z]*)$", token)
+            if not match:
+                repaired_tokens.append(token)
+                continue
+
+            lead_punct, core_word, trail_punct = match.groups()
+
+            # Skip if contains hyphens (like multi-speed) or apostrophes (like I'd, it's)
+            if "-" in core_word or "'" in core_word:
+                repaired_tokens.append(token)
+                continue
+
+            # Don't split short tokens or tokens that are already valid English words
+            if len(core_word) < 4:
+                # Special check for 'Iwas' -> length 4, but let's check core_word.lower()
+                pass
+
+            core_lower = core_word.lower()
+            # If word is already in vocabulary, keep it untouched (e.g. school, starts, person)
+            # EXCEPT if it starts with 'I' followed by a lowercase verb (e.g. Iwas, Iwent, Ican)
+            is_i_contraction = core_word.startswith("I") and len(core_word) >= 3 and core_word[1].islower()
+            if core_lower in vocab and not is_i_contraction:
+                repaired_tokens.append(token)
+                continue
+
+            # Skip proper names (TitleCase, e.g. Kinomiya, Naruto) unless it's an 'I'-run
+            if core_word.istitle() and not is_i_contraction:
+                repaired_tokens.append(token)
+                continue
+
+            # Attempt word segmentation
+            parts = wordninja.split(core_word)
+            if len(parts) > 1 and all(len(p) > 1 or p.lower() in {"a", "i"} for p in parts):
+                # Ensure all segments are valid English vocabulary words
+                if all(p.lower() in vocab for p in parts):
+                    if core_word[0].isupper() and parts[0].islower():
+                        parts[0] = parts[0].capitalize()
+                    segmented = " ".join(parts)
+                    repaired_tokens.append(f"{lead_punct}{segmented}{trail_punct}")
+                    continue
+
+            repaired_tokens.append(token)
+
+        t = " ".join(repaired_tokens)
+
+        # Split long all-caps runs
+        def split_allcaps_run(match):
             parts = wordninja.split(match.group())
             if len(parts) > 1 and all(len(p) > 1 or p.lower() in {"a", "i"} for p in parts):
                 return " ".join(parts).upper()
             return match.group()
 
-        t = re.sub(r"\b[A-Z]{9,}\b", split_run, t)
+        t = re.sub(r"\b[A-Z]{9,}\b", split_allcaps_run, t)
 
     # 3. If entire text is UPPERCASE, convert to title/sentence case
     if t.isupper() and len(t) > 3:
@@ -400,8 +490,11 @@ class PanelScannerService:
         manga_ids: Optional[List[str]] = None,
         force_rescan: bool = False,
         language: Optional[str] = None,
+        chapter_language: Optional[str] = None,
         scan_mode: str = "panel",
         reading_direction: str = "rtl",
+        skip_blank_pages: bool = True,
+        skip_duplicate_credits: bool = True,
     ) -> Dict[str, Any]:
         """Trigger background scanning across the entire manga library or selected manga."""
         if self._global_scan_active or any(self._active_scans.values()):
@@ -418,8 +511,11 @@ class PanelScannerService:
                 manga_ids,
                 force_rescan,
                 language=language,
+                chapter_language=chapter_language,
                 scan_mode=scan_mode,
                 reading_direction=reading_direction,
+                skip_blank_pages=skip_blank_pages,
+                skip_duplicate_credits=skip_duplicate_credits,
             )
         )
         return {
@@ -440,8 +536,11 @@ class PanelScannerService:
         chapter_ids: Optional[List[str]] = None,
         force_rescan: bool = False,
         language: Optional[str] = None,
+        chapter_language: Optional[str] = None,
         scan_mode: str = "panel",
         reading_direction: str = "rtl",
+        skip_blank_pages: bool = True,
+        skip_duplicate_credits: bool = True,
     ) -> Dict[str, Any]:
         """Trigger background scanning and feature extraction for a single manga."""
         if any(self._active_scans.values()) or self._global_scan_active:
@@ -458,8 +557,11 @@ class PanelScannerService:
                 chapter_ids,
                 force_rescan,
                 language=language,
+                chapter_language=chapter_language,
                 scan_mode=scan_mode,
                 reading_direction=reading_direction,
+                skip_blank_pages=skip_blank_pages,
+                skip_duplicate_credits=skip_duplicate_credits,
             )
         )
         return {
@@ -473,8 +575,11 @@ class PanelScannerService:
         chapter_ids: Optional[List[str]],
         force_rescan: bool,
         language: Optional[str] = None,
+        chapter_language: Optional[str] = None,
         scan_mode: str = "panel",
         reading_direction: str = "rtl",
+        skip_blank_pages: bool = True,
+        skip_duplicate_credits: bool = True,
     ):
         try:
             await self.ensure_indexes()
@@ -489,6 +594,8 @@ class PanelScannerService:
 
             # 2. Query chapters
             c_filter: Dict[str, Any] = {"manga_id": manga_id}
+            if chapter_language and chapter_language != "all":
+                c_filter["language"] = chapter_language
             if chapter_ids:
                 obj_ids = [ObjectId(cid) for cid in chapter_ids if ObjectId.is_valid(cid)]
                 str_ids = [cid for cid in chapter_ids if not ObjectId.is_valid(cid)]
@@ -514,6 +621,7 @@ class PanelScannerService:
 
             processed_pages = 0
             panels_extracted_total = 0
+            seen_credit_hashes: Dict[str, int] = {}
 
             for chap in chapters:
                 c_id_str = str(chap["_id"])
@@ -564,11 +672,44 @@ class PanelScannerService:
                     if not image_bytes:
                         raise RuntimeError(f"Không đọc được Ch.{chap_num}, trang {page_num}; dữ liệu cũ được giữ lại.")
 
+                    img = vision_service.decode_image_bytes(image_bytes)
+                    if img is None:
+                        processed_pages += 1
+                        continue
+
+                    # Pre-processing filter 1: Skip blank or uniform black/white pages
+                    if skip_blank_pages and vision_service.is_blank_or_uniform_page(img):
+                        processed_pages += 1
+                        await self._emit_progress(
+                            manga_id,
+                            "indexing",
+                            processed_pages,
+                            total_pages,
+                            f"Bỏ qua trang trắng/đen không có chi tiết: Ch.{chap_num} • Trang {page_num}",
+                        )
+                        continue
+
+                    # Pre-processing filter 2: Skip duplicate credits
+                    if skip_duplicate_credits:
+                        ph = vision_service.compute_image_phash(img)
+                        if ph:
+                            seen_credit_hashes[ph] = seen_credit_hashes.get(ph, 0) + 1
+                            if seen_credit_hashes[ph] >= 2 and (page_num <= 2 or page_num >= len(pages) - 1):
+                                processed_pages += 1
+                                await self._emit_progress(
+                                    manga_id,
+                                    "indexing",
+                                    processed_pages,
+                                    total_pages,
+                                    f"Bỏ qua trang credit trùng lặp: Ch.{chap_num} • Trang {page_num}",
+                                )
+                                continue
+
                     # 2. Run vision pipeline in thread pool to prevent blocking event loop
                     eff_lang = language or chap.get("language") or "en"
                     extracted_panels = await asyncio.to_thread(
                         self._analyze_page_image,
-                        image_bytes,
+                        img,
                         manga_id,
                         manga_title,
                         c_id_str,
@@ -618,8 +759,11 @@ class PanelScannerService:
         manga_ids: Optional[List[str]],
         force_rescan: bool,
         language: Optional[str] = None,
+        chapter_language: Optional[str] = None,
         scan_mode: str = "panel",
         reading_direction: str = "rtl",
+        skip_blank_pages: bool = True,
+        skip_duplicate_credits: bool = True,
     ):
         """Execute full library scanning across all downloaded manga chapters."""
         try:
@@ -661,10 +805,11 @@ class PanelScannerService:
             manga_chapters_map: Dict[str, List[Dict[str, Any]]] = {}
 
             for mid in target_ids:
+                c_query: Dict[str, Any] = {"manga_id": mid}
+                if chapter_language and chapter_language != "all":
+                    c_query["language"] = chapter_language
                 chaps = (
-                    await db.chapters.find({"manga_id": mid})
-                    .sort([("chapter_numeric", 1), ("chapter_number", 1)])
-                    .to_list(None)
+                    await db.chapters.find(c_query).sort([("chapter_numeric", 1), ("chapter_number", 1)]).to_list(None)
                 )
                 manga_chapters_map[mid] = chaps
                 for c in chaps:
@@ -680,12 +825,13 @@ class PanelScannerService:
                     current_page=0,
                     total_pages=0,
                     panels_extracted=0,
-                    message="Chưa có trang truyện nào được tải xuống để quét.",
+                    message="Chưa có trang truyện nào phù hợp với bộ lọc để quét.",
                 )
                 return
 
             total_processed_pages = 0
             total_panels_extracted = 0
+            seen_credit_hashes: Dict[str, int] = {}
 
             for m_idx, mid in enumerate(target_ids):
                 if self._cancel_global_scan:
@@ -769,10 +915,49 @@ class PanelScannerService:
                                 f"Không đọc được {manga_title}, Ch.{chap_num}, trang {page_num}; dữ liệu cũ được giữ lại."
                             )
 
+                        img = vision_service.decode_image_bytes(image_bytes)
+                        if img is not None:
+                            # Filter blank or uniform pages
+                            if skip_blank_pages and vision_service.is_blank_or_uniform_page(img):
+                                total_processed_pages += 1
+                                await self._emit_global_progress(
+                                    stage="indexing",
+                                    current_manga_id=mid,
+                                    current_manga_title=manga_title,
+                                    mangas_scanned=m_idx,
+                                    total_mangas=total_mangas,
+                                    current_page=total_processed_pages,
+                                    total_pages=total_library_pages,
+                                    panels_extracted=total_panels_extracted,
+                                    message=f"Bỏ qua trang trắng/đen: {manga_title} • Ch.{chap_num} • Trang {page_num}",
+                                )
+                                continue
+
+                            # Filter duplicate credit pages
+                            if skip_duplicate_credits:
+                                ph = vision_service.compute_image_phash(img)
+                                if ph:
+                                    seen_credit_hashes[ph] = seen_credit_hashes.get(ph, 0) + 1
+                                    if seen_credit_hashes[ph] >= 2 and (page_num <= 2 or page_num >= len(pages) - 1):
+                                        total_processed_pages += 1
+                                        await self._emit_global_progress(
+                                            stage="indexing",
+                                            current_manga_id=mid,
+                                            current_manga_title=manga_title,
+                                            mangas_scanned=m_idx,
+                                            total_mangas=total_mangas,
+                                            current_page=total_processed_pages,
+                                            total_pages=total_library_pages,
+                                            panels_extracted=total_panels_extracted,
+                                            message=f"Bỏ qua credit trùng lặp: {manga_title} • Ch.{chap_num} • Trang {page_num}",
+                                        )
+                                        continue
+
                         eff_lang = language or chap.get("language") or "en"
+                        target_input = img if img is not None else image_bytes
                         extracted_panels = await asyncio.to_thread(
                             self._analyze_page_image,
-                            image_bytes,
+                            target_input,
                             mid,
                             manga_title,
                             c_id_str,
@@ -934,7 +1119,7 @@ class PanelScannerService:
 
     def _analyze_page_image(
         self,
-        image_bytes: bytes,
+        image_input: Any,
         manga_id: str,
         manga_title: str,
         chapter_id: str,
@@ -948,7 +1133,11 @@ class PanelScannerService:
         reading_direction: str = "rtl",
     ) -> List[Dict[str, Any]]:
         """Decode image, segment panels or speech bubbles, run OCR, NLP tokenize, lemmatize."""
-        img = vision_service.decode_image_bytes(image_bytes)
+        if isinstance(image_input, (bytes, bytearray)):
+            img = vision_service.decode_image_bytes(image_input)
+        else:
+            img = image_input
+
         if img is None:
             raise ValueError("Trang truyện không phải ảnh hợp lệ hoặc đã hỏng")
 
@@ -1315,6 +1504,40 @@ class PanelScannerService:
                 await collection.update_many(
                     {"chapter_id": chapter_id, "page_number": -new_p}, {"$set": {"page_number": new_p}}
                 )
+
+    async def delete_manga_panels(self, manga_id: str, chapter_id: Optional[str] = None) -> Dict[str, Any]:
+        """Delete all extracted panels and scan page records for a manga or specific chapter."""
+        selector: Dict[str, Any] = {"manga_id": manga_id}
+        if chapter_id:
+            selector["chapter_id"] = chapter_id
+
+        col = self._get_panels_col()
+        p_res = await col.delete_many(selector)
+        pages_res = await get_db().panel_scan_pages.delete_many(selector)
+        logger.info(
+            f"Deleted {p_res.deleted_count} panels and {pages_res.deleted_count} scan pages for manga {manga_id}"
+        )
+        return {
+            "success": True,
+            "deleted_panels": p_res.deleted_count,
+            "deleted_pages": pages_res.deleted_count,
+            "message": f"Đã xóa {p_res.deleted_count} panels và {pages_res.deleted_count} trang đã quét.",
+        }
+
+    async def delete_all_panels(self) -> Dict[str, Any]:
+        """Delete all extracted panels and scan page records across the entire system."""
+        col = self._get_panels_col()
+        p_res = await col.delete_many({})
+        pages_res = await get_db().panel_scan_pages.delete_many({})
+        logger.info(
+            f"Global panel purge: deleted {p_res.deleted_count} panels and {pages_res.deleted_count} scan pages"
+        )
+        return {
+            "success": True,
+            "deleted_panels": p_res.deleted_count,
+            "deleted_pages": pages_res.deleted_count,
+            "message": f"Đã xóa toàn bộ {p_res.deleted_count} panels và {pages_res.deleted_count} trang đã quét trong hệ thống.",
+        }
 
 
 panel_scanner_service = PanelScannerService()

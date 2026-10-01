@@ -1,12 +1,15 @@
-import logging
 import json
+import logging
 import re
-from typing import Optional, List, Dict, Any, Union
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+
 from bson import ObjectId
+
 from backend.database.connection import get_db
 
 logger = logging.getLogger(__name__)
+
 
 class AuditService:
     def _get_audit_collection(self):
@@ -70,7 +73,7 @@ class AuditService:
         note: Optional[str] = None,
         actor: str = "user",
         details: Optional[Dict[str, Any]] = None,
-        timestamp: Optional[datetime] = None
+        timestamp: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """
         Record a comprehensive audit log entry for core system operations.
@@ -81,10 +84,7 @@ class AuditService:
             resolved_title = entity_title
             if not resolved_title and entity_type == "manga" and ObjectId.is_valid(entity_id):
                 try:
-                    manga_doc = await self._get_mangas_collection().find_one(
-                        {"_id": ObjectId(entity_id)},
-                        {"title": 1}
-                    )
+                    manga_doc = await self._get_mangas_collection().find_one({"_id": ObjectId(entity_id)}, {"title": 1})
                     if manga_doc:
                         resolved_title = manga_doc.get("title")
                 except Exception:
@@ -113,7 +113,7 @@ class AuditService:
                 "new_value": self._format_value(new_value),
                 "timestamp": event_timestamp,
                 "note": note,
-                "details": cleaned_details
+                "details": cleaned_details,
             }
 
             res = await self._get_audit_collection().insert_one(log_doc)
@@ -135,7 +135,7 @@ class AuditService:
         end_date: Optional[datetime] = None,
         skip: int = 0,
         limit: int = 20,
-        sort_order: str = "desc"
+        sort_order: str = "desc",
     ) -> Dict[str, Any]:
         """
         Query audit logs with multi-field search, filtering, and pagination.
@@ -159,17 +159,19 @@ class AuditService:
         # Search across entity_title, note, field, action, and entity_id
         if search and search.strip():
             escaped = re.escape(search.strip())
-            clauses.append({
-                "$or": [
-                    {"entity_title": {"$regex": escaped, "$options": "i"}},
-                    {"note": {"$regex": escaped, "$options": "i"}},
-                    {"field": {"$regex": escaped, "$options": "i"}},
-                    {"action": {"$regex": escaped, "$options": "i"}},
-                    {"entity_id": {"$regex": escaped, "$options": "i"}},
-                    {"old_value": {"$regex": escaped, "$options": "i"}},
-                    {"new_value": {"$regex": escaped, "$options": "i"}}
-                ]
-            })
+            clauses.append(
+                {
+                    "$or": [
+                        {"entity_title": {"$regex": escaped, "$options": "i"}},
+                        {"note": {"$regex": escaped, "$options": "i"}},
+                        {"field": {"$regex": escaped, "$options": "i"}},
+                        {"action": {"$regex": escaped, "$options": "i"}},
+                        {"entity_id": {"$regex": escaped, "$options": "i"}},
+                        {"old_value": {"$regex": escaped, "$options": "i"}},
+                        {"new_value": {"$regex": escaped, "$options": "i"}},
+                    ]
+                }
+            )
 
         # Date range filtering
         time_query = {}
@@ -197,12 +199,7 @@ class AuditService:
         async for doc in cursor:
             items.append(self._serialize_log(doc))
 
-        return {
-            "total": total,
-            "items": items,
-            "skip": skip,
-            "limit": limit
-        }
+        return {"total": total, "items": items, "skip": skip, "limit": limit}
 
     async def get_entity_history(self, entity_id: str, limit: int = 200) -> List[Dict[str, Any]]:
         """
@@ -237,10 +234,7 @@ class AuditService:
             logs_24h = await coll.count_documents({"timestamp": {"$gte": twenty_four_hours_ago}})
 
             # Breakdown by entity_type
-            entity_pipeline = [
-                {"$group": {"_id": "$entity_type", "count": {"$sum": 1}}},
-                {"$sort": {"count": -1}}
-            ]
+            entity_pipeline = [{"$group": {"_id": "$entity_type", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
             by_entity = {}
             async for doc in coll.aggregate(entity_pipeline):
                 if doc["_id"]:
@@ -250,7 +244,7 @@ class AuditService:
             action_pipeline = [
                 {"$group": {"_id": "$action", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
-                {"$limit": 15}
+                {"$limit": 15},
             ]
             by_action = {}
             async for doc in coll.aggregate(action_pipeline):
@@ -263,10 +257,7 @@ class AuditService:
                 + by_action.get("update_review", 0)
                 + by_action.get("delete_review", 0)
             )
-            system_logs = (
-                by_action.get("sync_metadata", 0)
-                + by_action.get("enrich_trackers", 0)
-            )
+            system_logs = by_action.get("sync_metadata", 0) + by_action.get("enrich_trackers", 0)
 
             return {
                 "total_logs": total_logs,
@@ -277,7 +268,7 @@ class AuditService:
                 "review_logs": review_logs,
                 "system_logs": system_logs,
                 "by_entity_type": by_entity,
-                "by_action": by_action
+                "by_action": by_action,
             }
         except Exception as e:
             logger.error(f"Failed to compute audit stats: {e}")
@@ -290,7 +281,8 @@ class AuditService:
                 "review_logs": 0,
                 "system_logs": 0,
                 "by_entity_type": {},
-                "by_action": {}
+                "by_action": {},
             }
+
 
 audit_service = AuditService()

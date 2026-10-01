@@ -1,2465 +1,3200 @@
-import React, { useState, useEffect, useRef } from "react";
+import {
+	Calendar,
+	CheckCircle2,
+	ChevronDown,
+	ChevronUp,
+	Circle,
+	Filter,
+	Grid,
+	LayoutGrid,
+	List as ListIcon,
+	Loader2,
+	Plus,
+	RefreshCw,
+	Search,
+	SlidersHorizontal,
+	Sparkles,
+	Star,
+	Upload,
+	X,
+	XCircle,
+} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Plus, Filter, RefreshCw, Star, X, Upload, SlidersHorizontal, ChevronDown, ChevronUp, Calendar, Grid, List as ListIcon, LayoutGrid, CheckCircle2, Loader2, Circle, XCircle } from "lucide-react";
 import client from "../api/client";
-import { useAlert } from "../hooks/useAlert";
-import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
-import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
-import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
-import { useMangaBlur } from "../hooks/useMangaBlur";
 import { BlurredCover } from "../components/ui/BlurredCover";
+import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
+import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
+import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
+import { useAlert } from "../hooks/useAlert";
+import { useMangaBlur } from "../hooks/useMangaBlur";
 
 interface Tag {
-  _id: string;
-  name: { en: string; vi?: string | null };
-  color?: string;
-  source: string;
-  group?: string;
+	_id: string;
+	name: { en: string; vi?: string | null };
+	color?: string;
+	source: string;
+	group?: string;
 }
 
 interface Manga {
-  _id: string;
-  mangadex_id: string | null;
-  title: string;
-  author: string;
-  artist: string;
-  cover_url: string | null;
-  read_status: string;
-  personal_rating: number | null;
-  tag_ids: string[];
-  year: string;
-  content_rating?: string;
-  publication_demographic?: string;
-  status?: string;
-  original_language?: string;
-  description?: string;
+	_id: string;
+	mangadex_id: string | null;
+	title: string;
+	author: string;
+	artist: string;
+	cover_url: string | null;
+	read_status: string;
+	personal_rating: number | null;
+	tag_ids: string[];
+	year: string;
+	content_rating?: string;
+	publication_demographic?: string;
+	status?: string;
+	original_language?: string;
+	description?: string;
 }
 
 export const MangaListPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { showAlert, showToast } = useAlert();
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const { settings, shouldBlur } = useMangaBlur();
-  const isRatingHidden = settings.enabled && settings.hideRating;
-
-  const getArrayParam = (key: string): string[] => {
-    const val = searchParams.get(key);
-    return val ? val.split(",").filter(Boolean) : [];
-  };
-
-  // Library State
-  const [mangas, setMangas] = useState<Manga[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // Filter States
-  const [search, setSearch] = useState(() => searchParams.get("search") || "");
-  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") || "");
-  const [viewMode, setViewMode] = useState<"grid" | "list" | "card">(() => {
-    return (localStorage.getItem("library_view_mode") as any) || "grid";
-  });
-  const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
-
-  const [selectedReadStatuses, setSelectedReadStatuses] = useState<string[]>(() => {
-    const multi = getArrayParam("readStatuses");
-    if (multi.length > 0) return multi;
-    const single = searchParams.get("readStatus");
-    return single ? [single] : [];
-  });
-  const [excludeReadStatuses, setExcludeReadStatuses] = useState<string[]>(() => getArrayParam("excludeReadStatuses"));
-
-  const handleReadStatusClick = (status: string) => {
-    const isIncluded = selectedReadStatuses.includes(status);
-    const isExcluded = excludeReadStatuses.includes(status);
-
-    if (!isIncluded && !isExcluded) {
-      setSelectedReadStatuses((prev) => [...prev, status]);
-    } else if (isIncluded) {
-      setSelectedReadStatuses((prev) => prev.filter((s) => s !== status));
-      setExcludeReadStatuses((prev) => [...prev, status]);
-    } else {
-      setExcludeReadStatuses((prev) => prev.filter((s) => s !== status));
-    }
-    setPage(1);
-  };
-  const [selectedTags, setSelectedTags] = useState<string[]>(() => getArrayParam("selectedTags"));
-  const [excludeTags, setExcludeTags] = useState<string[]>(() => getArrayParam("excludeTags"));
-  const [tagMode, setTagMode] = useState<"all" | "any">(() => (searchParams.get("tagMode") as any) || "all");
-  const [contentRatings, setContentRatings] = useState<string[]>(() => getArrayParam("contentRatings"));
-  const [demographics, setDemographics] = useState<string[]>(() => getArrayParam("demographics"));
-  const [statuses, setStatuses] = useState<string[]>(() => getArrayParam("statuses"));
-  const [originalLanguages, setOriginalLanguages] = useState<string[]>(() => getArrayParam("originalLanguages"));
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>(() => getArrayParam("selectedAuthors"));
-  const [selectedArtists, setSelectedArtists] = useState<string[]>(() => getArrayParam("selectedArtists"));
-  const [year, setYear] = useState(() => searchParams.get("year") || "");
-  const [ratingMin, setRatingMin] = useState<number | "">(() => {
-    const val = searchParams.get("ratingMin");
-    return val ? Number(val) : "";
-  });
-  const [ratingMax, setRatingMax] = useState<number | "">(() => {
-    const val = searchParams.get("ratingMax");
-    return val ? Number(val) : "";
-  });
-  const [sourceFilter, setSourceFilter] = useState<"all" | "manual" | "mangadex">(() => {
-    const s = searchParams.get("source");
-    if (s === "manual" || s === "mangadex") return s;
-    return "all";
-  });
-  const [sortBy, setSortBy] = useState(() => searchParams.get("sortBy") || "added_at");
-  const [sortOrder, setSortOrder] = useState(() => searchParams.get("sortOrder") || "desc");
-  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
-  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(() => searchParams.get("isAdvancedSearchOpen") === "true");
-  const [limit, setLimit] = useState<number>(() => {
-    return Number(localStorage.getItem("library_page_limit")) || 12;
-  });
-
-  // Metadata/All Tags Options
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-
-  // Modals
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addTab, setAddTab] = useState<"dex" | "manual">("dex");
-
-  // MangaDex Search
-  const [dexQuery, setDexQuery] = useState("");
-  const [dexResults, setDexResults] = useState<any[]>([]);
-  const [dexSearching, setDexSearching] = useState(false);
-
-  // Import / Create Setup
-  const [importStatus, setImportStatus] = useState("unread");
-  const [importRating, setImportRating] = useState<number | "">("");
-  const [importTags, setImportTags] = useState<string[]>([]);
-  const [importingManga, setImportingManga] = useState<string | null>(null);
-  const [importProgressStep, setImportProgressStep] = useState<string | null>(null);
-  const [importProgressMessage, setImportProgressMessage] = useState<string>("");
-  const [importProgressPercent, setImportProgressPercent] = useState<number>(0);
-  const [failedStep, setFailedStep] = useState<string | null>(null);
-
-  // Manual Form States
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualAuthor, setManualAuthor] = useState("");
-  const [manualArtist, setManualArtist] = useState("");
-  const [manualDescription, setManualDescription] = useState("");
-  const [manualRating, setManualRating] = useState<number | "">("");
-  const [manualStatus, setManualStatus] = useState("ongoing");
-  const [manualReadStatus, setManualReadStatus] = useState("unread");
-  const [manualYear, setManualYear] = useState("");
-  const [manualOriginalLanguage, setManualOriginalLanguage] = useState("ja");
-  const [manualPublicationDemographic, setManualPublicationDemographic] = useState("");
-  const [manualContentRating, setManualContentRating] = useState("safe");
-  const [manualVolumes, setManualVolumes] = useState<number | "">("");
-  const [manualChapters, setManualChapters] = useState<number | "">("");
-  const [manualLinks] = useState<{ title: string; url: string }[]>([
-    { title: "Source", url: "" }
-  ]);
-  const [manualCover, setManualCover] = useState<File | null>(null);
-  const [manualCoverPreview, setManualCoverPreview] = useState<string | null>(null);
-  const [submittingManual, setSubmittingManual] = useState(false);
-
-  // Search debouncing effect
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(search);
-      if (search !== debouncedSearch) {
-        setPage(1);
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [search]);
-
-  // Sync filter state to URL Search Params
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (selectedReadStatuses.length) params.set("readStatuses", selectedReadStatuses.join(","));
-    if (excludeReadStatuses.length) params.set("excludeReadStatuses", excludeReadStatuses.join(","));
-    if (selectedTags.length) params.set("selectedTags", selectedTags.join(","));
-    if (excludeTags.length) params.set("excludeTags", excludeTags.join(","));
-    if (tagMode !== "all") params.set("tagMode", tagMode);
-    if (contentRatings.length) params.set("contentRatings", contentRatings.join(","));
-    if (demographics.length) params.set("demographics", demographics.join(","));
-    if (statuses.length) params.set("statuses", statuses.join(","));
-    if (originalLanguages.length) params.set("originalLanguages", originalLanguages.join(","));
-    if (selectedAuthors.length) params.set("selectedAuthors", selectedAuthors.join(","));
-    if (selectedArtists.length) params.set("selectedArtists", selectedArtists.join(","));
-    if (year) params.set("year", year);
-    if (ratingMin !== "") params.set("ratingMin", String(ratingMin));
-    if (ratingMax !== "") params.set("ratingMax", String(ratingMax));
-    if (sourceFilter !== "all") params.set("source", sourceFilter);
-    if (sortBy !== "added_at") params.set("sortBy", sortBy);
-    if (sortOrder !== "desc") params.set("sortOrder", sortOrder);
-    if (page !== 1) params.set("page", String(page));
-    if (isAdvancedSearchOpen) params.set("isAdvancedSearchOpen", "true");
-
-    const currentQuery = searchParams.toString();
-    const newQuery = params.toString();
-    if (currentQuery !== newQuery) {
-      setSearchParams(params, { replace: true });
-    }
-  }, [
-    search,
-    selectedReadStatuses,
-    excludeReadStatuses,
-    selectedTags,
-    excludeTags,
-    tagMode,
-    contentRatings,
-    demographics,
-    statuses,
-    originalLanguages,
-    selectedAuthors,
-    selectedArtists,
-    year,
-    ratingMin,
-    ratingMax,
-    sourceFilter,
-    sortBy,
-    sortOrder,
-    page,
-    isAdvancedSearchOpen,
-    searchParams,
-    setSearchParams
-  ]);
-
-  // Creator links helper
-  const renderCreatorLinks = (creatorString: string) => {
-    if (!creatorString || creatorString === "Unknown" || creatorString === "N/A") {
-      return <span>{creatorString || "Unknown"}</span>;
-    }
-    const creators = creatorString.split(/[,;]/).map(c => c.trim()).filter(Boolean);
-    return (
-      <>
-        {creators.map((name, index) => (
-          <React.Fragment key={name}>
-            {index > 0 && <span className="text-[var(--text-secondary)]">, </span>}
-            <a
-              href={`/author/${encodeURIComponent(name)}`}
-              onClick={(e) => {
-                if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                  return;
-                }
-                e.stopPropagation();
-                e.preventDefault();
-                navigate(`/author/${encodeURIComponent(name)}`);
-              }}
-              className="hover:text-[var(--brand-orange)] hover:underline cursor-pointer transition duration-150"
-            >
-              {name}
-            </a>
-          </React.Fragment>
-        ))}
-      </>
-    );
-  };
-
-  // Load Library & Tags
-  const fetchLibrary = async () => {
-    try {
-      setLoading(true);
-      const params: any = {
-        skip: (page - 1) * limit,
-        limit: limit,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      };
-
-      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-      if (selectedReadStatuses.length > 0) params.read_statuses = selectedReadStatuses;
-      if (excludeReadStatuses.length > 0) params.exclude_read_statuses = excludeReadStatuses;
-      if (ratingMin !== "") params.rating_min = Number(ratingMin);
-      if (ratingMax !== "") params.rating_max = Number(ratingMax);
-      if (selectedAuthors.length > 0) params.authors = selectedAuthors;
-      if (selectedArtists.length > 0) params.artists = selectedArtists;
-      if (year.trim()) params.year = year.trim();
-      if (tagMode) params.tag_mode = tagMode;
-
-      if (selectedTags.length > 0) {
-        params.tags = selectedTags;
-      }
-      if (excludeTags.length > 0) {
-        params.exclude_tags = excludeTags;
-      }
-      if (contentRatings.length > 0) {
-        params.content_ratings = contentRatings;
-      }
-      if (demographics.length > 0) {
-        params.demographics = demographics;
-      }
-      if (statuses.length > 0) {
-        params.statuses = statuses;
-      }
-      if (originalLanguages.length > 0) {
-        params.original_languages = originalLanguages;
-      }
-      if (sourceFilter === "manual") {
-        params.is_manual = true;
-      } else if (sourceFilter === "mangadex") {
-        params.is_manual = false;
-      }
-
-      const res = await client.get("/api/manga/", { params });
-      setMangas(res.data.items);
-      setTotal(res.data.total);
-    } catch (err) {
-      console.error("Error loading library:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTags = async () => {
-    try {
-      const res = await client.get("/api/tags/");
-      setAllTags(res.data);
-    } catch (err) {
-      console.error("Error loading tags:", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchLibrary();
-  }, [
-    page,
-    limit,
-    debouncedSearch,
-    selectedReadStatuses,
-    excludeReadStatuses,
-    ratingMin,
-    ratingMax,
-    sourceFilter,
-    sortBy,
-    sortOrder,
-    selectedTags,
-    excludeTags,
-    tagMode,
-    contentRatings,
-    demographics,
-    statuses,
-    originalLanguages,
-    selectedAuthors,
-    selectedArtists,
-    year
-  ]);
-
-  useEffect(() => {
-    fetchTags();
-  }, []);
-
-  // Handle Enter on search
-  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      setPage(1);
-      setDebouncedSearch(search);
-    }
-  };
-
-  const extractMangaDexUuid = (query: string): string => {
-    const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
-    const urlMatch = query.match(/\/title\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
-    if (urlMatch) {
-      return urlMatch[1];
-    }
-    const directMatch = query.match(uuidRegex);
-    if (directMatch && directMatch[0] === query.trim()) {
-      return directMatch[0];
-    }
-    return query;
-  };
-
-  // Search MangaDex
-  const handleDexSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!dexQuery.trim()) return;
-    try {
-      setDexSearching(true);
-      const resolvedQuery = extractMangaDexUuid(dexQuery.trim());
-      const res = await client.get("/api/mangadex/search", {
-        params: { query: resolvedQuery }
-      });
-      setDexResults(res.data);
-    } catch (err) {
-      console.error("MangaDex search failed:", err);
-      showAlert({
-        title: "Search Failed",
-        message: "Failed to search MangaDex. Try again.",
-        type: "error"
-      });
-    } finally {
-      setDexSearching(false);
-    }
-  };
-
-  // Import MangaDex Manga
-  const handleImportManga = async (dexId: string) => {
-    try {
-      setImportingManga(dexId);
-      setImportProgressStep("metadata");
-      setImportProgressMessage("Initializing import...");
-      setImportProgressPercent(0);
-      setFailedStep(null);
-
-      const payload: any = {
-        mangadex_id: dexId,
-        read_status: importStatus,
-        tag_ids: importTags
-      };
-      if (importRating !== "") payload.personal_rating = Number(importRating);
-
-      const baseUrl = client.defaults.baseURL || "";
-      const url = `${baseUrl}/api/manga/dex`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body reader available.");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let importedMangaData: any = null;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data: ")) {
-            const dataStr = trimmed.slice(6);
-            if (!dataStr) continue;
-            try {
-              const data = JSON.parse(dataStr);
-              if (data.step === "error") {
-                setImportProgressStep("error");
-                setFailedStep(data.failed_step || "metadata");
-                setImportProgressMessage(data.message);
-                
-                // Intercept duplicate error
-                if (data.code === "DUPLICATE_MANGA" || data.error_type === "DUPLICATE_MANGA") {
-                  const title = data.title;
-                  const mangaId = data.manga_id;
-                  const confirmSync = window.confirm(
-                    `Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`
-                  );
-                  if (confirmSync) {
-                    try {
-                      showToast("Đang đồng bộ thông tin...", "info");
-                      const syncRes = await client.post(`/api/manga/${mangaId}/sync`);
-                      setMangas((prev) => prev.map((m) => m._id === mangaId ? syncRes.data : m));
-                      showAlert({
-                        title: "Đồng bộ thành công",
-                        message: `Đã đồng bộ thông tin mới cho "${title}"!`,
-                        type: "success"
-                      });
-                      setIsAddModalOpen(false);
-                      setDexResults([]);
-                      setDexQuery("");
-                    } catch (syncErr) {
-                      console.error("Failed to sync duplicate manga:", syncErr);
-                      showAlert({
-                        title: "Đồng bộ thất bại",
-                        message: "Không thể đồng bộ thông tin manga.",
-                        type: "error"
-                      });
-                    }
-                  }
-                } else {
-                  showAlert({
-                    title: "Import Failed",
-                    message: data.message || "An unknown error occurred during import.",
-                    type: "error"
-                  });
-                }
-                return;
-              } else {
-                setImportProgressStep(data.step);
-                setImportProgressMessage(data.message);
-                setImportProgressPercent(data.progress || 0);
-                if (data.step === "done" && data.manga) {
-                  importedMangaData = data.manga;
-                }
-              }
-            } catch (jsonErr) {
-              console.error("Failed to parse stream JSON:", jsonErr, dataStr);
-            }
-          }
-        }
-      }
-
-      if (importedMangaData) {
-        // Update List
-        setMangas((prev) => [importedMangaData, ...prev].slice(0, limit));
-        setTotal((prev) => prev + 1);
-
-        // Reset imports options
-        setImportRating("");
-        setImportTags([]);
-
-        showAlert({
-          title: "Import Success",
-          message: `Imported "${importedMangaData.title}" successfully!`,
-          type: "success"
-        });
-        setIsAddModalOpen(false);
-        setDexResults([]);
-        setDexQuery("");
-      } else {
-        if (importProgressStep !== "error") {
-          showAlert({
-            title: "Import Incomplete",
-            message: "Stream ended without completing the import.",
-            type: "warning"
-          });
-        }
-      }
-    } catch (err: any) {
-      console.error("Import request failed:", err);
-      showAlert({
-        title: "Import Failed",
-        message: err.message || "Failed to import manga",
-        type: "error"
-      });
-    } finally {
-      setImportingManga(null);
-      setImportProgressStep(null);
-      setImportProgressPercent(0);
-      setImportProgressMessage("");
-      setFailedStep(null);
-    }
-  };
-
-  // Handle Cover select preview
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setManualCover(file);
-      setManualCoverPreview(URL.createObjectURL(file));
-    }
-  };
-
-  // Create Manual Manga
-  const handleCreateManual = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualTitle.trim()) {
-      showAlert({
-        title: "Required Field",
-        message: "Title is required",
-        type: "warning"
-      });
-      return;
-    }
-
-    try {
-      setSubmittingManual(true);
-      const payload: any = {
-        title: manualTitle.trim(),
-        author: manualAuthor.trim() || "Unknown",
-        artist: manualArtist.trim() || "Unknown",
-        description: manualDescription.trim(),
-        read_status: manualReadStatus,
-        status: manualStatus,
-        tag_ids: importTags, // Uses the same modal tag selector state
-        year: manualYear.trim() || "N/A",
-        links: manualLinks.filter((l) => l.title && l.url),
-        original_language: manualOriginalLanguage || null,
-        publication_demographic: manualPublicationDemographic || null,
-        content_rating: manualContentRating || null,
-        volumes: manualVolumes === "" ? null : Number(manualVolumes),
-        chapters: manualChapters === "" ? null : Number(manualChapters)
-      };
-      if (manualRating !== "") payload.personal_rating = Number(manualRating);
-
-      const formData = new FormData();
-      formData.append("metadata", JSON.stringify(payload));
-      if (manualCover) {
-        formData.append("cover", manualCover);
-      }
-
-      const res = await client.post("/api/manga/manual", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      setMangas((prev) => [res.data, ...prev].slice(0, limit));
-      setTotal((prev) => prev + 1);
-
-      showAlert({
-        title: "Success",
-        message: `Added "${res.data.title}" successfully!`,
-        type: "success"
-      });
-      setIsAddModalOpen(false);
-
-      // Reset manual fields
-      setManualTitle("");
-      setManualAuthor("");
-      setManualArtist("");
-      setManualDescription("");
-      setManualRating("");
-      setManualYear("");
-      setManualOriginalLanguage("ja");
-      setManualPublicationDemographic("");
-      setManualContentRating("safe");
-      setManualVolumes("");
-      setManualChapters("");
-      setManualCover(null);
-      setManualCoverPreview(null);
-      setImportTags([]);
-    } catch (err: any) {
-      showAlert({
-        title: "Error",
-        message: err.response?.data?.detail || "Failed to add manual manga",
-        type: "error"
-      });
-    } finally {
-      setSubmittingManual(false);
-    }
-  };
-
-  const handleTagClick = (tagId: string) => {
-    const isIncluded = selectedTags.includes(tagId);
-    const isExcluded = excludeTags.includes(tagId);
-
-    if (!isIncluded && !isExcluded) {
-      setSelectedTags((prev) => [...prev, tagId]);
-    } else if (isIncluded) {
-      setSelectedTags((prev) => prev.filter((id) => id !== tagId));
-      setExcludeTags((prev) => [...prev, tagId]);
-    } else {
-      setExcludeTags((prev) => prev.filter((id) => id !== tagId));
-    }
-    setPage(1);
-  };
-
-  const handleGroupClick = (groupName: string) => {
-    const groupTags = allTags.filter((t) => (t.group || "other") === groupName);
-    if (groupTags.length === 0) return;
-
-    const tagIds = groupTags.map((t) => t._id);
-    const allIncluded = tagIds.every((id) => selectedTags.includes(id));
-    const allExcluded = tagIds.every((id) => excludeTags.includes(id));
-
-    if (!allIncluded && !allExcluded) {
-      // Step 1: Must Include all tags in this group
-      setSelectedTags((prev) => {
-        const filtered = prev.filter((id) => !tagIds.includes(id));
-        return [...filtered, ...tagIds];
-      });
-      setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
-    } else if (allIncluded) {
-      // Step 2: Must Exclude all tags in this group
-      setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
-      setExcludeTags((prev) => {
-        const filtered = prev.filter((id) => !tagIds.includes(id));
-        return [...filtered, ...tagIds];
-      });
-    } else {
-      // Step 3: Ignore all tags in this group (Neutral)
-      setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
-      setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
-    }
-    setPage(1);
-  };
-
-
-
-  const handleLimitChange = (newLimit: number) => {
-    setLimit(newLimit);
-    localStorage.setItem("library_page_limit", String(newLimit));
-    setPage(1);
-  };
-
-  const handleQuickUpdateStatus = async (mangaId: string, status: string) => {
-    try {
-      const payload = { read_status: status };
-      const formData = new FormData();
-      formData.append("metadata", JSON.stringify(payload));
-
-      const res = await client.put(`/api/manga/${mangaId}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      setMangas((prev) => prev.map((m) => m._id === mangaId ? { ...m, read_status: res.data.read_status } : m));
-      showToast("Updated read status successfully!", "success");
-    } catch (err) {
-      console.error("Failed to quick-update status:", err);
-      showToast("Failed to update read status.", "error");
-    }
-  };
-
-  const handleQuickUpdateRating = async (mangaId: string, rating: number | null) => {
-    try {
-      const payload = { personal_rating: rating };
-      const formData = new FormData();
-      formData.append("metadata", JSON.stringify(payload));
-
-      const res = await client.put(`/api/manga/${mangaId}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      setMangas((prev) => prev.map((m) => m._id === mangaId ? { ...m, personal_rating: res.data.personal_rating } : m));
-      showToast("Updated rating successfully!", "success");
-    } catch (err) {
-      console.error("Failed to quick-update rating:", err);
-      showToast("Failed to update rating.", "error");
-    }
-  };
-
-  const getStatusColorClass = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
-      case "reading":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
-      case "dropped":
-        return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
-      case "on_hold":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300";
-      case "plan_to_read":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300";
-      case "re_reading":
-        return "bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300";
-      default:
-        return "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300";
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-spartan font-extrabold tracking-tight">Manga Library</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Track reviews, read status, and manage physical & digital collections.</p>
-        </div>
-
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center justify-center space-x-2 px-5 py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition duration-200"
-        >
-          <Plus size={18} />
-          <span>Add Manga</span>
-        </button>
-      </div>
-
-      {/* Filters bar */}
-      <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-4 shadow-sm">
-        {/* Main Search Row */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3.5 text-zinc-400" size={18} />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyPress}
-              placeholder="Search by title, author, artist, alt titles..."
-              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setDebouncedSearch("");
-                  setPage(1);
-                  searchInputRef.current?.focus();
-                }}
-                className="absolute right-3 top-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
-              >
-                <X size={18} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex gap-2 flex-wrap items-center">
-            {/* Source Filter Segmented Buttons */}
-            <div className="flex rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] p-0.5 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => { setSourceFilter("all"); setPage(1); }}
-                className={`px-3 py-2 rounded-lg transition ${
-                  sourceFilter === "all"
-                    ? "bg-[var(--brand-orange)] text-white shadow-sm"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                All Sources
-              </button>
-              <button
-                type="button"
-                onClick={() => { setSourceFilter("manual"); setPage(1); }}
-                className={`px-3 py-2 rounded-lg transition flex items-center space-x-1.5 ${
-                  sourceFilter === "manual"
-                    ? "bg-amber-600 text-white shadow-sm font-bold"
-                    : "text-[var(--text-secondary)] hover:text-amber-600 dark:hover:text-amber-400"
-                }`}
-                title="Only show manually added manga"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                <span>Manual Only</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setSourceFilter("mangadex"); setPage(1); }}
-                className={`px-3 py-2 rounded-lg transition ${
-                  sourceFilter === "mangadex"
-                    ? "bg-[var(--brand-orange)] text-white shadow-sm font-bold"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-                title="Only show MangaDex imported manga"
-              >
-                <span>MangaDex</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsAdvancedSearchOpen(true);
-              }}
-              className="px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-secondary)] font-semibold hover:border-zinc-400 transition text-sm"
-            >
-              Statuses: {selectedReadStatuses.length > 0 || excludeReadStatuses.length > 0
-                ? `${selectedReadStatuses.length} incl / ${excludeReadStatuses.length} excl`
-                : "All"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsAdvancedSearchOpen(!isAdvancedSearchOpen)}
-              className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl border border-[var(--border-primary)] transition font-semibold text-sm ${isAdvancedSearchOpen
-                ? "bg-orange-50 border-orange-200 text-orange-600 dark:bg-orange-950/20 dark:border-orange-900/30 dark:text-orange-400"
-                : "bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                }`}
-            >
-              <SlidersHorizontal size={16} />
-              <span>Advanced Search</span>
-              {isAdvancedSearchOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Collapsible Advanced Search Panel */}
-        {isAdvancedSearchOpen && (
-          <div className="pt-4 border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
-            {/* Sorting & Basic Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Sort By</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-                  className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
-                >
-                  <option value="added_at">Date Added</option>
-                  <option value="updated_at">Date Updated</option>
-                  <option value="title">Title</option>
-                  <option value="personal_rating">Personal Rating</option>
-                  <option value="year">Release Year</option>
-                  <option value="completed_at">Date Completed</option>
-                  <option value="reading_at">Date Started Reading</option>
-                  <option value="plan_to_read_at">Date Planned</option>
-                  <option value="dropped_at">Date Dropped</option>
-                  <option value="on_hold_at">Date On Hold</option>
-                  <option value="re_reading_at">Date Re-reading</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Sort Order</label>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => { setSortOrder(e.target.value); setPage(1); }}
-                  className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
-                >
-                  <option value="desc">Descending</option>
-                  <option value="asc">Ascending</option>
-                </select>
-              </div>
-
-              <div>
-                <CreatorMultiSelect
-                  label="Author"
-                  role="author"
-                  selected={selectedAuthors}
-                  onChange={(selected) => {
-                    setSelectedAuthors(selected);
-                    setPage(1);
-                  }}
-                  placeholder="All Authors"
-                />
-              </div>
-
-              <div>
-                <CreatorMultiSelect
-                  label="Artist"
-                  role="artist"
-                  selected={selectedArtists}
-                  onChange={(selected) => {
-                    setSelectedArtists(selected);
-                    setPage(1);
-                  }}
-                  placeholder="All Artists"
-                />
-              </div>
-            </div>
-
-            {/* Demographics, Content Rating, Publication Status, Original Language Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Magazine Demographic */}
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Magazine Demographic</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {["shounen", "shoujo", "seinen", "josei"].map((demo) => {
-                    const isSel = demographics.includes(demo);
-                    return (
-                      <button
-                        key={demo}
-                        type="button"
-                        onClick={() => {
-                          setDemographics((prev) =>
-                            prev.includes(demo) ? prev.filter((d) => d !== demo) : [...prev, demo]
-                          );
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${isSel
-                          ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
-                          : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                          }`}
-                      >
-                        {demo}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Content Rating */}
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Content Rating</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {["safe", "suggestive", "erotica", "pornographic"].map((rating) => {
-                    const isSel = contentRatings.includes(rating);
-                    return (
-                      <button
-                        key={rating}
-                        type="button"
-                        onClick={() => {
-                          setContentRatings((prev) =>
-                            prev.includes(rating) ? prev.filter((r) => r !== rating) : [...prev, rating]
-                          );
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${isSel
-                          ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
-                          : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                          }`}
-                      >
-                        {rating}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Publication Status */}
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Publication Status</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {["ongoing", "completed", "hiatus", "cancelled"].map((stat) => {
-                    const isSel = statuses.includes(stat);
-                    return (
-                      <button
-                        key={stat}
-                        type="button"
-                        onClick={() => {
-                          setStatuses((prev) =>
-                            prev.includes(stat) ? prev.filter((s) => s !== stat) : [...prev, stat]
-                          );
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${isSel
-                          ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
-                          : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                          }`}
-                      >
-                        {stat}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Original Language */}
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Original Language</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { code: "ja", label: "Japanese (ja)" },
-                    { code: "ko", label: "Korean (ko)" },
-                    { code: "zh", label: "Chinese (zh)" },
-                    { code: "en", label: "English (en)" },
-                    { code: "vi", label: "Vietnamese (vi)" },
-                    { code: "ru", label: "Russian (ru)" }
-                  ].map((lang) => {
-                    const isSel = originalLanguages.includes(lang.code);
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => {
-                          setOriginalLanguages((prev) =>
-                            prev.includes(lang.code) ? prev.filter((c) => c !== lang.code) : [...prev, lang.code]
-                          );
-                          setPage(1);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${isSel
-                          ? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
-                          : "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
-                          }`}
-                      >
-                        {lang.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Rating Limits, Tag Mode, Year & Legend */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-[var(--border-primary)]">
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Personal Rating</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="number"
-                    value={ratingMin}
-                    onChange={(e) => { setRatingMin(e.target.value === "" ? "" : Number(e.target.value)); setPage(1); }}
-                    placeholder="Min"
-                    min="0"
-                    max="10"
-                    step="0.5"
-                    className="w-full px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm text-center focus:outline-none"
-                  />
-                  <span className="text-zinc-400">-</span>
-                  <input
-                    type="number"
-                    value={ratingMax}
-                    onChange={(e) => { setRatingMax(e.target.value === "" ? "" : Number(e.target.value)); setPage(1); }}
-                    placeholder="Max"
-                    min="0"
-                    max="10"
-                    step="0.5"
-                    className="w-full px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm text-center focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Publication Year</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-3 text-zinc-400" size={16} />
-                  <input
-                    type="text"
-                    value={year}
-                    onChange={(e) => { setYear(e.target.value); setPage(1); }}
-                    placeholder="e.g. 2015"
-                    className="w-full pl-9 pr-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Tag Inclusion Mode</label>
-                <div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
-                  <button
-                    type="button"
-                    onClick={() => { setTagMode("all"); setPage(1); }}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${tagMode === "all"
-                      ? "bg-[var(--brand-orange)] text-white shadow-sm"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                      }`}
-                  >
-                    AND (All Selected)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setTagMode("any"); setPage(1); }}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${tagMode === "any"
-                      ? "bg-[var(--brand-orange)] text-white shadow-sm"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                      }`}
-                  >
-                    OR (Any Selected)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Read Status Filter Matrix */}
-            <div className="pt-4 border-t border-[var(--border-primary)] space-y-3">
-              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center space-x-1">
-                <Filter size={14} />
-                <span>Filter by Read Status (3-State Matrix):</span>
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: "unread", label: "Unread" },
-                  { value: "reading", label: "Reading" },
-                  { value: "completed", label: "Completed" },
-                  { value: "dropped", label: "Dropped" },
-                  { value: "on_hold", label: "On Hold" },
-                  { value: "plan_to_read", label: "Plan to Read" },
-                  { value: "re_reading", label: "Re-Reading" }
-                ].map((status) => {
-                  const isIncluded = selectedReadStatuses.includes(status.value);
-                  const isExcluded = excludeReadStatuses.includes(status.value);
-
-                  let btnClass = "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400";
-                  let icon = null;
-
-                  if (isIncluded) {
-                    btnClass = "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold";
-                    icon = <span className="mr-1 text-xs">✓</span>;
-                  } else if (isExcluded) {
-                    btnClass = "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 line-through font-bold";
-                    icon = <span className="mr-1 text-xs">✗</span>;
-                  }
-
-                  return (
-                    <button
-                      key={status.value}
-                      type="button"
-                      onClick={() => handleReadStatusClick(status.value)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center transition select-none ${btnClass}`}
-                    >
-                      {icon}
-                      <span>{status.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tag Filter Matrix */}
-            {allTags.length > 0 && (
-              <div className="pt-4 border-t border-[var(--border-primary)] space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center space-x-1">
-                    <Filter size={14} />
-                    <span>Filter by Genre/Tags (3-State Matrix):</span>
-                  </span>
-
-                  {/* Legend */}
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold">
-                    <span className="flex items-center space-x-1">
-                      <span className="w-2.5 h-2.5 rounded bg-neutral-100 dark:bg-neutral-850 border border-neutral-300 dark:border-neutral-700"></span>
-                      <span className="text-[var(--text-secondary)]">Neutral (Ignore)</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <span className="w-2.5 h-2.5 rounded bg-emerald-500/10 border border-emerald-500"></span>
-                      <span className="text-emerald-600 dark:text-emerald-400">Green (Must Include)</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <span className="w-2.5 h-2.5 rounded bg-rose-500/10 border border-rose-500"></span>
-                      <span className="text-rose-600 dark:text-rose-400">Red (Must Exclude)</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 max-h-[300px] overflow-y-auto pr-2">
-                  {Array.from(new Set(allTags.map((t) => t.group || "other"))).sort().map((groupName) => {
-                    const groupTags = allTags.filter((t) => (t.group || "other") === groupName);
-                    if (groupTags.length === 0) return null;
-                    return (
-                      <div key={groupName} className="space-y-1.5">
-                        <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleGroupClick(groupName)}
-                            className="group text-[10px] font-bold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] uppercase tracking-wider cursor-pointer select-none transition flex items-center gap-1.5 capitalize focus:outline-none"
-                          >
-                            <span>{groupName}</span>
-                            {(() => {
-                              const tagIds = groupTags.map((t) => t._id);
-                              const allIncluded = tagIds.every((id) => selectedTags.includes(id));
-                              const allExcluded = tagIds.every((id) => excludeTags.includes(id));
-                              if (allIncluded) {
-                                return (
-                                  <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-extrabold normal-case">
-                                    all included
-                                  </span>
-                                );
-                              } else if (allExcluded) {
-                                return (
-                                  <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded text-[8px] font-extrabold normal-case">
-                                    all excluded
-                                  </span>
-                                );
-                              }
-                              return (
-                                <span className="text-[8px] text-zinc-400 group-hover:text-[var(--brand-orange)]/80 font-medium normal-case transition">
-                                  (toggle all)
-                                </span>
-                              );
-                            })()}
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {groupTags.map((tag) => {
-                            const isIncluded = selectedTags.includes(tag._id);
-                            const isExcluded = excludeTags.includes(tag._id);
-
-                            let btnClass = "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400";
-                            let icon = null;
-
-                            if (isIncluded) {
-                              btnClass = "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold";
-                              icon = <span className="mr-1 text-xs">✓</span>;
-                            } else if (isExcluded) {
-                              btnClass = "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 line-through font-bold";
-                              icon = <span className="mr-1 text-xs">✗</span>;
-                            }
-
-                            return (
-                              <button
-                                key={tag._id}
-                                type="button"
-                                onClick={() => handleTagClick(tag._id)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center transition select-none ${btnClass}`}
-                              >
-                                {icon}
-                                <span>{tag.name.en}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Selected Summary and Reset Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
-          <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
-            <span>Active filters:</span>
-            {debouncedSearch && <span className="bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)] px-2 py-0.5 rounded-md">Search: "{debouncedSearch}"</span>}
-            {sourceFilter === "manual" && (
-              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md font-semibold flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>Source: Manual Only</span>
-              </span>
-            )}
-            {sourceFilter === "mangadex" && (
-              <span className="bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-md font-semibold">
-                Source: MangaDex
-              </span>
-            )}
-            {selectedReadStatuses.map(status => (
-              <span key={status} className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">Status: {status}</span>
-            ))}
-            {excludeReadStatuses.map(status => (
-              <span key={status} className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md line-through">Exclude: {status}</span>
-            ))}
-            {selectedTags.length > 0 && <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">Include {selectedTags.length} tags</span>}
-            {excludeTags.length > 0 && <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md">Exclude {excludeTags.length} tags</span>}
-            {(selectedAuthors.length > 0 || selectedArtists.length > 0 || year || contentRatings.length > 0 || demographics.length > 0 || statuses.length > 0 || originalLanguages.length > 0 || ratingMin || ratingMax) && (
-              <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md">Advanced active</span>
-            )}
-            {!search && sourceFilter === "all" && selectedReadStatuses.length === 0 && excludeReadStatuses.length === 0 && selectedTags.length === 0 && excludeTags.length === 0 && selectedAuthors.length === 0 && selectedArtists.length === 0 && !year && contentRatings.length === 0 && demographics.length === 0 && statuses.length === 0 && originalLanguages.length === 0 && !ratingMin && !ratingMax && (
-              <span className="text-zinc-400 font-medium">None</span>
-            )}
-          </div>
-
-          <button
-            onClick={() => {
-              setSearch("");
-              setSourceFilter("all");
-              setSelectedReadStatuses([]);
-              setExcludeReadStatuses([]);
-              setSelectedTags([]);
-              setExcludeTags([]);
-              setTagMode("all");
-              setContentRatings([]);
-              setDemographics([]);
-              setStatuses([]);
-              setOriginalLanguages([]);
-              setSelectedAuthors([]);
-              setSelectedArtists([]);
-              setYear("");
-              setRatingMin("");
-              setRatingMax("");
-              setSortBy("added_at");
-              setSortOrder("desc");
-              setPage(1);
-            }}
-            className="text-xs font-bold text-[var(--brand-orange)] hover:underline flex items-center space-x-1"
-          >
-            <RefreshCw size={12} />
-            <span>Reset All Filters</span>
-          </button>
-        </div>
-      </div>
-
-      {/* View Switcher Toolbar */}
-      {!loading && mangas.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border-primary)] pb-4 gap-4">
-          <span className="text-sm font-semibold text-[var(--text-secondary)]">
-            Showing <span className="text-[var(--text-primary)] font-bold">{mangas.length}</span> of <span className="text-[var(--text-primary)] font-bold">{total}</span> manga
-          </span>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
-              >
-                <option value="added_at">Date Added</option>
-                <option value="updated_at">Date Updated</option>
-                <option value="title">Title</option>
-                <option value="personal_rating">Personal Rating</option>
-                <option value="year">Release Year</option>
-                <option value="completed_at">Date Completed</option>
-                <option value="reading_at">Date Started Reading</option>
-                <option value="plan_to_read_at">Date Planned</option>
-                <option value="dropped_at">Date Dropped</option>
-                <option value="on_hold_at">Date On Hold</option>
-                <option value="re_reading_at">Date Re-reading</option>
-              </select>
-              <select
-                value={sortOrder}
-                onChange={(e) => { setSortOrder(e.target.value); setPage(1); }}
-                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
-              >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Per Page:</span>
-              <select
-                value={limit}
-                onChange={(e) => handleLimitChange(Number(e.target.value))}
-                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
-              >
-                <option value={12}>12</option>
-                <option value={24}>24</option>
-                <option value={48}>48</option>
-                <option value={60}>60</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-
-            <div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm">
-              <button
-                onClick={() => {
-                  setViewMode("grid");
-                  localStorage.setItem("library_view_mode", "grid");
-                }}
-                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "grid"
-                  ? "bg-[var(--brand-orange)] text-white"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                  }`}
-                title="Grid View"
-              >
-                <Grid size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode("list");
-                  localStorage.setItem("library_view_mode", "list");
-                }}
-                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "list"
-                  ? "bg-[var(--brand-orange)] text-white"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                  }`}
-                title="List View"
-              >
-                <ListIcon size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode("card");
-                  localStorage.setItem("library_view_mode", "card");
-                }}
-                className={`p-2 rounded-lg transition-colors duration-200 ${viewMode === "card"
-                  ? "bg-[var(--brand-orange)] text-white"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
-                  }`}
-                title="Detailed Card View"
-              >
-                <LayoutGrid size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manga Grid/List/Card List */}
-      {loading ? (
-        <div className="flex justify-center items-center py-24">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
-        </div>
-      ) : mangas.length > 0 ? (
-        <div className="space-y-8">
-          {viewMode === "grid" && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {mangas.map((manga) => (
-                <article
-                  key={manga._id}
-                  role="link"
-                  tabIndex={0}
-                  onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) navigate(`/manga/${manga._id}`); }}
-                  onClick={(e) => {
-                    if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                      return;
-                    }
-                    const target = e.target as HTMLElement;
-                    const closestAnchor = target.closest("a");
-                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || closestAnchor) return;
-                    e.preventDefault();
-                    navigate(`/manga/${manga._id}`);
-                  }}
-                  className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col group"
-                >
-                  {/* Cover Frame */}
-                  <div
-                    className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 cursor-zoom-in"
-                    onClick={(e) => {
-                      if (manga.cover_url) {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setZoomedCoverUrl(manga.cover_url);
-                      }
-                    }}
-                  >
-                    {manga.cover_url ? (
-                      <BlurredCover
-                        src={manga.cover_url}
-                        alt={manga.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        shouldBlur={shouldBlur(manga)}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-                        <span>No Cover Image</span>
-                      </div>
-                    )}
-
-                    {/* Status Badge (Select) */}
-                    <select
-                      value={manga.read_status}
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onMouseUp={(e) => e.stopPropagation()}
-                      onChange={(e) => handleQuickUpdateStatus(manga._id, e.target.value)}
-                      className={`absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
-                    >
-                      <option value="unread" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Unread</option>
-                      <option value="reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Reading</option>
-                      <option value="completed" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Completed</option>
-                      <option value="dropped" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Dropped</option>
-                      <option value="on_hold" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">On Hold</option>
-                      <option value="plan_to_read" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Plan to Read</option>
-                      <option value="re_reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Re-Reading</option>
-                    </select>
-
-                    {/* Rating Badge (Select) */}
-                    <div
-                      className="absolute bottom-3 right-3"
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onMouseUp={(e) => e.stopPropagation()}
-                    >
-                      <div className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}>
-                        <Star size={10} className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none" />
-                        <select
-                          value={manga.personal_rating ?? ""}
-                          onChange={(e) => {
-                            const val = e.target.value === "" ? null : Number(e.target.value);
-                            handleQuickUpdateRating(manga._id, val);
-                          }}
-                          className={`pl-5.5 pr-2 py-0.5 rounded text-[10px] font-bold border-none outline-none cursor-pointer appearance-none shadow-sm transition hover:brightness-110 ${manga.personal_rating !== null
-                            ? "bg-zinc-900/95 text-white"
-                            : "bg-zinc-950/60 text-zinc-400"
-                            }`}
-                        >
-                          <option value="" className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">★ -</option>
-                          {Array.from({ length: 21 }, (_, i) => {
-                            const num = 10 - i * 0.5;
-                            return (
-                              <option key={num} value={num} className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">
-                                {num.toFixed(1)}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Details */}
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-                    <div className="space-y-1">
-                      <div className="flex items-start justify-between gap-1.5">
-                        <h3 className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2 flex-1" title={manga.title}>
-                          {manga.title}
-                        </h3>
-                        {!manga.mangadex_id && (
-                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            Manual
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
-                        By {renderCreatorLinks(manga.author)}
-                      </p>
-                    </div>
-
-                    {/* Render 2 tags maximum */}
-                    <div className="flex flex-wrap gap-1">
-                      {manga.tag_ids.slice(0, 2).map((tid) => {
-                        const tag = allTags.find((t) => t._id === tid);
-                        if (!tag) return null;
-                        return (
-                          <span
-                            key={tid}
-                            onClick={(e) => e.stopPropagation()}
-                            className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-white truncate max-w-[80px]"
-                            style={{ backgroundColor: tag.color || "var(--text-secondary)" }}
-                          >
-                            {tag.name.en}
-                          </span>
-                        );
-                      })}
-                      {manga.tag_ids.length > 2 && (
-                        <span className="text-[9px] text-[var(--text-secondary)] font-bold">
-                          +{manga.tag_ids.length - 2}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {viewMode === "list" && (
-            <div className="overflow-x-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-sm">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    <th className="py-4 px-6 text-center w-20">Cover</th>
-                    <th className="py-4 px-4">Title</th>
-                    <th className="py-4 px-4">Author / Artist</th>
-                    <th className="py-4 px-4">Year / Status</th>
-                    <th className="py-4 px-4">Demographic</th>
-                    <th className="py-4 px-4">Rating</th>
-                    <th className="py-4 px-4">Read Status</th>
-                    <th className="py-4 px-6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-primary)] text-sm">
-                  {mangas.map((manga) => (
-                    <tr
-                      key={manga._id}
-                      onClick={(e) => {
-                        const target = e.target as HTMLElement;
-                        if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
-                          return;
-                        }
-                        navigate(`/manga/${manga._id}`);
-                      }}
-                      onAuxClick={(e) => {
-                        if (e.button === 1) {
-                          const target = e.target as HTMLElement;
-                          if (target.closest("select") || target.closest("button") || target.closest("a") || target.closest(".prevent-nav")) {
-                            return;
-                          }
-                          window.open(`/manga/${manga._id}`, "_blank");
-                        }
-                      }}
-                      className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 cursor-pointer transition duration-150"
-                    >
-                      <td className="py-3 px-6 text-center">
-                        <div
-                          className="w-12 h-16 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 mx-auto flex-shrink-0 cursor-zoom-in border border-[var(--border-primary)] shadow-sm"
-                          onClick={(e) => {
-                            if (manga.cover_url) {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              setZoomedCoverUrl(manga.cover_url);
-                            }
-                          }}
-                        >
-                          {manga.cover_url ? (
-                            <BlurredCover
-                              src={manga.cover_url}
-                              alt={manga.title}
-                              className="w-full h-full object-cover"
-                              shouldBlur={shouldBlur(manga)}
-                            />
-                          ) : (
-                            <span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">No Cover</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-[var(--text-primary)]">
-                        <div className="line-clamp-2 max-w-xs md:max-w-sm" title={manga.title}>
-                          <a
-                            href={`/manga/${manga._id}`}
-                            onClick={(e) => {
-                              if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                                return;
-                              }
-                              e.preventDefault();
-                              navigate(`/manga/${manga._id}`);
-                            }}
-                            className="hover:text-[var(--brand-orange)] hover:underline transition duration-150"
-                          >
-                            {manga.title}
-                          </a>
-                          {!manga.mangadex_id && (
-                            <span className="inline-flex items-center ml-2.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 align-middle">
-                              Manual
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
-                        <div className="space-y-0.5">
-                          <div className="line-clamp-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">Auth:</span>
-                            {renderCreatorLinks(manga.author)}
-                          </div>
-                          <div className="line-clamp-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">Art:</span>
-                            {renderCreatorLinks(manga.artist)}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-[var(--text-secondary)] font-semibold">
-                        <div className="flex flex-col">
-                          <span>{manga.year || "N/A"}</span>
-                          {manga.status && (
-                            <span className="text-xs font-bold capitalize text-[var(--text-secondary)] opacity-80">
-                              {manga.status}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        {manga.publication_demographic ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100/60 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/50 dark:border-orange-900/30">
-                            {manga.publication_demographic}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-400 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div
-                          className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onMouseUp={(e) => e.stopPropagation()}
-                        >
-                          <Star size={12} className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none" />
-                          <select
-                            value={manga.personal_rating ?? ""}
-                            onChange={(e) => {
-                              const val = e.target.value === "" ? null : Number(e.target.value);
-                              handleQuickUpdateRating(manga._id, val);
-                            }}
-                            className={`pl-6 pr-2 py-1 rounded-xl text-xs font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${manga.personal_rating !== null ? "text-yellow-600 dark:text-yellow-455 font-extrabold" : "text-zinc-400"
-                              }`}
-                          >
-                            <option value="" className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">-</option>
-                            {Array.from({ length: 21 }, (_, i) => {
-                              const num = 10 - i * 0.5;
-                              return (
-                                <option key={num} value={num} className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">
-                                  {num.toFixed(1)}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <select
-                          value={manga.read_status}
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onMouseUp={(e) => e.stopPropagation()}
-                          onChange={(e) => handleQuickUpdateStatus(manga._id, e.target.value)}
-                          className={`px-2 py-1 rounded-xl text-xs font-bold border border-transparent cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] ${getStatusColorClass(manga.read_status)}`}
-                        >
-                          <option value="unread" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Unread</option>
-                          <option value="reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Reading</option>
-                          <option value="completed" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Completed</option>
-                          <option value="dropped" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Dropped</option>
-                          <option value="on_hold" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">On Hold</option>
-                          <option value="plan_to_read" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Plan to Read</option>
-                          <option value="re_reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Re-Reading</option>
-                        </select>
-                      </td>
-                      <td className="py-3 px-6 text-right">
-                        <a
-                          href={`/manga/${manga._id}`}
-                          onClick={(e) => {
-                            if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                              return;
-                            }
-                            e.stopPropagation();
-                            e.preventDefault();
-                            navigate(`/manga/${manga._id}`);
-                          }}
-                          className="inline-block px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
-                        >
-                          View Details
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {viewMode === "card" && (
-            <div className="space-y-4">
-              {mangas.map((manga) => (
-                <article
-                  key={manga._id}
-                  role="link"
-                  tabIndex={0}
-                  onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) navigate(`/manga/${manga._id}`); }}
-                  onClick={(e) => {
-                    if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                      return;
-                    }
-                    const target = e.target as HTMLElement;
-                    const closestAnchor = target.closest("a");
-                    if (target.closest("select") || target.closest("button") || target.closest(".prevent-nav") || closestAnchor) return;
-                    e.preventDefault();
-                    navigate(`/manga/${manga._id}`);
-                  }}
-                  className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col md:flex-row group"
-                >
-                  {/* Cover Frame (larger) */}
-                  <div
-                    className="w-full md:w-48 aspect-[3/4] md:aspect-auto md:h-64 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 cursor-zoom-in"
-                    onClick={(e) => {
-                      if (manga.cover_url) {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setZoomedCoverUrl(manga.cover_url);
-                      }
-                    }}
-                  >
-                    {manga.cover_url ? (
-                      <BlurredCover
-                        src={manga.cover_url}
-                        alt={manga.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        shouldBlur={shouldBlur(manga)}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-                        <span>No Cover Image</span>
-                      </div>
-                    )}
-                    {/* Status Badge (Select) */}
-                    <select
-                      value={manga.read_status}
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onMouseUp={(e) => e.stopPropagation()}
-                      onChange={(e) => handleQuickUpdateStatus(manga._id, e.target.value)}
-                      className={`absolute top-3 left-3 px-2.5 py-1 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
-                    >
-                      <option value="unread" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Unread</option>
-                      <option value="reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Reading</option>
-                      <option value="completed" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Completed</option>
-                      <option value="dropped" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Dropped</option>
-                      <option value="on_hold" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">On Hold</option>
-                      <option value="plan_to_read" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Plan to Read</option>
-                      <option value="re_reading" className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200">Re-Reading</option>
-                    </select>
-                  </div>
-
-                  {/* Details Section */}
-                  <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {manga.publication_demographic && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-850 dark:bg-orange-950 dark:text-orange-300">
-                            {manga.publication_demographic}
-                          </span>
-                        )}
-                        {manga.status && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
-                            {manga.status}
-                          </span>
-                        )}
-                        <div
-                          className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onMouseUp={(e) => e.stopPropagation()}
-                        >
-                          <Star size={12} className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none" />
-                          <select
-                            value={manga.personal_rating ?? ""}
-                            onChange={(e) => {
-                              const val = e.target.value === "" ? null : Number(e.target.value);
-                              handleQuickUpdateRating(manga._id, val);
-                            }}
-                            className={`pl-6 pr-2 py-0.5 rounded text-[11px] font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${manga.personal_rating !== null ? "text-yellow-600 dark:text-yellow-400 font-extrabold" : "text-zinc-400"
-                              }`}
-                          >
-                            <option value="" className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">★ -</option>
-                            {Array.from({ length: 21 }, (_, i) => {
-                              const num = 10 - i * 0.5;
-                              return (
-                                <option key={num} value={num} className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200">
-                                  {num.toFixed(1)} / 10
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                        {manga.year && (
-                          <span className="text-xs text-[var(--text-secondary)] font-semibold">
-                            Released: {manga.year}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2.5">
-                        <h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
-                          {manga.title}
-                        </h3>
-                        {!manga.mangadex_id && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            Manual
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-xs text-[var(--text-secondary)] font-medium flex flex-wrap gap-x-4 gap-y-1">
-                        <span>
-                          <span className="font-bold text-[var(--text-primary)]">Author:</span> {renderCreatorLinks(manga.author)}
-                        </span>
-                        <span>
-                          <span className="font-bold text-[var(--text-primary)]">Artist:</span> {renderCreatorLinks(manga.artist)}
-                        </span>
-                      </div>
-
-                      {manga.description && (
-                        <p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed pt-1">
-                          {manga.description}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Tags & Action Row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
-                      <div className="flex flex-wrap gap-1.5">
-                        {manga.tag_ids.map((tid) => {
-                          const tag = allTags.find((t) => t._id === tid);
-                          if (!tag) return null;
-                          return (
-                            <span
-                              key={tid}
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold text-white transition hover:brightness-95"
-                              style={{ backgroundColor: tag.color || "var(--text-secondary)" }}
-                            >
-                              {tag.name.en}
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      <a
-                        href={`/manga/${manga._id}`}
-                        onClick={(e) => {
-                          if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-                            return;
-                          }
-                          e.stopPropagation();
-                          e.preventDefault();
-                          navigate(`/manga/${manga._id}`);
-                        }}
-                        className="flex-shrink-0 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow transition duration-200"
-                      >
-                        View Details
-                      </a>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {/* Pagination */}
-          {total > limit && (
-            <div className="flex justify-center items-center space-x-4 pt-4">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-4 py-2 border border-[var(--border-primary)] rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
-              >
-                Previous
-              </button>
-              <span className="text-sm font-semibold">
-                Page {page} of {Math.ceil(total / limit)}
-              </span>
-              <button
-                disabled={page * limit >= total}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-4 py-2 border border-[var(--border-primary)] rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="text-center py-24 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl text-[var(--text-secondary)]">
-          No manga match your filters or search. Add a manga to start!
-        </div>
-      )}
-
-      {/* Add Manga Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
-              <div className="space-y-1">
-                <h2 className="text-xl font-bold flex items-center space-x-2">
-                  <Plus size={20} className="text-[var(--brand-orange)]" />
-                  <span>Add New Manga</span>
-                </h2>
-                <div className="flex space-x-4 text-xs font-semibold">
-                  <button
-                    onClick={() => setAddTab("dex")}
-                    className={`pb-1 border-b-2 transition ${addTab === "dex"
-                      ? "border-[var(--brand-orange)] text-[var(--text-primary)]"
-                      : "border-transparent text-[var(--text-secondary)]"
-                      }`}
-                  >
-                    Search MangaDex
-                  </button>
-                  <button
-                    onClick={() => setAddTab("manual")}
-                    className={`pb-1 border-b-2 transition ${addTab === "manual"
-                      ? "border-[var(--brand-orange)] text-[var(--text-primary)]"
-                      : "border-transparent text-[var(--text-secondary)]"
-                      }`}
-                  >
-                    Add Manually
-                  </button>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 relative">
-              {importingManga && (
-                <div className="absolute inset-0 bg-[var(--bg-card)]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-200">
-                  <div className="w-full max-w-md space-y-6">
-                    <div className="text-center space-y-2">
-                      <h3 className="text-lg font-extrabold font-spartan">Importing MangaDex Manga</h3>
-                      <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
-                        UUID: <span className="font-mono text-zinc-500 dark:text-zinc-400">{importingManga}</span>
-                      </p>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-[var(--brand-orange)]">{importProgressMessage || "Initializing..."}</span>
-                        <span className="text-[var(--text-secondary)]">{importProgressPercent}%</span>
-                      </div>
-                      <div className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden border border-[var(--border-primary)] p-0.5">
-                        <div
-                          className="h-full bg-gradient-to-r from-[var(--brand-orange)] to-[var(--brand-coral)] rounded-full transition-all duration-300 ease-out"
-                          style={{ width: `${importProgressPercent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Steps Checklist */}
-                    <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-3.5 shadow-inner">
-                      {(() => {
-                        const getStepStatus = (stepName: string) => {
-                          if (importProgressStep === "error") {
-                            if (failedStep === stepName) return "failed";
-                            const stepsOrder = ["metadata", "creators", "tags", "cover", "save", "sync_assets"];
-                            const failedIdx = stepsOrder.indexOf(failedStep || "");
-                            const thisIdx = stepsOrder.indexOf(stepName);
-                            if (thisIdx < failedIdx) return "completed";
-                            return "pending";
-                          }
-
-                          const stepsOrder = ["metadata", "creators", "tags", "cover", "save", "sync_assets", "done"];
-                          const currentStepIndex = importProgressStep ? stepsOrder.indexOf(importProgressStep) : -1;
-                          const thisIdx = stepsOrder.indexOf(stepName);
-
-                          if (currentStepIndex === -1) {
-                            return thisIdx === 0 ? "active" : "pending";
-                          }
-                          if (thisIdx < currentStepIndex) return "completed";
-                          if (thisIdx === currentStepIndex) return "active";
-                          return "pending";
-                        };
-
-                        const renderStepItem = (label: string, stepName: string) => {
-                          const status = getStepStatus(stepName);
-                          let icon = <Circle size={18} className="text-zinc-400 dark:text-zinc-600 flex-shrink-0" />;
-                          let textClass = "text-zinc-500 dark:text-zinc-400 font-medium";
-
-                          if (status === "active") {
-                            icon = <Loader2 size={18} className="text-[var(--brand-orange)] animate-spin flex-shrink-0" />;
-                            textClass = "text-[var(--text-primary)] font-bold animate-pulse";
-                          } else if (status === "completed") {
-                            icon = <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />;
-                            textClass = "text-zinc-700 dark:text-zinc-300 font-semibold";
-                          } else if (status === "failed") {
-                            icon = <XCircle size={18} className="text-rose-500 flex-shrink-0" />;
-                            textClass = "text-rose-500 font-bold";
-                          }
-
-                          return (
-                            <div className="flex items-center space-x-3 text-sm transition duration-200">
-                              {icon}
-                              <span className={textClass}>{label}</span>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <>
-                            {renderStepItem("Fetch manga details from MangaDex", "metadata")}
-                            {renderStepItem("Sync author and artist profiles", "creators")}
-                            {renderStepItem("Organize and map genre tags", "tags")}
-                            {renderStepItem("Download cover & upload to storage", "cover")}
-                            {renderStepItem("Register manga in your library", "save")}
-                            {renderStepItem("Fetch alternative covers & recommendations", "sync_assets")}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {addTab === "dex" ? (
-                /* MangaDex Tab */
-                <div className="space-y-6">
-                  <form onSubmit={handleDexSearch} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={dexQuery}
-                      onChange={(e) => setDexQuery(e.target.value)}
-                      placeholder="Enter manga title or MangaDex UUID..."
-                      className="flex-1 px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      disabled={dexSearching}
-                      className="px-6 py-2 bg-[var(--brand-orange)] text-white font-bold rounded-xl hover:bg-[var(--brand-coral)] transition disabled:opacity-50 flex items-center space-x-2"
-                    >
-                      {dexSearching ? "Searching..." : "Search"}
-                    </button>
-                  </form>
-
-                  {/* Import Configuration Panel */}
-                  <div className="p-4 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl space-y-4">
-                    <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                      Import Configuration (Set values before clicking Import)
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                          Read Status
-                        </label>
-                        <select
-                          value={importStatus}
-                          onChange={(e) => setImportStatus(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
-                        >
-                          <option value="unread">Unread</option>
-                          <option value="reading">Reading</option>
-                          <option value="completed">Completed</option>
-                          <option value="dropped">Dropped</option>
-                          <option value="on_hold">On Hold</option>
-                          <option value="plan_to_read">Plan to Read</option>
-                          <option value="re_reading">Re-Reading</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                          Personal Rating (0-10)
-                        </label>
-                        <input
-                          type="number"
-                          value={importRating}
-                          onChange={(e) => setImportRating(e.target.value === "" ? "" : Number(e.target.value))}
-                          placeholder="e.g. 8.5"
-                          min="0"
-                          max="10"
-                          step="0.5"
-                          className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tag selector */}
-                    {allTags.length > 0 && (
-                      <GroupedTagSelector
-                        allTags={allTags}
-                        selectedTags={importTags}
-                        onChange={setImportTags}
-                        label="Assign Custom Tags on Import"
-                        placeholder="Search tags to assign..."
-                      />
-                    )}
-                  </div>
-
-                  {/* Search Results */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">Search Results</h3>
-                    {dexResults.length > 0 ? (
-                      <div className="divide-y divide-[var(--border-primary)] max-h-96 overflow-y-auto pr-2 space-y-3">
-                        {dexResults.map((m) => (
-                          <div key={m.id} className="pt-3 flex gap-4 items-start justify-between">
-                            <div className="flex gap-4">
-                              <div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
-                                {m.cover_url && (
-                                  <BlurredCover
-                                    src={m.cover_url}
-                                    alt={m.title}
-                                    className="w-full h-full object-cover"
-                                    shouldBlur={shouldBlur(m)}
-                                  />
-                                )}
-                              </div>
-                              <div className="space-y-1">
-                                <h4 className="text-sm font-bold text-[var(--text-primary)] line-clamp-1">{m.title}</h4>
-                                <p className="text-xs text-[var(--text-secondary)]">By {m.author} • {m.year}</p>
-                                <p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">{m.description}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleImportManga(m.id)}
-                              disabled={importingManga === m.id}
-                              className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-xs font-bold transition disabled:opacity-50 flex-shrink-0"
-                            >
-                              {importingManga === m.id ? "Importing..." : "Import"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 text-[var(--text-secondary)] text-sm">
-                        No results found yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Manual Add Tab */
-                <form onSubmit={handleCreateManual} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Manga Title *</label>
-                      <input
-                        type="text"
-                        value={manualTitle}
-                        onChange={(e) => setManualTitle(e.target.value)}
-                        placeholder="e.g. My Custom Manga"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-                        required
-                      />
-                    </div>
-
-                    <CreatorLiveSearchInput
-                      label="Author"
-                      role="author"
-                      value={manualAuthor}
-                      onChange={setManualAuthor}
-                      placeholder="e.g. Oda Eiichiro"
-                    />
-
-                    <CreatorLiveSearchInput
-                      label="Artist"
-                      role="artist"
-                      value={manualArtist}
-                      onChange={setManualArtist}
-                      placeholder="e.g. Yusuke Murata"
-                    />
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Release Year</label>
-                      <input
-                        type="text"
-                        value={manualYear}
-                        onChange={(e) => setManualYear(e.target.value)}
-                        placeholder="e.g. 2021"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Description</label>
-                    <textarea
-                      value={manualDescription}
-                      onChange={(e) => setManualDescription(e.target.value)}
-                      placeholder="Manga details, summary..."
-                      rows={3}
-                      className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] resize-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Publish Status</label>
-                      <select
-                        value={manualStatus}
-                        onChange={(e) => setManualStatus(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      >
-                        <option value="ongoing">Ongoing</option>
-                        <option value="completed">Completed</option>
-                        <option value="hiatus">Hiatus</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Read Status</label>
-                      <select
-                        value={manualReadStatus}
-                        onChange={(e) => setManualReadStatus(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      >
-                        <option value="unread">Unread</option>
-                        <option value="reading">Reading</option>
-                        <option value="completed">Completed</option>
-                        <option value="dropped">Dropped</option>
-                        <option value="on_hold">On Hold</option>
-                        <option value="plan_to_read">Plan to Read</option>
-                        <option value="re_reading">Re-Reading</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Rating (0-10)</label>
-                      <input
-                        type="number"
-                        value={manualRating}
-                        onChange={(e) => setManualRating(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="e.g. 9.5"
-                        min="0"
-                        max="10"
-                        step="0.5"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Advanced Search Comparison Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Original Language</label>
-                      <select
-                        value={manualOriginalLanguage}
-                        onChange={(e) => setManualOriginalLanguage(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      >
-                        <option value="ja">Japanese (ja)</option>
-                        <option value="ko">Korean (ko)</option>
-                        <option value="zh">Chinese (zh)</option>
-                        <option value="en">English (en)</option>
-                        <option value="vi">Vietnamese (vi)</option>
-                        <option value="ru">Russian (ru)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Demographic</label>
-                      <select
-                        value={manualPublicationDemographic}
-                        onChange={(e) => setManualPublicationDemographic(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      >
-                        <option value="">None</option>
-                        <option value="shounen">Shounen</option>
-                        <option value="shoujo">Shoujo</option>
-                        <option value="seinen">Seinen</option>
-                        <option value="josei">Josei</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Content Rating</label>
-                      <select
-                        value={manualContentRating}
-                        onChange={(e) => setManualContentRating(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      >
-                        <option value="safe">Safe</option>
-                        <option value="suggestive">Suggestive</option>
-                        <option value="erotica">Erotica</option>
-                        <option value="pornographic">Pornographic</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Total Volumes</label>
-                      <input
-                        type="number"
-                        value={manualVolumes}
-                        onChange={(e) => setManualVolumes(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="e.g. 12"
-                        min="0"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Total Chapters</label>
-                      <input
-                        type="number"
-                        value={manualChapters}
-                        onChange={(e) => setManualChapters(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="e.g. 120"
-                        min="0"
-                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Assign Tags (reuses checklist code) */}
-                  {/* Assign Tags */}
-                  {allTags.length > 0 && (
-                    <GroupedTagSelector
-                      allTags={allTags}
-                      selectedTags={importTags}
-                      onChange={setImportTags}
-                      label="Assign Custom Tags"
-                      placeholder="Search tags to assign..."
-                    />
-                  )}
-
-                  {/* Cover image upload */}
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">Upload Cover Image</label>
-                    <div className="flex items-center space-x-4">
-                      <label className="flex items-center space-x-2 px-4 py-2 border border-[var(--border-primary)] rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
-                        <Upload size={16} />
-                        <span className="text-xs font-semibold">Choose File</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleCoverChange} />
-                      </label>
-                      {manualCoverPreview && (
-                        <div className="w-12 h-16 rounded overflow-hidden bg-zinc-100 border border-[var(--border-primary)]">
-                          <img src={manualCoverPreview} alt="Preview" className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Modal Footer Submit */}
-                  <div className="pt-4 border-t border-[var(--border-primary)] flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddModalOpen(false)}
-                      className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submittingManual}
-                      className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
-                    >
-                      {submittingManual ? "Adding..." : "Add Manga"}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lightbox Zoom Portal/Overlay */}
-      {zoomedCoverUrl && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
-          onClick={() => setZoomedCoverUrl(null)}
-        >
-          <button
-            onClick={() => setZoomedCoverUrl(null)}
-            className="absolute top-6 right-6 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700/80 text-white transition"
-          >
-            <X size={24} />
-          </button>
-          <div
-            className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={zoomedCoverUrl}
-              alt="Zoomed cover"
-              className="max-w-full max-h-[90vh] object-contain"
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
+	const { showAlert, showToast } = useAlert();
+	const searchInputRef = useRef<HTMLInputElement>(null);
+	const { settings, shouldBlur } = useMangaBlur();
+	const isRatingHidden = settings.enabled && settings.hideRating;
+
+	const getArrayParam = (key: string): string[] => {
+		const val = searchParams.get(key);
+		return val ? val.split(",").filter(Boolean) : [];
+	};
+
+	// Library State
+	const [mangas, setMangas] = useState<Manga[]>([]);
+	const [total, setTotal] = useState(0);
+	const [loading, setLoading] = useState(true);
+
+	// Filter States
+	const [search, setSearch] = useState(() => searchParams.get("search") || "");
+	const [debouncedSearch, setDebouncedSearch] = useState(
+		() => searchParams.get("search") || "",
+	);
+	const [viewMode, setViewMode] = useState<"grid" | "list" | "card">(() => {
+		return (localStorage.getItem("library_view_mode") as any) || "grid";
+	});
+	const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
+
+	const [selectedReadStatuses, setSelectedReadStatuses] = useState<string[]>(
+		() => {
+			const multi = getArrayParam("readStatuses");
+			if (multi.length > 0) return multi;
+			const single = searchParams.get("readStatus");
+			return single ? [single] : [];
+		},
+	);
+	const [excludeReadStatuses, setExcludeReadStatuses] = useState<string[]>(() =>
+		getArrayParam("excludeReadStatuses"),
+	);
+
+	const handleReadStatusClick = (status: string) => {
+		const isIncluded = selectedReadStatuses.includes(status);
+		const isExcluded = excludeReadStatuses.includes(status);
+
+		if (!isIncluded && !isExcluded) {
+			setSelectedReadStatuses((prev) => [...prev, status]);
+		} else if (isIncluded) {
+			setSelectedReadStatuses((prev) => prev.filter((s) => s !== status));
+			setExcludeReadStatuses((prev) => [...prev, status]);
+		} else {
+			setExcludeReadStatuses((prev) => prev.filter((s) => s !== status));
+		}
+		setPage(1);
+	};
+	const [selectedTags, setSelectedTags] = useState<string[]>(() =>
+		getArrayParam("selectedTags"),
+	);
+	const [excludeTags, setExcludeTags] = useState<string[]>(() =>
+		getArrayParam("excludeTags"),
+	);
+	const [tagMode, setTagMode] = useState<"all" | "any">(
+		() => (searchParams.get("tagMode") as any) || "all",
+	);
+	const [contentRatings, setContentRatings] = useState<string[]>(() =>
+		getArrayParam("contentRatings"),
+	);
+	const [demographics, setDemographics] = useState<string[]>(() =>
+		getArrayParam("demographics"),
+	);
+	const [statuses, setStatuses] = useState<string[]>(() =>
+		getArrayParam("statuses"),
+	);
+	const [originalLanguages, setOriginalLanguages] = useState<string[]>(() =>
+		getArrayParam("originalLanguages"),
+	);
+	const [selectedAuthors, setSelectedAuthors] = useState<string[]>(() =>
+		getArrayParam("selectedAuthors"),
+	);
+	const [selectedArtists, setSelectedArtists] = useState<string[]>(() =>
+		getArrayParam("selectedArtists"),
+	);
+	const [year, setYear] = useState(() => searchParams.get("year") || "");
+	const [ratingMin, setRatingMin] = useState<number | "">(() => {
+		const val = searchParams.get("ratingMin");
+		return val ? Number(val) : "";
+	});
+	const [ratingMax, setRatingMax] = useState<number | "">(() => {
+		const val = searchParams.get("ratingMax");
+		return val ? Number(val) : "";
+	});
+	const [sourceFilter, setSourceFilter] = useState<
+		"all" | "manual" | "mangadex"
+	>(() => {
+		const s = searchParams.get("source");
+		if (s === "manual" || s === "mangadex") return s;
+		return "all";
+	});
+	const [sortBy, setSortBy] = useState(
+		() => searchParams.get("sortBy") || "added_at",
+	);
+	const [sortOrder, setSortOrder] = useState(
+		() => searchParams.get("sortOrder") || "desc",
+	);
+	const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
+	const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(
+		() => searchParams.get("isAdvancedSearchOpen") === "true",
+	);
+	const [limit, setLimit] = useState<number>(() => {
+		return Number(localStorage.getItem("library_page_limit")) || 12;
+	});
+
+	// Metadata/All Tags Options
+	const [allTags, setAllTags] = useState<Tag[]>([]);
+
+	// Modals
+	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+	const [addTab, setAddTab] = useState<"dex" | "manual">("dex");
+
+	// MangaDex Search
+	const [dexQuery, setDexQuery] = useState("");
+	const [dexResults, setDexResults] = useState<any[]>([]);
+	const [dexSearching, setDexSearching] = useState(false);
+
+	// Import / Create Setup
+	const [importStatus, setImportStatus] = useState("unread");
+	const [importRating, setImportRating] = useState<number | "">("");
+	const [importTags, setImportTags] = useState<string[]>([]);
+	const [importingManga, setImportingManga] = useState<string | null>(null);
+	const [importProgressStep, setImportProgressStep] = useState<string | null>(
+		null,
+	);
+	const [importProgressMessage, setImportProgressMessage] =
+		useState<string>("");
+	const [importProgressPercent, setImportProgressPercent] = useState<number>(0);
+	const [failedStep, setFailedStep] = useState<string | null>(null);
+
+	// Manual Form States
+	const [manualTitle, setManualTitle] = useState("");
+	const [manualAuthor, setManualAuthor] = useState("");
+	const [manualArtist, setManualArtist] = useState("");
+	const [manualDescription, setManualDescription] = useState("");
+	const [manualRating, setManualRating] = useState<number | "">("");
+	const [manualStatus, setManualStatus] = useState("ongoing");
+	const [manualReadStatus, setManualReadStatus] = useState("unread");
+	const [manualYear, setManualYear] = useState("");
+	const [manualOriginalLanguage, setManualOriginalLanguage] = useState("ja");
+	const [manualPublicationDemographic, setManualPublicationDemographic] =
+		useState("");
+	const [manualContentRating, setManualContentRating] = useState("safe");
+	const [manualVolumes, setManualVolumes] = useState<number | "">("");
+	const [manualChapters, setManualChapters] = useState<number | "">("");
+	const [manualLinks] = useState<{ title: string; url: string }[]>([
+		{ title: "Source", url: "" },
+	]);
+	const [manualCover, setManualCover] = useState<File | null>(null);
+	const [manualCoverPreview, setManualCoverPreview] = useState<string | null>(
+		null,
+	);
+	const [submittingManual, setSubmittingManual] = useState(false);
+
+	// Search debouncing effect
+	useEffect(() => {
+		const handler = setTimeout(() => {
+			setDebouncedSearch(search);
+			if (search !== debouncedSearch) {
+				setPage(1);
+			}
+		}, 300);
+
+		return () => {
+			clearTimeout(handler);
+		};
+	}, [search]);
+
+	// Sync filter state to URL Search Params
+	useEffect(() => {
+		const params = new URLSearchParams();
+		if (search) params.set("search", search);
+		if (selectedReadStatuses.length)
+			params.set("readStatuses", selectedReadStatuses.join(","));
+		if (excludeReadStatuses.length)
+			params.set("excludeReadStatuses", excludeReadStatuses.join(","));
+		if (selectedTags.length) params.set("selectedTags", selectedTags.join(","));
+		if (excludeTags.length) params.set("excludeTags", excludeTags.join(","));
+		if (tagMode !== "all") params.set("tagMode", tagMode);
+		if (contentRatings.length)
+			params.set("contentRatings", contentRatings.join(","));
+		if (demographics.length) params.set("demographics", demographics.join(","));
+		if (statuses.length) params.set("statuses", statuses.join(","));
+		if (originalLanguages.length)
+			params.set("originalLanguages", originalLanguages.join(","));
+		if (selectedAuthors.length)
+			params.set("selectedAuthors", selectedAuthors.join(","));
+		if (selectedArtists.length)
+			params.set("selectedArtists", selectedArtists.join(","));
+		if (year) params.set("year", year);
+		if (ratingMin !== "") params.set("ratingMin", String(ratingMin));
+		if (ratingMax !== "") params.set("ratingMax", String(ratingMax));
+		if (sourceFilter !== "all") params.set("source", sourceFilter);
+		if (sortBy !== "added_at") params.set("sortBy", sortBy);
+		if (sortOrder !== "desc") params.set("sortOrder", sortOrder);
+		if (page !== 1) params.set("page", String(page));
+		if (isAdvancedSearchOpen) params.set("isAdvancedSearchOpen", "true");
+
+		const currentQuery = searchParams.toString();
+		const newQuery = params.toString();
+		if (currentQuery !== newQuery) {
+			setSearchParams(params, { replace: true });
+		}
+	}, [
+		search,
+		selectedReadStatuses,
+		excludeReadStatuses,
+		selectedTags,
+		excludeTags,
+		tagMode,
+		contentRatings,
+		demographics,
+		statuses,
+		originalLanguages,
+		selectedAuthors,
+		selectedArtists,
+		year,
+		ratingMin,
+		ratingMax,
+		sourceFilter,
+		sortBy,
+		sortOrder,
+		page,
+		isAdvancedSearchOpen,
+		searchParams,
+		setSearchParams,
+	]);
+
+	// Creator links helper
+	const renderCreatorLinks = (creatorString: string) => {
+		if (
+			!creatorString ||
+			creatorString === "Unknown" ||
+			creatorString === "N/A"
+		) {
+			return <span>{creatorString || "Unknown"}</span>;
+		}
+		const creators = creatorString
+			.split(/[,;]/)
+			.map((c) => c.trim())
+			.filter(Boolean);
+		return (
+			<>
+				{creators.map((name, index) => (
+					<React.Fragment key={name}>
+						{index > 0 && (
+							<span className="text-[var(--text-secondary)]">, </span>
+						)}
+						<a
+							href={`/author/${encodeURIComponent(name)}`}
+							onClick={(e) => {
+								if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+									return;
+								}
+								e.stopPropagation();
+								e.preventDefault();
+								navigate(`/author/${encodeURIComponent(name)}`);
+							}}
+							onMouseDown={(e) => {
+								if (e.button === 1) e.preventDefault();
+							}}
+							onAuxClick={(e) => {
+								if (e.button === 1) {
+									window.open(`/author/${encodeURIComponent(name)}`, "_blank");
+								}
+							}}
+							className="hover:text-[var(--brand-orange)] hover:underline cursor-pointer transition duration-150"
+						>
+							{name}
+						</a>
+					</React.Fragment>
+				))}
+			</>
+		);
+	};
+
+	const renderPublicationStatusBadge = (status?: string | null) => {
+		if (!status) return null;
+		const s = status.toLowerCase();
+		let colorClass =
+			"bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-750";
+		if (s === "completed") {
+			colorClass =
+				"bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30";
+		} else if (s === "ongoing") {
+			colorClass =
+				"bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+		} else if (s === "hiatus") {
+			colorClass =
+				"bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
+		} else if (s === "cancelled") {
+			colorClass =
+				"bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
+		}
+		return (
+			<span
+				className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-xs ${colorClass}`}
+			>
+				{status}
+			</span>
+		);
+	};
+
+	// Load Library & Tags
+	const fetchLibrary = async () => {
+		try {
+			setLoading(true);
+			const params: any = {
+				skip: (page - 1) * limit,
+				limit: limit,
+				sort_by: sortBy,
+				sort_order: sortOrder,
+			};
+
+			if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+			if (selectedReadStatuses.length > 0)
+				params.read_statuses = selectedReadStatuses;
+			if (excludeReadStatuses.length > 0)
+				params.exclude_read_statuses = excludeReadStatuses;
+			if (ratingMin !== "") params.rating_min = Number(ratingMin);
+			if (ratingMax !== "") params.rating_max = Number(ratingMax);
+			if (selectedAuthors.length > 0) params.authors = selectedAuthors;
+			if (selectedArtists.length > 0) params.artists = selectedArtists;
+			if (year.trim()) params.year = year.trim();
+			if (tagMode) params.tag_mode = tagMode;
+
+			if (selectedTags.length > 0) {
+				params.tags = selectedTags;
+			}
+			if (excludeTags.length > 0) {
+				params.exclude_tags = excludeTags;
+			}
+			if (contentRatings.length > 0) {
+				params.content_ratings = contentRatings;
+			}
+			if (demographics.length > 0) {
+				params.demographics = demographics;
+			}
+			if (statuses.length > 0) {
+				params.statuses = statuses;
+			}
+			if (originalLanguages.length > 0) {
+				params.original_languages = originalLanguages;
+			}
+			if (sourceFilter === "manual") {
+				params.is_manual = true;
+			} else if (sourceFilter === "mangadex") {
+				params.is_manual = false;
+			}
+
+			const res = await client.get("/api/manga/", { params });
+			setMangas(res.data.items);
+			setTotal(res.data.total);
+		} catch (err) {
+			console.error("Error loading library:", err);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const fetchTags = async () => {
+		try {
+			const res = await client.get("/api/tags/");
+			setAllTags(res.data);
+		} catch (err) {
+			console.error("Error loading tags:", err);
+		}
+	};
+
+	useEffect(() => {
+		fetchLibrary();
+	}, [
+		page,
+		limit,
+		debouncedSearch,
+		selectedReadStatuses,
+		excludeReadStatuses,
+		ratingMin,
+		ratingMax,
+		sourceFilter,
+		sortBy,
+		sortOrder,
+		selectedTags,
+		excludeTags,
+		tagMode,
+		contentRatings,
+		demographics,
+		statuses,
+		originalLanguages,
+		selectedAuthors,
+		selectedArtists,
+		year,
+	]);
+
+	useEffect(() => {
+		fetchTags();
+	}, []);
+
+	// Handle Enter on search
+	const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter") {
+			setPage(1);
+			setDebouncedSearch(search);
+		}
+	};
+
+	const extractMangaDexUuid = (query: string): string => {
+		const uuidRegex =
+			/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+		const urlMatch = query.match(
+			/\/title\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+		);
+		if (urlMatch) {
+			return urlMatch[1];
+		}
+		const directMatch = query.match(uuidRegex);
+		if (directMatch && directMatch[0] === query.trim()) {
+			return directMatch[0];
+		}
+		return query;
+	};
+
+	// Search MangaDex
+	const handleDexSearch = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!dexQuery.trim()) return;
+		try {
+			setDexSearching(true);
+			const resolvedQuery = extractMangaDexUuid(dexQuery.trim());
+			const res = await client.get("/api/mangadex/search", {
+				params: { query: resolvedQuery },
+			});
+			setDexResults(res.data);
+		} catch (err) {
+			console.error("MangaDex search failed:", err);
+			showAlert({
+				title: "Search Failed",
+				message: "Failed to search MangaDex. Try again.",
+				type: "error",
+			});
+		} finally {
+			setDexSearching(false);
+		}
+	};
+
+	// Import MangaDex Manga
+	const handleImportManga = async (dexId: string) => {
+		try {
+			setImportingManga(dexId);
+			setImportProgressStep("metadata");
+			setImportProgressMessage("Initializing import...");
+			setImportProgressPercent(0);
+			setFailedStep(null);
+
+			const payload: any = {
+				mangadex_id: dexId,
+				read_status: importStatus,
+				tag_ids: importTags,
+			};
+			if (importRating !== "") payload.personal_rating = Number(importRating);
+
+			const baseUrl = client.defaults.baseURL || "";
+			const url = `${baseUrl}/api/manga/dex`;
+
+			const response = await fetch(url, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(payload),
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const reader = response.body?.getReader();
+			if (!reader) {
+				throw new Error("No response body reader available.");
+			}
+
+			const decoder = new TextDecoder();
+			let buffer = "";
+			let importedMangaData: any = null;
+
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split("\n");
+				buffer = lines.pop() || "";
+
+				for (const line of lines) {
+					const trimmed = line.trim();
+					if (trimmed.startsWith("data: ")) {
+						const dataStr = trimmed.slice(6);
+						if (!dataStr) continue;
+						try {
+							const data = JSON.parse(dataStr);
+							if (data.step === "error") {
+								setImportProgressStep("error");
+								setFailedStep(data.failed_step || "metadata");
+								setImportProgressMessage(data.message);
+
+								// Intercept duplicate error
+								if (
+									data.code === "DUPLICATE_MANGA" ||
+									data.error_type === "DUPLICATE_MANGA"
+								) {
+									const title = data.title;
+									const mangaId = data.manga_id;
+									const confirmSync = window.confirm(
+										`Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`,
+									);
+									if (confirmSync) {
+										try {
+											showToast("Đang đồng bộ thông tin...", "info");
+											const syncRes = await client.post(
+												`/api/manga/${mangaId}/sync`,
+											);
+											setMangas((prev) =>
+												prev.map((m) => (m._id === mangaId ? syncRes.data : m)),
+											);
+											showAlert({
+												title: "Đồng bộ thành công",
+												message: `Đã đồng bộ thông tin mới cho "${title}"!`,
+												type: "success",
+											});
+											setIsAddModalOpen(false);
+											setDexResults([]);
+											setDexQuery("");
+										} catch (syncErr) {
+											console.error("Failed to sync duplicate manga:", syncErr);
+											showAlert({
+												title: "Đồng bộ thất bại",
+												message: "Không thể đồng bộ thông tin manga.",
+												type: "error",
+											});
+										}
+									}
+								} else {
+									showAlert({
+										title: "Import Failed",
+										message:
+											data.message ||
+											"An unknown error occurred during import.",
+										type: "error",
+									});
+								}
+								return;
+							} else {
+								setImportProgressStep(data.step);
+								setImportProgressMessage(data.message);
+								setImportProgressPercent(data.progress || 0);
+								if (data.step === "done" && data.manga) {
+									importedMangaData = data.manga;
+								}
+							}
+						} catch (jsonErr) {
+							console.error("Failed to parse stream JSON:", jsonErr, dataStr);
+						}
+					}
+				}
+			}
+
+			if (importedMangaData) {
+				// Update List
+				setMangas((prev) => [importedMangaData, ...prev].slice(0, limit));
+				setTotal((prev) => prev + 1);
+
+				// Reset imports options
+				setImportRating("");
+				setImportTags([]);
+
+				showAlert({
+					title: "Import Success",
+					message: `Imported "${importedMangaData.title}" successfully!`,
+					type: "success",
+				});
+				setIsAddModalOpen(false);
+				setDexResults([]);
+				setDexQuery("");
+			} else {
+				if (importProgressStep !== "error") {
+					showAlert({
+						title: "Import Incomplete",
+						message: "Stream ended without completing the import.",
+						type: "warning",
+					});
+				}
+			}
+		} catch (err: any) {
+			console.error("Import request failed:", err);
+			showAlert({
+				title: "Import Failed",
+				message: err.message || "Failed to import manga",
+				type: "error",
+			});
+		} finally {
+			setImportingManga(null);
+			setImportProgressStep(null);
+			setImportProgressPercent(0);
+			setImportProgressMessage("");
+			setFailedStep(null);
+		}
+	};
+
+	// Handle Cover select preview
+	const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		if (e.target.files && e.target.files[0]) {
+			const file = e.target.files[0];
+			setManualCover(file);
+			setManualCoverPreview(URL.createObjectURL(file));
+		}
+	};
+
+	// Create Manual Manga
+	const handleCreateManual = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!manualTitle.trim()) {
+			showAlert({
+				title: "Required Field",
+				message: "Title is required",
+				type: "warning",
+			});
+			return;
+		}
+
+		try {
+			setSubmittingManual(true);
+			const payload: any = {
+				title: manualTitle.trim(),
+				author: manualAuthor.trim() || "Unknown",
+				artist: manualArtist.trim() || "Unknown",
+				description: manualDescription.trim(),
+				read_status: manualReadStatus,
+				status: manualStatus,
+				tag_ids: importTags, // Uses the same modal tag selector state
+				year: manualYear.trim() || "N/A",
+				links: manualLinks.filter((l) => l.title && l.url),
+				original_language: manualOriginalLanguage || null,
+				publication_demographic: manualPublicationDemographic || null,
+				content_rating: manualContentRating || null,
+				volumes: manualVolumes === "" ? null : Number(manualVolumes),
+				chapters: manualChapters === "" ? null : Number(manualChapters),
+			};
+			if (manualRating !== "") payload.personal_rating = Number(manualRating);
+
+			const formData = new FormData();
+			formData.append("metadata", JSON.stringify(payload));
+			if (manualCover) {
+				formData.append("cover", manualCover);
+			}
+
+			const res = await client.post("/api/manga/manual", formData, {
+				headers: { "Content-Type": "multipart/form-data" },
+			});
+
+			setMangas((prev) => [res.data, ...prev].slice(0, limit));
+			setTotal((prev) => prev + 1);
+
+			showAlert({
+				title: "Success",
+				message: `Added "${res.data.title}" successfully!`,
+				type: "success",
+			});
+			setIsAddModalOpen(false);
+
+			// Reset manual fields
+			setManualTitle("");
+			setManualAuthor("");
+			setManualArtist("");
+			setManualDescription("");
+			setManualRating("");
+			setManualYear("");
+			setManualOriginalLanguage("ja");
+			setManualPublicationDemographic("");
+			setManualContentRating("safe");
+			setManualVolumes("");
+			setManualChapters("");
+			setManualCover(null);
+			setManualCoverPreview(null);
+			setImportTags([]);
+		} catch (err: any) {
+			showAlert({
+				title: "Error",
+				message: err.response?.data?.detail || "Failed to add manual manga",
+				type: "error",
+			});
+		} finally {
+			setSubmittingManual(false);
+		}
+	};
+
+	const handleTagClick = (tagId: string) => {
+		const isIncluded = selectedTags.includes(tagId);
+		const isExcluded = excludeTags.includes(tagId);
+
+		if (!isIncluded && !isExcluded) {
+			setSelectedTags((prev) => [...prev, tagId]);
+		} else if (isIncluded) {
+			setSelectedTags((prev) => prev.filter((id) => id !== tagId));
+			setExcludeTags((prev) => [...prev, tagId]);
+		} else {
+			setExcludeTags((prev) => prev.filter((id) => id !== tagId));
+		}
+		setPage(1);
+	};
+
+	const handleGroupClick = (groupName: string) => {
+		const groupTags = allTags.filter((t) => (t.group || "other") === groupName);
+		if (groupTags.length === 0) return;
+
+		const tagIds = groupTags.map((t) => t._id);
+		const allIncluded = tagIds.every((id) => selectedTags.includes(id));
+		const allExcluded = tagIds.every((id) => excludeTags.includes(id));
+
+		if (!allIncluded && !allExcluded) {
+			// Step 1: Must Include all tags in this group
+			setSelectedTags((prev) => {
+				const filtered = prev.filter((id) => !tagIds.includes(id));
+				return [...filtered, ...tagIds];
+			});
+			setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+		} else if (allIncluded) {
+			// Step 2: Must Exclude all tags in this group
+			setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+			setExcludeTags((prev) => {
+				const filtered = prev.filter((id) => !tagIds.includes(id));
+				return [...filtered, ...tagIds];
+			});
+		} else {
+			// Step 3: Ignore all tags in this group (Neutral)
+			setSelectedTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+			setExcludeTags((prev) => prev.filter((id) => !tagIds.includes(id)));
+		}
+		setPage(1);
+	};
+
+	const handleLimitChange = (newLimit: number) => {
+		setLimit(newLimit);
+		localStorage.setItem("library_page_limit", String(newLimit));
+		setPage(1);
+	};
+
+	const handleQuickUpdateStatus = async (mangaId: string, status: string) => {
+		try {
+			const payload = { read_status: status };
+			const formData = new FormData();
+			formData.append("metadata", JSON.stringify(payload));
+
+			const res = await client.put(`/api/manga/${mangaId}`, formData, {
+				headers: { "Content-Type": "multipart/form-data" },
+			});
+
+			setMangas((prev) =>
+				prev.map((m) =>
+					m._id === mangaId ? { ...m, read_status: res.data.read_status } : m,
+				),
+			);
+			showToast("Updated read status successfully!", "success");
+		} catch (err) {
+			console.error("Failed to quick-update status:", err);
+			showToast("Failed to update read status.", "error");
+		}
+	};
+
+	const handleQuickUpdateRating = async (
+		mangaId: string,
+		rating: number | null,
+	) => {
+		try {
+			const payload = { personal_rating: rating };
+			const formData = new FormData();
+			formData.append("metadata", JSON.stringify(payload));
+
+			const res = await client.put(`/api/manga/${mangaId}`, formData, {
+				headers: { "Content-Type": "multipart/form-data" },
+			});
+
+			setMangas((prev) =>
+				prev.map((m) =>
+					m._id === mangaId
+						? { ...m, personal_rating: res.data.personal_rating }
+						: m,
+				),
+			);
+			showToast("Updated rating successfully!", "success");
+		} catch (err) {
+			console.error("Failed to quick-update rating:", err);
+			showToast("Failed to update rating.", "error");
+		}
+	};
+
+	const getStatusColorClass = (status: string) => {
+		switch (status) {
+			case "completed":
+				return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
+			case "reading":
+				return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+			case "dropped":
+				return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+			case "on_hold":
+				return "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300";
+			case "plan_to_read":
+				return "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300";
+			case "re_reading":
+				return "bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300";
+			default:
+				return "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300";
+		}
+	};
+
+	return (
+		<div className="space-y-6">
+			{/* Title Header */}
+			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+				<div>
+					<h1 className="text-3xl font-spartan font-extrabold tracking-tight">
+						Manga Library
+					</h1>
+					<p className="text-sm text-[var(--text-secondary)]">
+						Track reviews, read status, and manage physical & digital
+						collections.
+					</p>
+				</div>
+
+				<button
+					onClick={() => setIsAddModalOpen(true)}
+					className="flex items-center justify-center space-x-2 px-5 py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition duration-200"
+				>
+					<Plus size={18} />
+					<span>Add Manga</span>
+				</button>
+			</div>
+
+			{/* Filters bar */}
+			<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-4 shadow-sm">
+				{/* Main Search Row */}
+				<div className="flex flex-col md:flex-row gap-4">
+					<div className="relative flex-1">
+						<Search
+							className="absolute left-3 top-3.5 text-zinc-400"
+							size={18}
+						/>
+						<input
+							ref={searchInputRef}
+							type="text"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							onKeyDown={handleSearchKeyPress}
+							placeholder="Search by title, author, artist, alt titles..."
+							className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+						/>
+						{search && (
+							<button
+								type="button"
+								onClick={() => {
+									setSearch("");
+									setDebouncedSearch("");
+									setPage(1);
+									searchInputRef.current?.focus();
+								}}
+								className="absolute right-3 top-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
+							>
+								<X size={18} />
+							</button>
+						)}
+					</div>
+
+					<div className="flex gap-2 flex-wrap items-center">
+						{/* Source Filter Segmented Buttons */}
+						<div className="flex rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] p-0.5 text-xs font-semibold">
+							<button
+								type="button"
+								onClick={() => {
+									setSourceFilter("all");
+									setPage(1);
+								}}
+								className={`px-3 py-2 rounded-lg transition ${
+									sourceFilter === "all"
+										? "bg-[var(--brand-orange)] text-white shadow-sm"
+										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+								}`}
+							>
+								All Sources
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setSourceFilter("manual");
+									setPage(1);
+								}}
+								className={`px-3 py-2 rounded-lg transition flex items-center space-x-1.5 ${
+									sourceFilter === "manual"
+										? "bg-amber-600 text-white shadow-sm font-bold"
+										: "text-[var(--text-secondary)] hover:text-amber-600 dark:hover:text-amber-400"
+								}`}
+								title="Only show manually added manga"
+							>
+								<span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+								<span>Manual Only</span>
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setSourceFilter("mangadex");
+									setPage(1);
+								}}
+								className={`px-3 py-2 rounded-lg transition ${
+									sourceFilter === "mangadex"
+										? "bg-[var(--brand-orange)] text-white shadow-sm font-bold"
+										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+								}`}
+								title="Only show MangaDex imported manga"
+							>
+								<span>MangaDex</span>
+							</button>
+						</div>
+
+						<button
+							type="button"
+							onClick={() => {
+								setIsAdvancedSearchOpen(true);
+							}}
+							className="px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-secondary)] font-semibold hover:border-zinc-400 transition text-sm"
+						>
+							Statuses:{" "}
+							{selectedReadStatuses.length > 0 || excludeReadStatuses.length > 0
+								? `${selectedReadStatuses.length} incl / ${excludeReadStatuses.length} excl`
+								: "All"}
+						</button>
+
+						<button
+							type="button"
+							onClick={() => setIsAdvancedSearchOpen(!isAdvancedSearchOpen)}
+							className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl border border-[var(--border-primary)] transition font-semibold text-sm ${
+								isAdvancedSearchOpen
+									? "bg-orange-50 border-orange-200 text-orange-600 dark:bg-orange-950/20 dark:border-orange-900/30 dark:text-orange-400"
+									: "bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+							}`}
+						>
+							<SlidersHorizontal size={16} />
+							<span>Advanced Search</span>
+							{isAdvancedSearchOpen ? (
+								<ChevronUp size={16} />
+							) : (
+								<ChevronDown size={16} />
+							)}
+						</button>
+					</div>
+				</div>
+
+				{/* Collapsible Advanced Search Panel */}
+				{isAdvancedSearchOpen && (
+					<div className="pt-4 border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+						{/* Sorting & Basic Details Grid */}
+						<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Sort By
+								</label>
+								<select
+									value={sortBy}
+									onChange={(e) => {
+										setSortBy(e.target.value);
+										setPage(1);
+									}}
+									className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
+								>
+									<option value="added_at">Date Added</option>
+									<option value="updated_at">Date Updated</option>
+									<option value="title">Title</option>
+									<option value="personal_rating">Personal Rating</option>
+									<option value="year">Release Year</option>
+									<option value="completed_at">
+										Date Completed (Reading Progress)
+									</option>
+									<option value="status">
+										Publication Status (Ongoing / Completed)
+									</option>
+									<option value="reading_at">Date Started Reading</option>
+									<option value="plan_to_read_at">Date Planned</option>
+									<option value="dropped_at">Date Dropped</option>
+									<option value="on_hold_at">Date On Hold</option>
+									<option value="re_reading_at">Date Re-reading</option>
+								</select>
+							</div>
+
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Sort Order
+								</label>
+								<select
+									value={sortOrder}
+									onChange={(e) => {
+										setSortOrder(e.target.value);
+										setPage(1);
+									}}
+									className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
+								>
+									<option value="desc">Descending</option>
+									<option value="asc">Ascending</option>
+								</select>
+							</div>
+
+							<div>
+								<CreatorMultiSelect
+									label="Author"
+									role="author"
+									selected={selectedAuthors}
+									onChange={(selected) => {
+										setSelectedAuthors(selected);
+										setPage(1);
+									}}
+									placeholder="All Authors"
+								/>
+							</div>
+
+							<div>
+								<CreatorMultiSelect
+									label="Artist"
+									role="artist"
+									selected={selectedArtists}
+									onChange={(selected) => {
+										setSelectedArtists(selected);
+										setPage(1);
+									}}
+									placeholder="All Artists"
+								/>
+							</div>
+						</div>
+
+						{/* Demographics, Content Rating, Publication Status, Original Language Row */}
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+							{/* Magazine Demographic */}
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Magazine Demographic
+								</label>
+								<div className="flex flex-wrap gap-1.5">
+									{["shounen", "shoujo", "seinen", "josei"].map((demo) => {
+										const isSel = demographics.includes(demo);
+										return (
+											<button
+												key={demo}
+												type="button"
+												onClick={() => {
+													setDemographics((prev) =>
+														prev.includes(demo)
+															? prev.filter((d) => d !== demo)
+															: [...prev, demo],
+													);
+													setPage(1);
+												}}
+												className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${
+													isSel
+														? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+														: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+												}`}
+											>
+												{demo}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+
+							{/* Content Rating */}
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Content Rating
+								</label>
+								<div className="flex flex-wrap gap-1.5">
+									{["safe", "suggestive", "erotica", "pornographic"].map(
+										(rating) => {
+											const isSel = contentRatings.includes(rating);
+											return (
+												<button
+													key={rating}
+													type="button"
+													onClick={() => {
+														setContentRatings((prev) =>
+															prev.includes(rating)
+																? prev.filter((r) => r !== rating)
+																: [...prev, rating],
+														);
+														setPage(1);
+													}}
+													className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${
+														isSel
+															? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+															: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+													}`}
+												>
+													{rating}
+												</button>
+											);
+										},
+									)}
+								</div>
+							</div>
+
+							{/* Publication Status */}
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Publication Status
+								</label>
+								<div className="flex flex-wrap gap-1.5">
+									{["ongoing", "completed", "hiatus", "cancelled"].map(
+										(stat) => {
+											const isSel = statuses.includes(stat);
+											return (
+												<button
+													key={stat}
+													type="button"
+													onClick={() => {
+														setStatuses((prev) =>
+															prev.includes(stat)
+																? prev.filter((s) => s !== stat)
+																: [...prev, stat],
+														);
+														setPage(1);
+													}}
+													className={`px-3 py-1.5 rounded-lg text-xs font-semibold border capitalize transition ${
+														isSel
+															? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+															: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+													}`}
+												>
+													{stat}
+												</button>
+											);
+										},
+									)}
+								</div>
+							</div>
+
+							{/* Original Language */}
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Original Language
+								</label>
+								<div className="flex flex-wrap gap-1.5">
+									{[
+										{ code: "ja", label: "Japanese (ja)" },
+										{ code: "ko", label: "Korean (ko)" },
+										{ code: "zh", label: "Chinese (zh)" },
+										{ code: "en", label: "English (en)" },
+										{ code: "vi", label: "Vietnamese (vi)" },
+										{ code: "ru", label: "Russian (ru)" },
+									].map((lang) => {
+										const isSel = originalLanguages.includes(lang.code);
+										return (
+											<button
+												key={lang.code}
+												type="button"
+												onClick={() => {
+													setOriginalLanguages((prev) =>
+														prev.includes(lang.code)
+															? prev.filter((c) => c !== lang.code)
+															: [...prev, lang.code],
+													);
+													setPage(1);
+												}}
+												className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+													isSel
+														? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+														: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400"
+												}`}
+											>
+												{lang.label}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						</div>
+
+						{/* Rating Limits, Tag Mode, Year & Legend */}
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-[var(--border-primary)]">
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Personal Rating
+								</label>
+								<div className="flex items-center space-x-2">
+									<input
+										type="number"
+										value={ratingMin}
+										onChange={(e) => {
+											setRatingMin(
+												e.target.value === "" ? "" : Number(e.target.value),
+											);
+											setPage(1);
+										}}
+										placeholder="Min"
+										min="0"
+										max="10"
+										step="0.5"
+										className="w-full px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm text-center focus:outline-none"
+									/>
+									<span className="text-zinc-400">-</span>
+									<input
+										type="number"
+										value={ratingMax}
+										onChange={(e) => {
+											setRatingMax(
+												e.target.value === "" ? "" : Number(e.target.value),
+											);
+											setPage(1);
+										}}
+										placeholder="Max"
+										min="0"
+										max="10"
+										step="0.5"
+										className="w-full px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm text-center focus:outline-none"
+									/>
+								</div>
+							</div>
+
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Publication Year
+								</label>
+								<div className="relative">
+									<Calendar
+										className="absolute left-3 top-3 text-zinc-400"
+										size={16}
+									/>
+									<input
+										type="text"
+										value={year}
+										onChange={(e) => {
+											setYear(e.target.value);
+											setPage(1);
+										}}
+										placeholder="e.g. 2015"
+										className="w-full pl-9 pr-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+									/>
+								</div>
+							</div>
+
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+									Tag Inclusion Mode
+								</label>
+								<div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
+									<button
+										type="button"
+										onClick={() => {
+											setTagMode("all");
+											setPage(1);
+										}}
+										className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+											tagMode === "all"
+												? "bg-[var(--brand-orange)] text-white shadow-sm"
+												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+										}`}
+									>
+										AND (All Selected)
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											setTagMode("any");
+											setPage(1);
+										}}
+										className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+											tagMode === "any"
+												? "bg-[var(--brand-orange)] text-white shadow-sm"
+												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+										}`}
+									>
+										OR (Any Selected)
+									</button>
+								</div>
+							</div>
+						</div>
+
+						{/* Read Status Filter Matrix */}
+						<div className="pt-4 border-t border-[var(--border-primary)] space-y-3">
+							<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center space-x-1">
+								<Filter size={14} />
+								<span>Filter by Read Status (3-State Matrix):</span>
+							</span>
+							<div className="flex flex-wrap gap-2">
+								{[
+									{ value: "unread", label: "Unread" },
+									{ value: "reading", label: "Reading" },
+									{ value: "completed", label: "Completed" },
+									{ value: "dropped", label: "Dropped" },
+									{ value: "on_hold", label: "On Hold" },
+									{ value: "plan_to_read", label: "Plan to Read" },
+									{ value: "re_reading", label: "Re-Reading" },
+								].map((status) => {
+									const isIncluded = selectedReadStatuses.includes(
+										status.value,
+									);
+									const isExcluded = excludeReadStatuses.includes(status.value);
+
+									let btnClass =
+										"bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400";
+									let icon = null;
+
+									if (isIncluded) {
+										btnClass =
+											"bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold";
+										icon = <span className="mr-1 text-xs">✓</span>;
+									} else if (isExcluded) {
+										btnClass =
+											"bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 line-through font-bold";
+										icon = <span className="mr-1 text-xs">✗</span>;
+									}
+
+									return (
+										<button
+											key={status.value}
+											type="button"
+											onClick={() => handleReadStatusClick(status.value)}
+											className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center transition select-none ${btnClass}`}
+										>
+											{icon}
+											<span>{status.label}</span>
+										</button>
+									);
+								})}
+							</div>
+						</div>
+
+						{/* Tag Filter Matrix */}
+						{allTags.length > 0 && (
+							<div className="pt-4 border-t border-[var(--border-primary)] space-y-4">
+								<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+									<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center space-x-1">
+										<Filter size={14} />
+										<span>Filter by Genre/Tags (3-State Matrix):</span>
+									</span>
+
+									{/* Legend */}
+									<div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold">
+										<span className="flex items-center space-x-1">
+											<span className="w-2.5 h-2.5 rounded bg-neutral-100 dark:bg-neutral-850 border border-neutral-300 dark:border-neutral-700"></span>
+											<span className="text-[var(--text-secondary)]">
+												Neutral (Ignore)
+											</span>
+										</span>
+										<span className="flex items-center space-x-1">
+											<span className="w-2.5 h-2.5 rounded bg-emerald-500/10 border border-emerald-500"></span>
+											<span className="text-emerald-600 dark:text-emerald-400">
+												Green (Must Include)
+											</span>
+										</span>
+										<span className="flex items-center space-x-1">
+											<span className="w-2.5 h-2.5 rounded bg-rose-500/10 border border-rose-500"></span>
+											<span className="text-rose-600 dark:text-rose-400">
+												Red (Must Exclude)
+											</span>
+										</span>
+									</div>
+								</div>
+
+								<div className="grid grid-cols-1 gap-4 max-h-[300px] overflow-y-auto pr-2">
+									{Array.from(new Set(allTags.map((t) => t.group || "other")))
+										.sort()
+										.map((groupName) => {
+											const groupTags = allTags.filter(
+												(t) => (t.group || "other") === groupName,
+											);
+											if (groupTags.length === 0) return null;
+											return (
+												<div key={groupName} className="space-y-1.5">
+													<div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-0.5">
+														<button
+															type="button"
+															onClick={() => handleGroupClick(groupName)}
+															className="group text-[10px] font-bold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] uppercase tracking-wider cursor-pointer select-none transition flex items-center gap-1.5 capitalize focus:outline-none"
+														>
+															<span>{groupName}</span>
+															{(() => {
+																const tagIds = groupTags.map((t) => t._id);
+																const allIncluded = tagIds.every((id) =>
+																	selectedTags.includes(id),
+																);
+																const allExcluded = tagIds.every((id) =>
+																	excludeTags.includes(id),
+																);
+																if (allIncluded) {
+																	return (
+																		<span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded text-[8px] font-extrabold normal-case">
+																			all included
+																		</span>
+																	);
+																} else if (allExcluded) {
+																	return (
+																		<span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded text-[8px] font-extrabold normal-case">
+																			all excluded
+																		</span>
+																	);
+																}
+																return (
+																	<span className="text-[8px] text-zinc-400 group-hover:text-[var(--brand-orange)]/80 font-medium normal-case transition">
+																		(toggle all)
+																	</span>
+																);
+															})()}
+														</button>
+													</div>
+													<div className="flex flex-wrap gap-2">
+														{groupTags.map((tag) => {
+															const isIncluded = selectedTags.includes(tag._id);
+															const isExcluded = excludeTags.includes(tag._id);
+
+															let btnClass =
+																"bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400";
+															let icon = null;
+
+															if (isIncluded) {
+																btnClass =
+																	"bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold";
+																icon = <span className="mr-1 text-xs">✓</span>;
+															} else if (isExcluded) {
+																btnClass =
+																	"bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 line-through font-bold";
+																icon = <span className="mr-1 text-xs">✗</span>;
+															}
+
+															return (
+																<button
+																	key={tag._id}
+																	type="button"
+																	onClick={() => handleTagClick(tag._id)}
+																	className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center transition select-none ${btnClass}`}
+																>
+																	{icon}
+																	<span>{tag.name.en}</span>
+																</button>
+															);
+														})}
+													</div>
+												</div>
+											);
+										})}
+								</div>
+							</div>
+						)}
+					</div>
+				)}
+
+				{/* Selected Summary and Reset Bar */}
+				<div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
+					<div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)]">
+						<span>Active filters:</span>
+						{debouncedSearch && (
+							<span className="bg-orange-50 dark:bg-orange-950/20 text-[var(--brand-orange)] px-2 py-0.5 rounded-md">
+								Search: "{debouncedSearch}"
+							</span>
+						)}
+						{sourceFilter === "manual" && (
+							<span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md font-semibold flex items-center space-x-1">
+								<span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+								<span>Source: Manual Only</span>
+							</span>
+						)}
+						{sourceFilter === "mangadex" && (
+							<span className="bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-md font-semibold">
+								Source: MangaDex
+							</span>
+						)}
+						{selectedReadStatuses.map((status) => (
+							<span
+								key={status}
+								className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md"
+							>
+								Status: {status}
+							</span>
+						))}
+						{excludeReadStatuses.map((status) => (
+							<span
+								key={status}
+								className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md line-through"
+							>
+								Exclude: {status}
+							</span>
+						))}
+						{selectedTags.length > 0 && (
+							<span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">
+								Include {selectedTags.length} tags
+							</span>
+						)}
+						{excludeTags.length > 0 && (
+							<span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-md">
+								Exclude {excludeTags.length} tags
+							</span>
+						)}
+						{(selectedAuthors.length > 0 ||
+							selectedArtists.length > 0 ||
+							year ||
+							contentRatings.length > 0 ||
+							demographics.length > 0 ||
+							statuses.length > 0 ||
+							originalLanguages.length > 0 ||
+							ratingMin ||
+							ratingMax) && (
+							<span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md">
+								Advanced active
+							</span>
+						)}
+						{!search &&
+							sourceFilter === "all" &&
+							selectedReadStatuses.length === 0 &&
+							excludeReadStatuses.length === 0 &&
+							selectedTags.length === 0 &&
+							excludeTags.length === 0 &&
+							selectedAuthors.length === 0 &&
+							selectedArtists.length === 0 &&
+							!year &&
+							contentRatings.length === 0 &&
+							demographics.length === 0 &&
+							statuses.length === 0 &&
+							originalLanguages.length === 0 &&
+							!ratingMin &&
+							!ratingMax && (
+								<span className="text-zinc-400 font-medium">None</span>
+							)}
+					</div>
+
+					<button
+						onClick={() => {
+							setSearch("");
+							setSourceFilter("all");
+							setSelectedReadStatuses([]);
+							setExcludeReadStatuses([]);
+							setSelectedTags([]);
+							setExcludeTags([]);
+							setTagMode("all");
+							setContentRatings([]);
+							setDemographics([]);
+							setStatuses([]);
+							setOriginalLanguages([]);
+							setSelectedAuthors([]);
+							setSelectedArtists([]);
+							setYear("");
+							setRatingMin("");
+							setRatingMax("");
+							setSortBy("added_at");
+							setSortOrder("desc");
+							setPage(1);
+						}}
+						className="text-xs font-bold text-[var(--brand-orange)] hover:underline flex items-center space-x-1"
+					>
+						<RefreshCw size={12} />
+						<span>Reset All Filters</span>
+					</button>
+				</div>
+			</div>
+
+			{/* View Switcher Toolbar */}
+			{!loading && mangas.length > 0 && (
+				<div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border-primary)] pb-4 gap-4">
+					<span className="text-sm font-semibold text-[var(--text-secondary)]">
+						Showing{" "}
+						<span className="text-[var(--text-primary)] font-bold">
+							{mangas.length}
+						</span>{" "}
+						of{" "}
+						<span className="text-[var(--text-primary)] font-bold">
+							{total}
+						</span>{" "}
+						manga
+					</span>
+					<div className="flex flex-wrap items-center gap-4">
+						<div className="flex items-center space-x-2">
+							<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+								Sort:
+							</span>
+							<select
+								value={sortBy}
+								onChange={(e) => {
+									setSortBy(e.target.value);
+									setPage(1);
+								}}
+								className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+							>
+								<option value="added_at">Date Added</option>
+								<option value="updated_at">Date Updated</option>
+								<option value="title">Title</option>
+								<option value="personal_rating">Personal Rating</option>
+								<option value="year">Release Year</option>
+								<option value="completed_at">
+									Date Completed (Reading Progress)
+								</option>
+								<option value="status">
+									Publication Status (Ongoing / Completed)
+								</option>
+								<option value="reading_at">Date Started Reading</option>
+								<option value="plan_to_read_at">Date Planned</option>
+								<option value="dropped_at">Date Dropped</option>
+								<option value="on_hold_at">Date On Hold</option>
+								<option value="re_reading_at">Date Re-reading</option>
+							</select>
+							<select
+								value={sortOrder}
+								onChange={(e) => {
+									setSortOrder(e.target.value);
+									setPage(1);
+								}}
+								className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+							>
+								<option value="desc">Descending</option>
+								<option value="asc">Ascending</option>
+							</select>
+						</div>
+
+						<div className="flex items-center space-x-2">
+							<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+								Per Page:
+							</span>
+							<select
+								value={limit}
+								onChange={(e) => handleLimitChange(Number(e.target.value))}
+								className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
+							>
+								<option value={12}>12</option>
+								<option value={24}>24</option>
+								<option value={48}>48</option>
+								<option value={60}>60</option>
+								<option value={100}>100</option>
+							</select>
+						</div>
+
+						<button
+							type="button"
+							onClick={() => navigate("/detector")}
+							className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 text-xs font-bold transition shadow-xs cursor-pointer"
+							title="Quét toàn bộ thư viện & tra cứu khung tranh AI"
+						>
+							<Sparkles size={14} />
+							<span className="hidden sm:inline">Quét Panels & OCR</span>
+						</button>
+
+						<div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm">
+							<button
+								onClick={() => {
+									setViewMode("grid");
+									localStorage.setItem("library_view_mode", "grid");
+								}}
+								className={`p-2 rounded-lg transition-colors duration-200 ${
+									viewMode === "grid"
+										? "bg-[var(--brand-orange)] text-white"
+										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+								}`}
+								title="Grid View"
+							>
+								<Grid size={18} />
+							</button>
+							<button
+								onClick={() => {
+									setViewMode("list");
+									localStorage.setItem("library_view_mode", "list");
+								}}
+								className={`p-2 rounded-lg transition-colors duration-200 ${
+									viewMode === "list"
+										? "bg-[var(--brand-orange)] text-white"
+										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+								}`}
+								title="List View"
+							>
+								<ListIcon size={18} />
+							</button>
+							<button
+								onClick={() => {
+									setViewMode("card");
+									localStorage.setItem("library_view_mode", "card");
+								}}
+								className={`p-2 rounded-lg transition-colors duration-200 ${
+									viewMode === "card"
+										? "bg-[var(--brand-orange)] text-white"
+										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
+								}`}
+								title="Detailed Card View"
+							>
+								<LayoutGrid size={18} />
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Manga Grid/List/Card List */}
+			{loading ? (
+				<div className="flex justify-center items-center py-24">
+					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
+				</div>
+			) : mangas.length > 0 ? (
+				<div className="space-y-8">
+					{viewMode === "grid" && (
+						<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+							{mangas.map((manga) => (
+								<article
+									key={manga._id}
+									role="link"
+									tabIndex={0}
+									onKeyDown={(event) => {
+										if (
+											event.key === "Enter" &&
+											event.target === event.currentTarget
+										)
+											navigate(`/manga/${manga._id}`);
+									}}
+									onMouseDown={(e) => {
+										if (e.button === 1) e.preventDefault();
+									}}
+									onAuxClick={(e) => {
+										if (e.button === 1) {
+											const target = e.target as HTMLElement;
+											if (!target.closest("select, button, a, .prevent-nav")) {
+												window.open(`/manga/${manga._id}`, "_blank");
+											}
+										}
+									}}
+									onClick={(e) => {
+										if (e.button === 1) return;
+										if (e.ctrlKey || e.metaKey) {
+											window.open(`/manga/${manga._id}`, "_blank");
+											return;
+										}
+										const target = e.target as HTMLElement;
+										const closestAnchor = target.closest("a");
+										if (
+											target.closest("select") ||
+											target.closest("button") ||
+											target.closest(".prevent-nav") ||
+											closestAnchor
+										)
+											return;
+										e.preventDefault();
+										navigate(`/manga/${manga._id}`);
+									}}
+									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col group"
+								>
+									{/* Cover Frame */}
+									<div
+										className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 cursor-zoom-in"
+										onClick={(e) => {
+											if (manga.cover_url) {
+												e.stopPropagation();
+												e.preventDefault();
+												setZoomedCoverUrl(manga.cover_url);
+											}
+										}}
+									>
+										{manga.cover_url ? (
+											<BlurredCover
+												src={manga.cover_url}
+												alt={manga.title}
+												className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+												shouldBlur={shouldBlur(manga)}
+											/>
+										) : (
+											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
+												<span>No Cover Image</span>
+											</div>
+										)}
+
+										{/* Status Badge (Select) */}
+										<select
+											value={manga.read_status}
+											onClick={(e) => e.stopPropagation()}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseUp={(e) => e.stopPropagation()}
+											onChange={(e) =>
+												handleQuickUpdateStatus(manga._id, e.target.value)
+											}
+											className={`absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
+										>
+											<option
+												value="unread"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Unread
+											</option>
+											<option
+												value="reading"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Reading
+											</option>
+											<option
+												value="completed"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Completed
+											</option>
+											<option
+												value="dropped"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Dropped
+											</option>
+											<option
+												value="on_hold"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												On Hold
+											</option>
+											<option
+												value="plan_to_read"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Plan to Read
+											</option>
+											<option
+												value="re_reading"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Re-Reading
+											</option>
+										</select>
+
+										{/* Rating Badge (Select) */}
+										<div
+											className="absolute bottom-3 right-3"
+											onClick={(e) => e.stopPropagation()}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseUp={(e) => e.stopPropagation()}
+										>
+											<div
+												className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+											>
+												<Star
+													size={10}
+													className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
+												/>
+												<select
+													value={manga.personal_rating ?? ""}
+													onChange={(e) => {
+														const val =
+															e.target.value === ""
+																? null
+																: Number(e.target.value);
+														handleQuickUpdateRating(manga._id, val);
+													}}
+													className={`pl-5.5 pr-2 py-0.5 rounded text-[10px] font-bold border-none outline-none cursor-pointer appearance-none shadow-sm transition hover:brightness-110 ${
+														manga.personal_rating !== null
+															? "bg-zinc-900/95 text-white"
+															: "bg-zinc-950/60 text-zinc-400"
+													}`}
+												>
+													<option
+														value=""
+														className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														★ -
+													</option>
+													{Array.from({ length: 21 }, (_, i) => {
+														const num = 10 - i * 0.5;
+														return (
+															<option
+																key={num}
+																value={num}
+																className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+															>
+																{num.toFixed(1)}
+															</option>
+														);
+													})}
+												</select>
+											</div>
+										</div>
+									</div>
+
+									{/* Details */}
+									<div className="p-4 flex-1 flex flex-col justify-between space-y-2">
+										<div className="space-y-1">
+											<div className="flex items-start justify-between gap-1.5">
+												<h3
+													className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2 flex-1"
+													title={manga.title}
+												>
+													{manga.title}
+												</h3>
+												{!manga.mangadex_id && (
+													<span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+														Manual
+													</span>
+												)}
+											</div>
+											<div className="flex items-center gap-1.5 flex-wrap justify-between">
+												<p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
+													By {renderCreatorLinks(manga.author)}
+												</p>
+												{manga.status &&
+													renderPublicationStatusBadge(manga.status)}
+											</div>
+										</div>
+
+										{/* Render 2 tags maximum */}
+										<div className="flex flex-wrap gap-1">
+											{manga.tag_ids.slice(0, 2).map((tid) => {
+												const tag = allTags.find((t) => t._id === tid);
+												if (!tag) return null;
+												return (
+													<span
+														key={tid}
+														onClick={(e) => e.stopPropagation()}
+														className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-white truncate max-w-[80px]"
+														style={{
+															backgroundColor:
+																tag.color || "var(--text-secondary)",
+														}}
+													>
+														{tag.name.en}
+													</span>
+												);
+											})}
+											{manga.tag_ids.length > 2 && (
+												<span className="text-[9px] text-[var(--text-secondary)] font-bold">
+													+{manga.tag_ids.length - 2}
+												</span>
+											)}
+										</div>
+									</div>
+								</article>
+							))}
+						</div>
+					)}
+
+					{viewMode === "list" && (
+						<div className="overflow-x-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-sm">
+							<table className="w-full text-left border-collapse">
+								<thead>
+									<tr className="border-b border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+										<th className="py-4 px-6 text-center w-20">Cover</th>
+										<th className="py-4 px-4">Title</th>
+										<th className="py-4 px-4">Author / Artist</th>
+										<th className="py-4 px-4">Year / Status</th>
+										<th className="py-4 px-4">Demographic</th>
+										<th className="py-4 px-4">Rating</th>
+										<th className="py-4 px-4">Read Status</th>
+										<th className="py-4 px-6 text-right">Actions</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-[var(--border-primary)] text-sm">
+									{mangas.map((manga) => (
+										<tr
+											key={manga._id}
+											onClick={(e) => {
+												const target = e.target as HTMLElement;
+												if (
+													target.closest("select") ||
+													target.closest("button") ||
+													target.closest("a") ||
+													target.closest(".prevent-nav")
+												) {
+													return;
+												}
+												navigate(`/manga/${manga._id}`);
+											}}
+											onAuxClick={(e) => {
+												if (e.button === 1) {
+													const target = e.target as HTMLElement;
+													if (
+														target.closest("select") ||
+														target.closest("button") ||
+														target.closest("a") ||
+														target.closest(".prevent-nav")
+													) {
+														return;
+													}
+													window.open(`/manga/${manga._id}`, "_blank");
+												}
+											}}
+											className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 cursor-pointer transition duration-150"
+										>
+											<td className="py-3 px-6 text-center">
+												<div
+													className="w-12 h-16 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 mx-auto flex-shrink-0 cursor-zoom-in border border-[var(--border-primary)] shadow-sm"
+													onClick={(e) => {
+														if (manga.cover_url) {
+															e.stopPropagation();
+															e.preventDefault();
+															setZoomedCoverUrl(manga.cover_url);
+														}
+													}}
+												>
+													{manga.cover_url ? (
+														<BlurredCover
+															src={manga.cover_url}
+															alt={manga.title}
+															className="w-full h-full object-cover"
+															shouldBlur={shouldBlur(manga)}
+														/>
+													) : (
+														<span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">
+															No Cover
+														</span>
+													)}
+												</div>
+											</td>
+											<td className="py-3 px-4 font-bold text-[var(--text-primary)]">
+												<div
+													className="line-clamp-2 max-w-xs md:max-w-sm"
+													title={manga.title}
+												>
+													<a
+														href={`/manga/${manga._id}`}
+														onClick={(e) => {
+															if (
+																e.button === 1 ||
+																e.ctrlKey ||
+																e.metaKey ||
+																e.shiftKey
+															) {
+																return;
+															}
+															e.preventDefault();
+															navigate(`/manga/${manga._id}`);
+														}}
+														className="hover:text-[var(--brand-orange)] hover:underline transition duration-150"
+													>
+														{manga.title}
+													</a>
+													{!manga.mangadex_id && (
+														<span className="inline-flex items-center ml-2.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 align-middle">
+															Manual
+														</span>
+													)}
+												</div>
+											</td>
+											<td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
+												<div className="space-y-0.5">
+													<div className="line-clamp-1">
+														<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
+															Auth:
+														</span>
+														{renderCreatorLinks(manga.author)}
+													</div>
+													<div className="line-clamp-1">
+														<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
+															Art:
+														</span>
+														{renderCreatorLinks(manga.artist)}
+													</div>
+												</div>
+											</td>
+											<td className="py-3 px-4 text-[var(--text-secondary)] font-semibold">
+												<div className="flex flex-col">
+													<span>{manga.year || "N/A"}</span>
+													{manga.status &&
+														renderPublicationStatusBadge(manga.status)}
+												</div>
+											</td>
+											<td className="py-3 px-4">
+												{manga.publication_demographic ? (
+													<span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100/60 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/50 dark:border-orange-900/30">
+														{manga.publication_demographic}
+													</span>
+												) : (
+													<span className="text-zinc-400 text-xs">-</span>
+												)}
+											</td>
+											<td className="py-3 px-4">
+												<div
+													className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+													onClick={(e) => e.stopPropagation()}
+													onMouseDown={(e) => e.stopPropagation()}
+													onMouseUp={(e) => e.stopPropagation()}
+												>
+													<Star
+														size={12}
+														className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
+													/>
+													<select
+														value={manga.personal_rating ?? ""}
+														onChange={(e) => {
+															const val =
+																e.target.value === ""
+																	? null
+																	: Number(e.target.value);
+															handleQuickUpdateRating(manga._id, val);
+														}}
+														className={`pl-6 pr-2 py-1 rounded-xl text-xs font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
+															manga.personal_rating !== null
+																? "text-yellow-600 dark:text-yellow-455 font-extrabold"
+																: "text-zinc-400"
+														}`}
+													>
+														<option
+															value=""
+															className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															-
+														</option>
+														{Array.from({ length: 21 }, (_, i) => {
+															const num = 10 - i * 0.5;
+															return (
+																<option
+																	key={num}
+																	value={num}
+																	className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+																>
+																	{num.toFixed(1)}
+																</option>
+															);
+														})}
+													</select>
+												</div>
+											</td>
+											<td className="py-3 px-4">
+												<select
+													value={manga.read_status}
+													onClick={(e) => e.stopPropagation()}
+													onMouseDown={(e) => e.stopPropagation()}
+													onMouseUp={(e) => e.stopPropagation()}
+													onChange={(e) =>
+														handleQuickUpdateStatus(manga._id, e.target.value)
+													}
+													className={`px-2 py-1 rounded-xl text-xs font-bold border border-transparent cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] ${getStatusColorClass(manga.read_status)}`}
+												>
+													<option
+														value="unread"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Unread
+													</option>
+													<option
+														value="reading"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Reading
+													</option>
+													<option
+														value="completed"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Completed
+													</option>
+													<option
+														value="dropped"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Dropped
+													</option>
+													<option
+														value="on_hold"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														On Hold
+													</option>
+													<option
+														value="plan_to_read"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Plan to Read
+													</option>
+													<option
+														value="re_reading"
+														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+													>
+														Re-Reading
+													</option>
+												</select>
+											</td>
+											<td className="py-3 px-6 text-right">
+												<a
+													href={`/manga/${manga._id}`}
+													onClick={(e) => {
+														if (
+															e.button === 1 ||
+															e.ctrlKey ||
+															e.metaKey ||
+															e.shiftKey
+														) {
+															return;
+														}
+														e.stopPropagation();
+														e.preventDefault();
+														navigate(`/manga/${manga._id}`);
+													}}
+													className="inline-block px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
+												>
+													View Details
+												</a>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+
+					{viewMode === "card" && (
+						<div className="space-y-4">
+							{mangas.map((manga) => (
+								<article
+									key={manga._id}
+									role="link"
+									tabIndex={0}
+									onKeyDown={(event) => {
+										if (
+											event.key === "Enter" &&
+											event.target === event.currentTarget
+										)
+											navigate(`/manga/${manga._id}`);
+									}}
+									onMouseDown={(e) => {
+										if (e.button === 1) e.preventDefault();
+									}}
+									onAuxClick={(e) => {
+										if (e.button === 1) {
+											const target = e.target as HTMLElement;
+											if (!target.closest("select, button, a, .prevent-nav")) {
+												window.open(`/manga/${manga._id}`, "_blank");
+											}
+										}
+									}}
+									onClick={(e) => {
+										if (e.button === 1) return;
+										if (e.ctrlKey || e.metaKey) {
+											window.open(`/manga/${manga._id}`, "_blank");
+											return;
+										}
+										const target = e.target as HTMLElement;
+										const closestAnchor = target.closest("a");
+										if (
+											target.closest("select") ||
+											target.closest("button") ||
+											target.closest(".prevent-nav") ||
+											closestAnchor
+										)
+											return;
+										e.preventDefault();
+										navigate(`/manga/${manga._id}`);
+									}}
+									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col md:flex-row group"
+								>
+									{/* Cover Frame (larger) */}
+									<div
+										className="w-full md:w-48 aspect-[3/4] md:aspect-auto md:h-64 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 cursor-zoom-in"
+										onClick={(e) => {
+											if (manga.cover_url) {
+												e.stopPropagation();
+												e.preventDefault();
+												setZoomedCoverUrl(manga.cover_url);
+											}
+										}}
+									>
+										{manga.cover_url ? (
+											<BlurredCover
+												src={manga.cover_url}
+												alt={manga.title}
+												className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+												shouldBlur={shouldBlur(manga)}
+											/>
+										) : (
+											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
+												<span>No Cover Image</span>
+											</div>
+										)}
+										{/* Status Badge (Select) */}
+										<select
+											value={manga.read_status}
+											onClick={(e) => e.stopPropagation()}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseUp={(e) => e.stopPropagation()}
+											onChange={(e) =>
+												handleQuickUpdateStatus(manga._id, e.target.value)
+											}
+											className={`absolute top-3 left-3 px-2.5 py-1 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
+										>
+											<option
+												value="unread"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Unread
+											</option>
+											<option
+												value="reading"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Reading
+											</option>
+											<option
+												value="completed"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Completed
+											</option>
+											<option
+												value="dropped"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Dropped
+											</option>
+											<option
+												value="on_hold"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												On Hold
+											</option>
+											<option
+												value="plan_to_read"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Plan to Read
+											</option>
+											<option
+												value="re_reading"
+												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+											>
+												Re-Reading
+											</option>
+										</select>
+									</div>
+
+									{/* Details Section */}
+									<div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+										<div className="space-y-2">
+											<div className="flex flex-wrap items-center gap-2">
+												{manga.publication_demographic && (
+													<span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-850 dark:bg-orange-950 dark:text-orange-300">
+														{manga.publication_demographic}
+													</span>
+												)}
+												{manga.status &&
+													renderPublicationStatusBadge(manga.status)}
+												<div
+													className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+													onClick={(e) => e.stopPropagation()}
+													onMouseDown={(e) => e.stopPropagation()}
+													onMouseUp={(e) => e.stopPropagation()}
+												>
+													<Star
+														size={12}
+														className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
+													/>
+													<select
+														value={manga.personal_rating ?? ""}
+														onChange={(e) => {
+															const val =
+																e.target.value === ""
+																	? null
+																	: Number(e.target.value);
+															handleQuickUpdateRating(manga._id, val);
+														}}
+														className={`pl-6 pr-2 py-0.5 rounded text-[11px] font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
+															manga.personal_rating !== null
+																? "text-yellow-600 dark:text-yellow-400 font-extrabold"
+																: "text-zinc-400"
+														}`}
+													>
+														<option
+															value=""
+															className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															★ -
+														</option>
+														{Array.from({ length: 21 }, (_, i) => {
+															const num = 10 - i * 0.5;
+															return (
+																<option
+																	key={num}
+																	value={num}
+																	className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+																>
+																	{num.toFixed(1)} / 10
+																</option>
+															);
+														})}
+													</select>
+												</div>
+												{manga.year && (
+													<span className="text-xs text-[var(--text-secondary)] font-semibold">
+														Released: {manga.year}
+													</span>
+												)}
+											</div>
+
+											<div className="flex items-center gap-2.5">
+												<h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
+													{manga.title}
+												</h3>
+												{!manga.mangadex_id && (
+													<span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+														Manual
+													</span>
+												)}
+											</div>
+
+											<div className="text-xs text-[var(--text-secondary)] font-medium flex flex-wrap gap-x-4 gap-y-1">
+												<span>
+													<span className="font-bold text-[var(--text-primary)]">
+														Author:
+													</span>{" "}
+													{renderCreatorLinks(manga.author)}
+												</span>
+												<span>
+													<span className="font-bold text-[var(--text-primary)]">
+														Artist:
+													</span>{" "}
+													{renderCreatorLinks(manga.artist)}
+												</span>
+											</div>
+
+											{manga.description && (
+												<p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed pt-1">
+													{manga.description}
+												</p>
+											)}
+										</div>
+
+										{/* Tags & Action Row */}
+										<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
+											<div className="flex flex-wrap gap-1.5">
+												{manga.tag_ids.map((tid) => {
+													const tag = allTags.find((t) => t._id === tid);
+													if (!tag) return null;
+													return (
+														<span
+															key={tid}
+															onClick={(e) => e.stopPropagation()}
+															className="px-2 py-0.5 rounded text-[10px] font-bold text-white transition hover:brightness-95"
+															style={{
+																backgroundColor:
+																	tag.color || "var(--text-secondary)",
+															}}
+														>
+															{tag.name.en}
+														</span>
+													);
+												})}
+											</div>
+
+											<a
+												href={`/manga/${manga._id}`}
+												onClick={(e) => {
+													if (
+														e.button === 1 ||
+														e.ctrlKey ||
+														e.metaKey ||
+														e.shiftKey
+													) {
+														return;
+													}
+													e.stopPropagation();
+													e.preventDefault();
+													navigate(`/manga/${manga._id}`);
+												}}
+												className="flex-shrink-0 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow transition duration-200"
+											>
+												View Details
+											</a>
+										</div>
+									</div>
+								</article>
+							))}
+						</div>
+					)}
+
+					{/* Pagination */}
+					{total > limit && (
+						<div className="flex justify-center items-center space-x-4 pt-4">
+							<button
+								disabled={page === 1}
+								onClick={() => setPage((p) => Math.max(1, p - 1))}
+								className="px-4 py-2 border border-[var(--border-primary)] rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+							>
+								Previous
+							</button>
+							<span className="text-sm font-semibold">
+								Page {page} of {Math.ceil(total / limit)}
+							</span>
+							<button
+								disabled={page * limit >= total}
+								onClick={() => setPage((p) => p + 1)}
+								className="px-4 py-2 border border-[var(--border-primary)] rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold"
+							>
+								Next
+							</button>
+						</div>
+					)}
+				</div>
+			) : (
+				<div className="text-center py-24 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl text-[var(--text-secondary)]">
+					No manga match your filters or search. Add a manga to start!
+				</div>
+			)}
+
+			{/* Add Manga Modal */}
+			{isAddModalOpen && (
+				<div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+						{/* Modal Header */}
+						<div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
+							<div className="space-y-1">
+								<h2 className="text-xl font-bold flex items-center space-x-2">
+									<Plus size={20} className="text-[var(--brand-orange)]" />
+									<span>Add New Manga</span>
+								</h2>
+								<div className="flex space-x-4 text-xs font-semibold">
+									<button
+										onClick={() => setAddTab("dex")}
+										className={`pb-1 border-b-2 transition ${
+											addTab === "dex"
+												? "border-[var(--brand-orange)] text-[var(--text-primary)]"
+												: "border-transparent text-[var(--text-secondary)]"
+										}`}
+									>
+										Search MangaDex
+									</button>
+									<button
+										onClick={() => setAddTab("manual")}
+										className={`pb-1 border-b-2 transition ${
+											addTab === "manual"
+												? "border-[var(--brand-orange)] text-[var(--text-primary)]"
+												: "border-transparent text-[var(--text-secondary)]"
+										}`}
+									>
+										Add Manually
+									</button>
+								</div>
+							</div>
+							<button
+								onClick={() => setIsAddModalOpen(false)}
+								className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
+							>
+								<X size={20} />
+							</button>
+						</div>
+
+						{/* Modal Body */}
+						<div className="flex-1 overflow-y-auto p-6 relative">
+							{importingManga && (
+								<div className="absolute inset-0 bg-[var(--bg-card)]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-200">
+									<div className="w-full max-w-md space-y-6">
+										<div className="text-center space-y-2">
+											<h3 className="text-lg font-extrabold font-spartan">
+												Importing MangaDex Manga
+											</h3>
+											<p className="text-xs text-[var(--text-secondary)] line-clamp-1">
+												UUID:{" "}
+												<span className="font-mono text-zinc-500 dark:text-zinc-400">
+													{importingManga}
+												</span>
+											</p>
+										</div>
+
+										{/* Progress Bar */}
+										<div className="space-y-1.5">
+											<div className="flex justify-between text-xs font-bold">
+												<span className="text-[var(--brand-orange)]">
+													{importProgressMessage || "Initializing..."}
+												</span>
+												<span className="text-[var(--text-secondary)]">
+													{importProgressPercent}%
+												</span>
+											</div>
+											<div className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden border border-[var(--border-primary)] p-0.5">
+												<div
+													className="h-full bg-gradient-to-r from-[var(--brand-orange)] to-[var(--brand-coral)] rounded-full transition-all duration-300 ease-out"
+													style={{ width: `${importProgressPercent}%` }}
+												></div>
+											</div>
+										</div>
+
+										{/* Steps Checklist */}
+										<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-3.5 shadow-inner">
+											{(() => {
+												const getStepStatus = (stepName: string) => {
+													if (importProgressStep === "error") {
+														if (failedStep === stepName) return "failed";
+														const stepsOrder = [
+															"metadata",
+															"creators",
+															"tags",
+															"cover",
+															"save",
+															"sync_assets",
+														];
+														const failedIdx = stepsOrder.indexOf(
+															failedStep || "",
+														);
+														const thisIdx = stepsOrder.indexOf(stepName);
+														if (thisIdx < failedIdx) return "completed";
+														return "pending";
+													}
+
+													const stepsOrder = [
+														"metadata",
+														"creators",
+														"tags",
+														"cover",
+														"save",
+														"sync_assets",
+														"done",
+													];
+													const currentStepIndex = importProgressStep
+														? stepsOrder.indexOf(importProgressStep)
+														: -1;
+													const thisIdx = stepsOrder.indexOf(stepName);
+
+													if (currentStepIndex === -1) {
+														return thisIdx === 0 ? "active" : "pending";
+													}
+													if (thisIdx < currentStepIndex) return "completed";
+													if (thisIdx === currentStepIndex) return "active";
+													return "pending";
+												};
+
+												const renderStepItem = (
+													label: string,
+													stepName: string,
+												) => {
+													const status = getStepStatus(stepName);
+													let icon = (
+														<Circle
+															size={18}
+															className="text-zinc-400 dark:text-zinc-600 flex-shrink-0"
+														/>
+													);
+													let textClass =
+														"text-zinc-500 dark:text-zinc-400 font-medium";
+
+													if (status === "active") {
+														icon = (
+															<Loader2
+																size={18}
+																className="text-[var(--brand-orange)] animate-spin flex-shrink-0"
+															/>
+														);
+														textClass =
+															"text-[var(--text-primary)] font-bold animate-pulse";
+													} else if (status === "completed") {
+														icon = (
+															<CheckCircle2
+																size={18}
+																className="text-emerald-500 flex-shrink-0"
+															/>
+														);
+														textClass =
+															"text-zinc-700 dark:text-zinc-300 font-semibold";
+													} else if (status === "failed") {
+														icon = (
+															<XCircle
+																size={18}
+																className="text-rose-500 flex-shrink-0"
+															/>
+														);
+														textClass = "text-rose-500 font-bold";
+													}
+
+													return (
+														<div className="flex items-center space-x-3 text-sm transition duration-200">
+															{icon}
+															<span className={textClass}>{label}</span>
+														</div>
+													);
+												};
+
+												return (
+													<>
+														{renderStepItem(
+															"Fetch manga details from MangaDex",
+															"metadata",
+														)}
+														{renderStepItem(
+															"Sync author and artist profiles",
+															"creators",
+														)}
+														{renderStepItem(
+															"Organize and map genre tags",
+															"tags",
+														)}
+														{renderStepItem(
+															"Download cover & upload to storage",
+															"cover",
+														)}
+														{renderStepItem(
+															"Register manga in your library",
+															"save",
+														)}
+														{renderStepItem(
+															"Fetch alternative covers & recommendations",
+															"sync_assets",
+														)}
+													</>
+												);
+											})()}
+										</div>
+									</div>
+								</div>
+							)}
+							{addTab === "dex" ? (
+								/* MangaDex Tab */
+								<div className="space-y-6">
+									<form onSubmit={handleDexSearch} className="flex gap-2">
+										<input
+											type="text"
+											value={dexQuery}
+											onChange={(e) => setDexQuery(e.target.value)}
+											placeholder="Enter manga title or MangaDex UUID..."
+											className="flex-1 px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+											required
+										/>
+										<button
+											type="submit"
+											disabled={dexSearching}
+											className="px-6 py-2 bg-[var(--brand-orange)] text-white font-bold rounded-xl hover:bg-[var(--brand-coral)] transition disabled:opacity-50 flex items-center space-x-2"
+										>
+											{dexSearching ? "Searching..." : "Search"}
+										</button>
+									</form>
+
+									{/* Import Configuration Panel */}
+									<div className="p-4 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl space-y-4">
+										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+											Import Configuration (Set values before clicking Import)
+										</h4>
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+													Read Status
+												</label>
+												<select
+													value={importStatus}
+													onChange={(e) => setImportStatus(e.target.value)}
+													className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
+												>
+													<option value="unread">Unread</option>
+													<option value="reading">Reading</option>
+													<option value="completed">Completed</option>
+													<option value="dropped">Dropped</option>
+													<option value="on_hold">On Hold</option>
+													<option value="plan_to_read">Plan to Read</option>
+													<option value="re_reading">Re-Reading</option>
+												</select>
+											</div>
+
+											<div>
+												<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+													Personal Rating (0-10)
+												</label>
+												<input
+													type="number"
+													value={importRating}
+													onChange={(e) =>
+														setImportRating(
+															e.target.value === ""
+																? ""
+																: Number(e.target.value),
+														)
+													}
+													placeholder="e.g. 8.5"
+													min="0"
+													max="10"
+													step="0.5"
+													className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
+												/>
+											</div>
+										</div>
+
+										{/* Tag selector */}
+										{allTags.length > 0 && (
+											<GroupedTagSelector
+												allTags={allTags}
+												selectedTags={importTags}
+												onChange={setImportTags}
+												label="Assign Custom Tags on Import"
+												placeholder="Search tags to assign..."
+											/>
+										)}
+									</div>
+
+									{/* Search Results */}
+									<div className="space-y-4">
+										<h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+											Search Results
+										</h3>
+										{dexResults.length > 0 ? (
+											<div className="divide-y divide-[var(--border-primary)] max-h-96 overflow-y-auto pr-2 space-y-3">
+												{dexResults.map((m) => (
+													<div
+														key={m.id}
+														className="pt-3 flex gap-4 items-start justify-between"
+													>
+														<div className="flex gap-4">
+															<div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
+																{m.cover_url && (
+																	<BlurredCover
+																		src={m.cover_url}
+																		alt={m.title}
+																		className="w-full h-full object-cover"
+																		shouldBlur={shouldBlur(m)}
+																	/>
+																)}
+															</div>
+															<div className="space-y-1">
+																<h4 className="text-sm font-bold text-[var(--text-primary)] line-clamp-1">
+																	{m.title}
+																</h4>
+																<p className="text-xs text-[var(--text-secondary)]">
+																	By {m.author} • {m.year}
+																</p>
+																<p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">
+																	{m.description}
+																</p>
+															</div>
+														</div>
+														<button
+															onClick={() => handleImportManga(m.id)}
+															disabled={importingManga === m.id}
+															className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-xs font-bold transition disabled:opacity-50 flex-shrink-0"
+														>
+															{importingManga === m.id
+																? "Importing..."
+																: "Import"}
+														</button>
+													</div>
+												))}
+											</div>
+										) : (
+											<div className="text-center py-12 text-[var(--text-secondary)] text-sm">
+												No results found yet.
+											</div>
+										)}
+									</div>
+								</div>
+							) : (
+								/* Manual Add Tab */
+								<form onSubmit={handleCreateManual} className="space-y-4">
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Manga Title *
+											</label>
+											<input
+												type="text"
+												value={manualTitle}
+												onChange={(e) => setManualTitle(e.target.value)}
+												placeholder="e.g. My Custom Manga"
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
+												required
+											/>
+										</div>
+
+										<CreatorLiveSearchInput
+											label="Author"
+											role="author"
+											value={manualAuthor}
+											onChange={setManualAuthor}
+											placeholder="e.g. Oda Eiichiro"
+										/>
+
+										<CreatorLiveSearchInput
+											label="Artist"
+											role="artist"
+											value={manualArtist}
+											onChange={setManualArtist}
+											placeholder="e.g. Yusuke Murata"
+										/>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Release Year
+											</label>
+											<input
+												type="text"
+												value={manualYear}
+												onChange={(e) => setManualYear(e.target.value)}
+												placeholder="e.g. 2021"
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
+											/>
+										</div>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Description
+										</label>
+										<textarea
+											value={manualDescription}
+											onChange={(e) => setManualDescription(e.target.value)}
+											placeholder="Manga details, summary..."
+											rows={3}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] resize-none"
+										/>
+									</div>
+
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Publish Status
+											</label>
+											<select
+												value={manualStatus}
+												onChange={(e) => setManualStatus(e.target.value)}
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											>
+												<option value="ongoing">Ongoing</option>
+												<option value="completed">Completed</option>
+												<option value="hiatus">Hiatus</option>
+												<option value="cancelled">Cancelled</option>
+											</select>
+										</div>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Read Status
+											</label>
+											<select
+												value={manualReadStatus}
+												onChange={(e) => setManualReadStatus(e.target.value)}
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											>
+												<option value="unread">Unread</option>
+												<option value="reading">Reading</option>
+												<option value="completed">Completed</option>
+												<option value="dropped">Dropped</option>
+												<option value="on_hold">On Hold</option>
+												<option value="plan_to_read">Plan to Read</option>
+												<option value="re_reading">Re-Reading</option>
+											</select>
+										</div>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Rating (0-10)
+											</label>
+											<input
+												type="number"
+												value={manualRating}
+												onChange={(e) =>
+													setManualRating(
+														e.target.value === "" ? "" : Number(e.target.value),
+													)
+												}
+												placeholder="e.g. 9.5"
+												min="0"
+												max="10"
+												step="0.5"
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											/>
+										</div>
+									</div>
+
+									{/* Advanced Search Comparison Fields */}
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Original Language
+											</label>
+											<select
+												value={manualOriginalLanguage}
+												onChange={(e) =>
+													setManualOriginalLanguage(e.target.value)
+												}
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											>
+												<option value="ja">Japanese (ja)</option>
+												<option value="ko">Korean (ko)</option>
+												<option value="zh">Chinese (zh)</option>
+												<option value="en">English (en)</option>
+												<option value="vi">Vietnamese (vi)</option>
+												<option value="ru">Russian (ru)</option>
+											</select>
+										</div>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Demographic
+											</label>
+											<select
+												value={manualPublicationDemographic}
+												onChange={(e) =>
+													setManualPublicationDemographic(e.target.value)
+												}
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											>
+												<option value="">None</option>
+												<option value="shounen">Shounen</option>
+												<option value="shoujo">Shoujo</option>
+												<option value="seinen">Seinen</option>
+												<option value="josei">Josei</option>
+											</select>
+										</div>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Content Rating
+											</label>
+											<select
+												value={manualContentRating}
+												onChange={(e) => setManualContentRating(e.target.value)}
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											>
+												<option value="safe">Safe</option>
+												<option value="suggestive">Suggestive</option>
+												<option value="erotica">Erotica</option>
+												<option value="pornographic">Pornographic</option>
+											</select>
+										</div>
+									</div>
+
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Total Volumes
+											</label>
+											<input
+												type="number"
+												value={manualVolumes}
+												onChange={(e) =>
+													setManualVolumes(
+														e.target.value === "" ? "" : Number(e.target.value),
+													)
+												}
+												placeholder="e.g. 12"
+												min="0"
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											/>
+										</div>
+
+										<div>
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+												Total Chapters
+											</label>
+											<input
+												type="number"
+												value={manualChapters}
+												onChange={(e) =>
+													setManualChapters(
+														e.target.value === "" ? "" : Number(e.target.value),
+													)
+												}
+												placeholder="e.g. 120"
+												min="0"
+												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+											/>
+										</div>
+									</div>
+
+									{/* Assign Tags (reuses checklist code) */}
+									{/* Assign Tags */}
+									{allTags.length > 0 && (
+										<GroupedTagSelector
+											allTags={allTags}
+											selectedTags={importTags}
+											onChange={setImportTags}
+											label="Assign Custom Tags"
+											placeholder="Search tags to assign..."
+										/>
+									)}
+
+									{/* Cover image upload */}
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Upload Cover Image
+										</label>
+										<div className="flex items-center space-x-4">
+											<label className="flex items-center space-x-2 px-4 py-2 border border-[var(--border-primary)] rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
+												<Upload size={16} />
+												<span className="text-xs font-semibold">
+													Choose File
+												</span>
+												<input
+													type="file"
+													accept="image/*"
+													className="hidden"
+													onChange={handleCoverChange}
+												/>
+											</label>
+											{manualCoverPreview && (
+												<div className="w-12 h-16 rounded overflow-hidden bg-zinc-100 border border-[var(--border-primary)]">
+													<img
+														src={manualCoverPreview}
+														alt="Preview"
+														className="w-full h-full object-cover"
+													/>
+												</div>
+											)}
+										</div>
+									</div>
+
+									{/* Modal Footer Submit */}
+									<div className="pt-4 border-t border-[var(--border-primary)] flex justify-end space-x-3">
+										<button
+											type="button"
+											onClick={() => setIsAddModalOpen(false)}
+											className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+										>
+											Cancel
+										</button>
+										<button
+											type="submit"
+											disabled={submittingManual}
+											className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
+										>
+											{submittingManual ? "Adding..." : "Add Manga"}
+										</button>
+									</div>
+								</form>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Lightbox Zoom Portal/Overlay */}
+			{zoomedCoverUrl && (
+				<div
+					className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+					onClick={() => setZoomedCoverUrl(null)}
+				>
+					<button
+						onClick={() => setZoomedCoverUrl(null)}
+						className="absolute top-6 right-6 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700/80 text-white transition"
+					>
+						<X size={24} />
+					</button>
+					<div
+						className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 animate-in zoom-in-95 duration-200"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<img
+							src={zoomedCoverUrl}
+							alt="Zoomed cover"
+							className="max-w-full max-h-[90vh] object-contain"
+						/>
+					</div>
+				</div>
+			)}
+		</div>
+	);
 };
 
 export default MangaListPage;

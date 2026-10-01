@@ -1,29 +1,31 @@
-import os
 import asyncio
-import logging
-import random
-import uuid
-import time
-import io
 import base64
+import io
+import logging
+import os
+import random
+import time
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from bson import ObjectId
 from PIL import Image
-from backend.database.connection import get_db
-from backend.services.mangadex_service import mangadex_service
-from backend.utils.file_utils import clean_filename, normalize_windows_path
-from backend.services.audit_service import audit_service
-from backend.services.minio_service import minio_service
-from backend.services.chapter_service import chapter_service
-from backend.config import settings
 
+from backend.config import settings
+from backend.database.connection import get_db
+from backend.services.audit_service import audit_service
+from backend.services.chapter_service import chapter_service
+from backend.services.mangadex_service import mangadex_service
+from backend.services.minio_service import minio_service
+from backend.utils.file_utils import clean_filename, normalize_windows_path
 
 logger = logging.getLogger(__name__)
 
 # Dictionary to keep track of active tasks in memory for cancellation checks
 # key: task_id (str), value: bool (True if cancelled)
 active_cancellations = {}
+
 
 class DownloadService:
     def __init__(self):
@@ -43,10 +45,10 @@ class DownloadService:
         chapters: List[Dict[str, Any]],
         save_to_disk: bool = False,
         lang: str = "en",
-        download_path: Optional[str] = None
+        download_path: Optional[str] = None,
     ) -> str:
         task_id = str(uuid.uuid4())
-        
+
         chapters_detail = []
         for c in chapters:
             raw_vol = c.get("volume")
@@ -56,21 +58,23 @@ class DownloadService:
                 if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
                     vol_clean = s_vol
 
-            chapters_detail.append({
-                "id": c["id"],
-                "chapter": c["chapter"],
-                "title": c.get("title", ""),
-                "volume": vol_clean,
-                "group_name": c.get("group_name", ""),
-                "group_id": c.get("group_id", ""),
-                "publish_at": c.get("publish_at"),
-                "readable_at": c.get("readable_at"),
-                "uploader": c.get("uploader"),
-                "pages": c.get("pages"),
-                "status": "pending",
-                "error": None
-            })
-            
+            chapters_detail.append(
+                {
+                    "id": c["id"],
+                    "chapter": c["chapter"],
+                    "title": c.get("title", ""),
+                    "volume": vol_clean,
+                    "group_name": c.get("group_name", ""),
+                    "group_id": c.get("group_id", ""),
+                    "publish_at": c.get("publish_at"),
+                    "readable_at": c.get("readable_at"),
+                    "uploader": c.get("uploader"),
+                    "pages": c.get("pages"),
+                    "status": "pending",
+                    "error": None,
+                }
+            )
+
         task_doc = {
             "_id": task_id,
             "manga_id": manga_id,
@@ -85,9 +89,9 @@ class DownloadService:
             "download_path": download_path,
             "error_message": None,
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
-        
+
         await self._get_tasks_collection().insert_one(task_doc)
         active_cancellations[task_id] = False
         return task_id
@@ -96,10 +100,7 @@ class DownloadService:
         return await self._get_tasks_collection().find_one({"_id": task_id})
 
     async def list_tasks(self, limit: int = 20) -> List[Dict[str, Any]]:
-        cursor = self._get_tasks_collection().find(
-            {},
-            {"chapters_detail": 0}
-        ).sort("created_at", -1).limit(limit)
+        cursor = self._get_tasks_collection().find({}, {"chapters_detail": 0}).sort("created_at", -1).limit(limit)
         tasks = []
         async for doc in cursor:
             tasks.append(doc)
@@ -109,14 +110,13 @@ class DownloadService:
         task = await self.get_task_status(task_id)
         if not task:
             return False
-            
+
         if task["status"] in ["completed", "failed", "cancelled"]:
             return False
-            
+
         active_cancellations[task_id] = True
         await self._get_tasks_collection().update_one(
-            {"_id": task_id},
-            {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}}
+            {"_id": task_id}, {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}}
         )
         return True
 
@@ -124,10 +124,10 @@ class DownloadService:
         task = await self.get_task_status(task_id)
         if not task:
             return False
-            
+
         if task_id in self.running_tasks or task["status"] not in ["completed", "failed", "cancelled"]:
             return False
-            
+
         await self._get_tasks_collection().delete_one({"_id": task_id})
         return True
 
@@ -135,21 +135,21 @@ class DownloadService:
         task = await self.get_task_status(task_id)
         if not task:
             return False
-            
+
         if task_id in self.running_tasks:
             logger.info(f"Task {task_id} is still running; retry resume after cancellation completes.")
             return False
-            
+
         # Reset cancellations tracker
         active_cancellations[task_id] = False
-        
+
         # Reset stuck/failed/cancelled chapters to pending
         chapters = task.get("chapters_detail", [])
         for chap in chapters:
             if chap.get("status") in ["failed", "downloading", "pending"]:
                 chap["status"] = "pending"
                 chap["error"] = None
-                
+
         await self._get_tasks_collection().update_one(
             {"_id": task_id},
             {
@@ -158,15 +158,13 @@ class DownloadService:
                     "error_message": None,
                     "chapters_detail": chapters,
                     "resolved_download_path": task.get("resolved_download_path") or task.get("download_path"),
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.utcnow(),
                 }
-            }
+            },
         )
-        
+
         background_tasks.add_task(
-            self.start_download_background,
-            task_id=task_id,
-            download_path=task.get("download_path")
+            self.start_download_background, task_id=task_id, download_path=task.get("download_path")
         )
         return True
 
@@ -183,9 +181,9 @@ class DownloadService:
                     "$set": {
                         "status": "cancelled",
                         "error_message": "Tác vụ bị gián đoạn do khởi động lại dịch vụ hoặc ứng dụng.",
-                        "updated_at": now
+                        "updated_at": now,
                     }
-                }
+                },
             )
             if result.modified_count > 0:
                 logger.info(f"Cleaned up {result.modified_count} interrupted download task(s) on startup.")
@@ -200,20 +198,20 @@ class DownloadService:
             logger.warning(f"Task {task_id} is already running. Skipping duplicate execution.")
             return
         self.running_tasks.add(task_id)
-        
+
         task = await self.get_task_status(task_id)
         if not task:
             self.running_tasks.discard(task_id)
             return
-            
+
         manga_id = task["manga_id"]
         manga_title = task["manga_title"]
         chapters = task["chapters_detail"]
         total = task["total_chapters"]
-        
+
         save_to_disk = task.get("save_to_disk", False)
         lang = task.get("lang", "en")
-        
+
         target_dir = None
         if save_to_disk:
             base_dir = download_path
@@ -226,7 +224,8 @@ class DownloadService:
             # Every manga gets its own directory, including oneshots. On resume,
             # reuse the resolved directory instead of appending the title again.
             target_dir = task.get("resolved_download_path") or normalize_windows_path(
-                os.path.join(base_dir, clean_filename(manga_title)))
+                os.path.join(base_dir, clean_filename(manga_title))
+            )
 
         # Update state to downloading and store resolved download path
         await self._get_tasks_collection().update_one(
@@ -236,11 +235,11 @@ class DownloadService:
                     "status": "downloading",
                     "download_path": os.path.abspath(target_dir) if target_dir else None,
                     "resolved_download_path": os.path.abspath(target_dir) if target_dir else None,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.utcnow(),
                 }
-            }
+            },
         )
-        
+
         try:
             if target_dir:
                 os.makedirs(target_dir, exist_ok=True)
@@ -251,131 +250,155 @@ class DownloadService:
                 "pages_done": 0,
                 "bytes_done": 0,
                 "total_chapters": total,
-                "current_chap_index": 1
+                "completed_chapters": completed_count,
+                "current_chap_index": 1,
             }
-            
-            for idx, chap in enumerate(chapters, 1):
-                shared_stats["current_chap_index"] = idx
-                # Check cancellation
-                if active_cancellations.get(task_id) or (await self._check_db_cancelled(task_id)):
-                    logger.info(f"Task {task_id} cancelled.")
-                    break
-                    
+
+            # Multi-threading concurrency control (max 4 concurrent chapters, min 1)
+            uncompleted_chapters = [c for c in chapters if c.get("status") != "completed"]
+            max_concurrency = max(1, min(4, len(uncompleted_chapters)))
+            semaphore = asyncio.Semaphore(max_concurrency)
+            stats_lock = asyncio.Lock()
+            active_workers: Dict[str, Dict[str, Any]] = {}
+
+            async def _download_chapter(chap_idx: int, chap: Dict[str, Any]):
+                nonlocal completed_count
                 chap_id = chap["id"]
                 chap_num = chap["chapter"]
                 chap_title = chap.get("title", "")
                 chap_status = chap.get("status", "pending")
-                
+
                 if chap_status == "completed":
-                    continue
-                    
-                # Determine folder name based on chapter title existence and language
-                lang_tag = f" [{lang.upper()}]" if lang and lang.lower() != "en" else ""
-                if chap_title:
-                    folder_name = clean_filename(f"Chapter {chap_num}{lang_tag} - {chap_title}")
-                else:
-                    folder_name = clean_filename(f"Chapter {chap_num}{lang_tag}")
-                    
-                chap_path = os.path.join(target_dir, f"{folder_name} [{lang}] [{chap_id}]") if target_dir else None
-                if chap_path:
-                    os.makedirs(chap_path, exist_ok=True)
-                
-                # Update individual chapter status to downloading
-                await self._update_chapter_status(task_id, chap_id, "downloading")
-                
-                # Fetch images
-                try:
-                    img_urls = await mangadex_service.get_chapter_images(chap_id)
-                    if not img_urls:
-                        raise ValueError("No images found for this chapter.")
-                    
-                    # Download images and upload directly to MinIO (and optionally save to disk)
-                    success, page_items = await self._download_images_concurrently(
-                        urls=img_urls,
-                        chap_path=chap_path,
-                        task_id=task_id,
-                        chap_num=chap_num,
-                        manga_id=manga_id,
-                        chap_id=chap_id,
-                        shared_stats=shared_stats
-                    )
-                    
-                    if success:
-                        # Record chapter in database
-                        await chapter_service.create_or_update_chapter({
-                            "manga_id": manga_id,
+                    return
+
+                if active_cancellations.get(task_id) or (await self._check_db_cancelled(task_id)):
+                    return
+
+                async with semaphore:
+                    if active_cancellations.get(task_id) or (await self._check_db_cancelled(task_id)):
+                        return
+
+                    lang_tag = f" [{lang.upper()}]" if lang and lang.lower() != "en" else ""
+                    if chap_title:
+                        folder_name = clean_filename(f"Chapter {chap_num}{lang_tag} - {chap_title}")
+                    else:
+                        folder_name = clean_filename(f"Chapter {chap_num}{lang_tag}")
+
+                    chap_path = os.path.join(target_dir, f"{folder_name} [{lang}] [{chap_id}]") if target_dir else None
+                    if chap_path:
+                        os.makedirs(chap_path, exist_ok=True)
+
+                    await self._update_chapter_status(task_id, chap_id, "downloading")
+
+                    async with stats_lock:
+                        shared_stats["current_chap_index"] = chap_idx
+                        active_workers[chap_id] = {
+                            "chapter_id": chap_id,
                             "chapter_number": chap_num,
                             "title": chap_title,
-                            "volume": chap.get("volume"),
-                            "language": lang,
-                            "scanlation_group": chap.get("group_name"),
-                            "uploader": chap.get("uploader"),
-                            "publish_at": chap.get("publish_at"),
-                            "readable_at": chap.get("readable_at"),
-                            "source": "mangadex",
-                            "source_id": chap_id,
-                            "local_path": chap_path,
-                            "pages": page_items,
-                            "page_count": len(page_items)
-                        })
-                        await self._update_chapter_status(task_id, chap_id, "completed")
-                        completed_count += 1
-                    else:
-                        # Keep completed/cached files: the folder may also hold
-                        # a previous successful download of this chapter.
-                        raise RuntimeError("Failed to download one or more pages.")
-                        
-                except Exception as e:
-                    logger.error(f"Error downloading chapter {chap_num}: {e}")
-                    await self._update_chapter_status(task_id, chap_id, "failed", str(e))
-                
-                # Update task progress
-                progress = completed_count / total
-                await self._get_tasks_collection().update_one(
-                    {"_id": task_id},
-                    {
-                        "$set": {
-                            "completed_chapters": completed_count,
-                            "progress": progress,
-                            "updated_at": datetime.utcnow()
+                            "status": "downloading",
                         }
-                    }
-                )
-                
-                # Delay between chapters to avoid rate limits
-                await asyncio.sleep(random.uniform(1.0, 2.0))
-                
+                        await self._get_tasks_collection().update_one(
+                            {"_id": task_id}, {"$set": {"active_workers": list(active_workers.values())}}
+                        )
+
+                    try:
+                        img_urls = await mangadex_service.get_chapter_images(chap_id)
+                        if not img_urls:
+                            raise ValueError("No images found for this chapter.")
+
+                        success, page_items = await self._download_images_concurrently(
+                            urls=img_urls,
+                            chap_path=chap_path,
+                            task_id=task_id,
+                            chap_num=chap_num,
+                            manga_id=manga_id,
+                            chap_id=chap_id,
+                            shared_stats=shared_stats,
+                        )
+
+                        if success:
+                            await chapter_service.create_or_update_chapter(
+                                {
+                                    "manga_id": manga_id,
+                                    "chapter_number": chap_num,
+                                    "title": chap_title,
+                                    "volume": chap.get("volume"),
+                                    "language": lang,
+                                    "scanlation_group": chap.get("group_name"),
+                                    "uploader": chap.get("uploader"),
+                                    "publish_at": chap.get("publish_at"),
+                                    "readable_at": chap.get("readable_at"),
+                                    "source": "mangadex",
+                                    "source_id": chap_id,
+                                    "local_path": chap_path,
+                                    "pages": page_items,
+                                    "page_count": len(page_items),
+                                }
+                            )
+                            await self._update_chapter_status(task_id, chap_id, "completed")
+                            async with stats_lock:
+                                completed_count += 1
+                                shared_stats["completed_chapters"] = completed_count
+                        else:
+                            raise RuntimeError("Failed to download one or more pages.")
+                    except Exception as e:
+                        logger.error(f"Error downloading chapter {chap_num}: {e}")
+                        await self._update_chapter_status(task_id, chap_id, "failed", str(e))
+                    finally:
+                        async with stats_lock:
+                            active_workers.pop(chap_id, None)
+                            progress = completed_count / max(1, total)
+                            await self._get_tasks_collection().update_one(
+                                {"_id": task_id},
+                                {
+                                    "$set": {
+                                        "completed_chapters": completed_count,
+                                        "progress": progress,
+                                        "active_workers": list(active_workers.values()),
+                                        "updated_at": datetime.utcnow(),
+                                    }
+                                },
+                            )
+
+                    # Subtle delay between chapter finishes
+                    await asyncio.sleep(random.uniform(0.5, 1.2))
+
+            # Download chapters concurrently with bounded semaphore
+            chap_tasks = [_download_chapter(idx, chap) for idx, chap in enumerate(chapters, 1)]
+            await asyncio.gather(*chap_tasks)
+
             # Finalize task status
             final_task = await self.get_task_status(task_id)
             if final_task and final_task["status"] != "cancelled":
                 # Check if all completed
                 failed_any = any(c["status"] == "failed" for c in final_task["chapters_detail"])
                 status = "failed" if failed_any or completed_count != total else "completed"
-                
+
                 await self._get_tasks_collection().update_one(
                     {"_id": task_id},
                     {
                         "$set": {
                             "status": status,
                             "progress": 1.0 if status == "completed" else final_task["progress"],
-                            "updated_at": datetime.utcnow()
+                            "updated_at": datetime.utcnow(),
                         }
-                    }
+                    },
                 )
-                
+
                 # If completed successfully, update manga download_path if save_to_disk
                 if status == "completed":
                     try:
                         manga_doc = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
                         old_download_path = manga_doc.get("download_path") if manga_doc else None
                         abs_target_dir = os.path.abspath(target_dir) if target_dir else None
-                        
+
                         if abs_target_dir:
                             await self._get_mangas_collection().update_one(
                                 {"_id": ObjectId(manga_id)},
-                                {"$set": {"download_path": abs_target_dir, "updated_at": datetime.utcnow()}}
+                                {"$set": {"download_path": abs_target_dir, "updated_at": datetime.utcnow()}},
                             )
-                        
+
                         # Add audit log entry
                         await audit_service.log_event(
                             entity_type="manga",
@@ -386,23 +409,22 @@ class DownloadService:
                             old_value=old_download_path,
                             new_value=abs_target_dir or "system_storage",
                             actor="system",
-                            note=f"Downloaded {len(chapters)} chapter(s) to system storage" + (f" and disk ({abs_target_dir})" if abs_target_dir else ""),
-                            details={"download_path": abs_target_dir, "chapters_count": len(chapters), "save_to_disk": save_to_disk}
+                            note=f"Downloaded {len(chapters)} chapter(s) to system storage"
+                            + (f" and disk ({abs_target_dir})" if abs_target_dir else ""),
+                            details={
+                                "download_path": abs_target_dir,
+                                "chapters_count": len(chapters),
+                                "save_to_disk": save_to_disk,
+                            },
                         )
                     except Exception as db_err:
                         logger.error(f"Error logging audit for manga download {manga_id}: {db_err}")
-                
+
         except Exception as e:
             logger.error(f"Critical error in task {task_id}: {e}")
             await self._get_tasks_collection().update_one(
                 {"_id": task_id},
-                {
-                    "$set": {
-                        "status": "failed",
-                        "error_message": str(e),
-                        "updated_at": datetime.utcnow()
-                    }
-                }
+                {"$set": {"status": "failed", "error_message": str(e), "updated_at": datetime.utcnow()}},
             )
         finally:
             active_cancellations.pop(task_id, None)
@@ -419,9 +441,9 @@ class DownloadService:
                 "$set": {
                     "chapters_detail.$.status": status,
                     "chapters_detail.$.error": error,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.utcnow(),
                 }
-            }
+            },
         )
 
     def _read_file(self, path: str) -> bytes:
@@ -431,13 +453,13 @@ class DownloadService:
     def _generate_base64_thumbnail(self, bytes_data: bytes, width: int = 120) -> Optional[str]:
         try:
             img = Image.open(io.BytesIO(bytes_data))
-            if img.mode not in ('RGB', 'RGBA'):
-                img = img.convert('RGB')
-            w_percent = (width / float(img.size[0]))
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            w_percent = width / float(img.size[0])
             h_size = int((float(img.size[1]) * float(w_percent)))
             img = img.resize((width, h_size), Image.Resampling.LANCZOS)
             buffered = io.BytesIO()
-            if img.mode == 'RGBA':
+            if img.mode == "RGBA":
                 background = Image.new("RGB", img.size, (255, 255, 255))
                 background.paste(img, mask=img.split()[3])
                 img = background
@@ -463,25 +485,25 @@ class DownloadService:
         eta_sec: Optional[float] = None,
         total_pages_downloaded: Optional[int] = None,
         total_bytes_downloaded: Optional[int] = None,
-        remaining_chapters: Optional[int] = None
+        remaining_chapters: Optional[int] = None,
     ):
         try:
             now_ts = time.time()
             last_ts = self._last_progress_updates.get(task_id, 0.0)
-            is_edge_page = (page_num == 1 or page_num == page_total)
+            is_edge_page = page_num == 1 or page_num == page_total
             if not is_edge_page and (now_ts - last_ts < 0.4):
                 return
             self._last_progress_updates[task_id] = now_ts
 
             # Generate thumbnail preview asynchronously
             preview_base64 = await asyncio.to_thread(self._generate_base64_thumbnail, bytes_data)
-            
+
             update_fields: Dict[str, Any] = {
                 "current_chapter_name": f"Chapter {chap_num}",
                 "current_page_number": page_num,
                 "current_page_total": page_total,
                 "current_page_preview": preview_base64,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
             }
             if filename:
                 update_fields["current_filename"] = filename
@@ -502,10 +524,7 @@ class DownloadService:
             if remaining_chapters is not None:
                 update_fields["remaining_chapters"] = remaining_chapters
 
-            await self._get_tasks_collection().update_one(
-                {"_id": task_id},
-                {"$set": update_fields}
-            )
+            await self._get_tasks_collection().update_one({"_id": task_id}, {"$set": update_fields})
         except Exception as e:
             logger.error(f"Failed to update page progress for task {task_id}: {e}")
 
@@ -518,7 +537,7 @@ class DownloadService:
         manga_id: str,
         chap_id: str,
         shared_stats: Optional[Dict[str, Any]] = None,
-        max_sem: int = 4
+        max_sem: int = 4,
     ) -> Tuple[bool, List[Dict[str, Any]]]:
         sem = asyncio.Semaphore(max_sem)
         page_results: List[Optional[Dict[str, Any]]] = [None] * len(urls)
@@ -532,10 +551,10 @@ class DownloadService:
                 ext = ".jpg"
                 if "." in url[-5:]:
                     ext = os.path.splitext(url.split("?")[0])[1].lower()
-                
-                file_name = f"{idx+1:03d}{ext}"
+
+                file_name = f"{idx + 1:03d}{ext}"
                 full_path = os.path.join(chap_path, file_name) if chap_path else None
-                
+
                 bytes_data = None
                 # Check if already exists on disk
                 if full_path and os.path.exists(full_path) and os.path.getsize(full_path) > 0:
@@ -559,7 +578,7 @@ class DownloadService:
                         chapter_id=chap_id,
                         filename=file_name,
                         data=bytes_data,
-                        content_type=content_type
+                        content_type=content_type,
                     )
                 except Exception as me:
                     logger.error(f"Error uploading page {file_name} to MinIO: {me}")
@@ -581,7 +600,7 @@ class DownloadService:
                     "file_size": fsize,
                     "width": width,
                     "height": height,
-                    "md5_hash": md5_h
+                    "md5_hash": md5_h,
                 }
 
                 # Compute statistics
@@ -601,13 +620,14 @@ class DownloadService:
                     total_b = shared_stats["bytes_done"]
                     speed_p = round(total_p / elapsed_sec, 1)
                     speed_mb = round((total_b / (1024 * 1024)) / elapsed_sec, 2)
-                    
-                    cur_ch = shared_stats.get("current_chap_index", 1)
+
+                    comp_ch = shared_stats.get("completed_chapters", 0)
                     tot_ch = shared_stats.get("total_chapters", 1)
-                    rem_ch = max(0, tot_ch - cur_ch)
+                    rem_ch = max(0, tot_ch - comp_ch)
                     # estimate remaining pages
+                    cur_ch = shared_stats.get("current_chap_index", 1)
                     avg_pages_per_ch = total_p / max(1, cur_ch)
-                    est_rem_pages = int(rem_ch * avg_pages_per_ch + max(0, len(urls) - (idx + 1)))
+                    est_rem_pages = int(max(0, rem_ch - 1) * avg_pages_per_ch + max(0, len(urls) - (idx + 1)))
                     eta_sec = round(est_rem_pages / max(0.1, speed_p), 1)
 
                 # Update progress preview
@@ -625,7 +645,7 @@ class DownloadService:
                     eta_sec=eta_sec,
                     total_pages_downloaded=total_p,
                     total_bytes_downloaded=total_b,
-                    remaining_chapters=rem_ch
+                    remaining_chapters=rem_ch,
                 )
                 await asyncio.sleep(0.01)
                 return True
@@ -640,5 +660,5 @@ class DownloadService:
         with open(path, "wb") as f:
             f.write(data)
 
-download_service = DownloadService()
 
+download_service = DownloadService()

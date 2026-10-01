@@ -3,6 +3,9 @@ import { NavLink, Outlet } from "react-router-dom";
 import { BookOpen, BarChart3, Tag, Compass, Settings, X, Save, Info, Wrench, DownloadCloud, RefreshCw, History, ScanSearch, Menu } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import DownloadWidget from "../ui/DownloadWidget";
+import { ScrollToTopButton } from "../ui/ScrollToTopButton";
+import { SteamNotification } from "../ui/SteamNotification";
+import { requestDesktopNotificationPermission } from "../../services/notificationService";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import { useMangaBlur, type BlurSettings } from "../../hooks/useMangaBlur";
@@ -26,6 +29,10 @@ export const Layout: React.FC = () => {
       console.error("Failed to fetch base path:", err);
     }
   };
+
+  useEffect(() => {
+    void requestDesktopNotificationPermission();
+  }, []);
 
   useEffect(() => {
     if (isSettingsOpen) {
@@ -481,6 +488,12 @@ export const Layout: React.FC = () => {
       
       {/* Global floating download widget */}
       <DownloadWidget />
+
+      {/* Floating Scroll To Top Button */}
+      <ScrollToTopButton />
+
+      {/* Steam-Style Achievement / Task Completion Popup */}
+      <SteamNotification />
     </div>
   );
 };

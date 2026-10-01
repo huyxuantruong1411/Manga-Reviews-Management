@@ -3,6 +3,7 @@
 RUN_STORAGE_INTEGRATION=1 python -m unittest discover -s backend/tests -v
 No existing database, bucket, manga, or download directory is modified.
 """
+
 import asyncio
 import io
 import os
@@ -39,7 +40,9 @@ class StorageIntegration(unittest.IsolatedAsyncioTestCase):
             await asyncio.to_thread(minio_service.client.make_bucket, bucket)
             created_bucket = True
             minio_service.bucket = bucket
-            await db_instance.db.mangas.insert_one({"_id": manga_id, "title": "Isolated OCR regression", "read_status": "unread"})
+            await db_instance.db.mangas.insert_one(
+                {"_id": manga_id, "title": "Isolated OCR regression", "read_status": "unread"}
+            )
             image = Image.new("RGB", (900, 280), "white")
             draw = ImageDraw.Draw(image)
             try:
@@ -50,14 +53,29 @@ class StorageIntegration(unittest.IsolatedAsyncioTestCase):
             image_bytes = io.BytesIO()
             image.save(image_bytes, format="PNG")
             data = image_bytes.getvalue()
-            await asyncio.to_thread(minio_service.client.put_object, bucket, key, io.BytesIO(data), len(data), content_type="image/png")
-            await db_instance.db.chapters.insert_one({
-                "_id": chapter_id, "manga_id": str(manga_id), "chapter_number": "1",
-                "chapter_numeric": 1, "language": "en", "pages": [{
-                    "page_number": 1, "filename": "001.png", "object_key": key,
-                    "width": 900, "height": 280, "md5_hash": "fixture-hash",
-                }], "page_count": 1,
-            })
+            await asyncio.to_thread(
+                minio_service.client.put_object, bucket, key, io.BytesIO(data), len(data), content_type="image/png"
+            )
+            await db_instance.db.chapters.insert_one(
+                {
+                    "_id": chapter_id,
+                    "manga_id": str(manga_id),
+                    "chapter_number": "1",
+                    "chapter_numeric": 1,
+                    "language": "en",
+                    "pages": [
+                        {
+                            "page_number": 1,
+                            "filename": "001.png",
+                            "object_key": key,
+                            "width": 900,
+                            "height": 280,
+                            "md5_hash": "fixture-hash",
+                        }
+                    ],
+                    "page_count": 1,
+                }
+            )
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 start = await client.post("/api/panels/scan", json={"manga_ids": [str(manga_id)]})
                 self.assertEqual(start.status_code, 200, start.text)
@@ -92,7 +110,9 @@ class StorageIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(progress["last_read_chapter_id"])
                 self.assertEqual(progress["read_chapter_ids"], [])
                 self.assertEqual((await client.get(f"/api/panels/{panel_id}/crop")).status_code, 404)
-                remaining = await asyncio.to_thread(lambda: list(minio_service.client.list_objects(bucket, recursive=True)))
+                remaining = await asyncio.to_thread(
+                    lambda: list(minio_service.client.list_objects(bucket, recursive=True))
+                )
                 self.assertEqual(remaining, [])
         finally:
             minio_service.bucket = previous_bucket

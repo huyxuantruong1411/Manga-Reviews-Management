@@ -1,4 +1,13 @@
-import { Layers, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
+import {
+	AlertTriangle,
+	Layers,
+	Loader2,
+	Search,
+	Sparkles,
+	Trash2,
+	X,
+	Zap,
+} from "lucide-react";
 import type React from "react";
 import {
 	useCallback,
@@ -9,6 +18,7 @@ import {
 } from "react";
 import client, { apiErrorMessage, apiUrl } from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+import { notifyTaskCompleted } from "../../services/notificationService";
 import type { Chapter } from "../../types/chapter";
 import type {
 	PanelResult,
@@ -51,8 +61,14 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 	const [scanChapterSelection, setScanChapterSelection] =
 		useState<string>("all");
 	const [scanLanguage, setScanLanguage] = useState<string>("en");
+	const [scanChapterLanguage, setScanChapterLanguage] = useState<string>("all");
 	const [scanMode, setScanMode] = useState<string>("panel");
 	const [readingDirection, setReadingDirection] = useState<string>("rtl");
+	const [skipBlankPages, setSkipBlankPages] = useState<boolean>(true);
+	const [skipDuplicateCredits, setSkipDuplicateCredits] =
+		useState<boolean>(true);
+	const [isDeletingPanels, setIsDeletingPanels] = useState<boolean>(false);
+	const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 	const sseRef = useRef<EventSource | null>(null);
 
 	// Popover & Modal state
@@ -121,6 +137,14 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 			["completed", "error", "cancelled"].includes(data.stage) &&
 			!data.is_scanning
 		) {
+			if (data.stage === "completed") {
+				notifyTaskCompleted({
+					title: "Quét đặc trưng & OCR hoàn tất!",
+					message: `Manga "${mangaTitle || "Manga"}" đã phân tích xong khung tranh & từ vựng.`,
+					badge: "QUÉT HOÀN TẤT",
+					type: "success",
+				});
+			}
 			client
 				.get(`/api/manga/${mangaId}/panels/stats`)
 				.then((res) => setStats(res.data))
@@ -192,6 +216,18 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 	};
 	const handleTriggerScan = async () => {
 		try {
+			setScanStatus({
+				manga_id: mangaId,
+				total: 0,
+				current: 0,
+				percent: 0,
+				stage: "initializing",
+				message: "Đang khởi tạo tác vụ quét...",
+				is_scanning: true,
+			});
+			setStats((prev) => (prev ? { ...prev, is_scanning: true } : prev));
+			setIsScanModalOpen(false);
+
 			await client.post(`/api/manga/${mangaId}/scan-panels`, {
 				force_rescan: forceRescan,
 				chapter_ids:
@@ -199,8 +235,10 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 				language: scanLanguage,
 				scan_mode: scanMode,
 				reading_direction: readingDirection,
+				chapter_language: scanChapterLanguage,
+				skip_blank_pages: skipBlankPages,
+				skip_duplicate_credits: skipDuplicateCredits,
 			});
-			setIsScanModalOpen(false);
 			const res = await client.get(`/api/manga/${mangaId}/scan-status`);
 			setScanStatus(res.data);
 		} catch (error) {
@@ -209,6 +247,32 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 				message: apiErrorMessage(error, "Không thể khởi chạy tác vụ quét."),
 				type: "error",
 			});
+			setStats((prev) => (prev ? { ...prev, is_scanning: false } : prev));
+		}
+	};
+
+	const handleDeletePanels = async () => {
+		setIsDeletingPanels(true);
+		try {
+			await client.delete(`/api/manga/${mangaId}/panels`);
+			setShowDeleteConfirm(false);
+			showAlert({
+				title: "Thành công",
+				message: "Đã xóa toàn bộ metadata khung tranh của manga này.",
+				type: "success",
+			});
+			const statRes = await client.get(`/api/manga/${mangaId}/panels/stats`);
+			setStats(statRes.data);
+			setResults([]);
+			setTotalResults(0);
+		} catch (error) {
+			showAlert({
+				title: "Lỗi",
+				message: apiErrorMessage(error, "Không thể xóa dữ liệu panel."),
+				type: "error",
+			});
+		} finally {
+			setIsDeletingPanels(false);
 		}
 	};
 
@@ -257,19 +321,34 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 						</p>
 					</div>
 
-					{/* Action Button & Live Progress Badge */}
+					{/* Action Buttons & Live Progress Badge */}
 					<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
 						<button
 							type="button"
+							onClick={() => setShowDeleteConfirm(true)}
+							disabled={
+								scanStatus?.is_scanning ||
+								stats?.is_scanning ||
+								!stats?.total_panels
+							}
+							className="px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center space-x-2 transition border border-red-500/30 text-red-400 hover:bg-red-500/10 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+							title="Xóa toàn bộ metadata khung tranh & từ vựng đã quét của manga này"
+						>
+							<Trash2 size={16} />
+							<span>Xóa dữ liệu quét</span>
+						</button>
+
+						<button
+							type="button"
 							onClick={() => setIsScanModalOpen(true)}
-							disabled={stats?.is_scanning}
+							disabled={scanStatus?.is_scanning || stats?.is_scanning}
 							className={`px-5 py-3 rounded-2xl font-black text-sm flex items-center justify-center space-x-2.5 transition shadow-md cursor-pointer ${
-								stats?.is_scanning
+								scanStatus?.is_scanning || stats?.is_scanning
 									? "bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse"
 									: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/20"
 							}`}
 						>
-							{stats?.is_scanning ? (
+							{scanStatus?.is_scanning || stats?.is_scanning ? (
 								<>
 									<Loader2 size={18} className="animate-spin text-amber-400" />
 									<span>Đang quét đặc trưng ({scanStatus?.percent || 0}%)</span>
@@ -284,8 +363,8 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 					</div>
 				</div>
 
-				{/* Real-time Scan Progress Bar (if active) */}
-				{stats?.is_scanning && scanStatus && (
+				{/* Real-time Scan Progress Bar (Immediate display without refresh) */}
+				{(scanStatus?.is_scanning || stats?.is_scanning) && scanStatus && (
 					<div className="mt-5 p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/30 space-y-2 animate-in fade-in duration-200">
 						<div className="flex items-center justify-between text-xs font-bold">
 							<span className="text-amber-400 flex items-center gap-2">
@@ -676,8 +755,26 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 								</label>
 							</div>
 
-							{/* Force Rescan Checkbox */}
-							<div className="pt-2">
+							{/* Chapter Language Filter */}
+							<div className="pt-1">
+								<label className="text-xs font-bold text-[var(--text-primary)] block mb-1">
+									Lọc ngôn ngữ Chapter nguồn (Language Filter):
+									<select
+										value={scanChapterLanguage}
+										onChange={(e) => setScanChapterLanguage(e.target.value)}
+										className="w-full px-3.5 py-2 mt-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] text-xs font-bold text-[var(--text-primary)] focus:border-amber-500 transition cursor-pointer"
+									>
+										<option value="all">
+											Tất cả các ngôn ngữ (All Chapters)
+										</option>
+										<option value="en">Chỉ quét chapter tiếng Anh (en)</option>
+										<option value="vi">Chỉ quét chapter tiếng Việt (vi)</option>
+									</select>
+								</label>
+							</div>
+
+							{/* Force Rescan & Pre-filters */}
+							<div className="pt-2 space-y-2.5">
 								<label className="flex items-start space-x-3 cursor-pointer select-none">
 									<input
 										type="checkbox"
@@ -692,6 +789,42 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 										<span className="text-[11px] text-[var(--text-secondary)]">
 											Bỏ qua cache và phân tích lại tất cả các trang, ghi đè các
 											panel đã trích xuất trước đó.
+										</span>
+									</div>
+								</label>
+
+								<label className="flex items-start space-x-3 cursor-pointer select-none">
+									<input
+										type="checkbox"
+										checked={skipBlankPages}
+										onChange={(e) => setSkipBlankPages(e.target.checked)}
+										className="mt-0.5 rounded border-[var(--border-primary)] text-amber-500 focus:ring-amber-500/20"
+									/>
+									<div className="text-xs">
+										<span className="font-bold text-[var(--text-primary)] block">
+											Tự động bỏ qua trang trắng / đen / đơn sắc
+										</span>
+										<span className="text-[11px] text-[var(--text-secondary)]">
+											Bỏ qua các trang chuyển cảnh trống, không có chi tiết hoặc
+											không có lời thoại để tăng tốc quét.
+										</span>
+									</div>
+								</label>
+
+								<label className="flex items-start space-x-3 cursor-pointer select-none">
+									<input
+										type="checkbox"
+										checked={skipDuplicateCredits}
+										onChange={(e) => setSkipDuplicateCredits(e.target.checked)}
+										className="mt-0.5 rounded border-[var(--border-primary)] text-amber-500 focus:ring-amber-500/20"
+									/>
+									<div className="text-xs">
+										<span className="font-bold text-[var(--text-primary)] block">
+											Khử trang credit nhóm dịch trùng lặp (Perceptual Hash)
+										</span>
+										<span className="text-[11px] text-[var(--text-secondary)]">
+											Tự nhận diện và loại bỏ trang credit/watermark xuất hiện
+											lặp lại giữa các chapter.
 										</span>
 									</div>
 								</label>
@@ -727,6 +860,53 @@ export const PanelLexisTab: React.FC<PanelLexisTabProps> = ({
 							>
 								<Sparkles size={14} />
 								<span>Bắt đầu quét</span>
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Delete Confirmation Modal */}
+			{showDeleteConfirm && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+					<div className="relative w-full max-w-md p-6 rounded-3xl bg-[var(--bg-secondary)] border border-red-500/30 shadow-2xl space-y-4">
+						<div className="flex items-center space-x-3 text-red-500">
+							<AlertTriangle size={24} />
+							<h3 className="text-lg font-bold text-[var(--text-primary)]">
+								Xác nhận xóa dữ liệu quét
+							</h3>
+						</div>
+						<p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+							Hành động này sẽ xóa vĩnh viễn toàn bộ các khung tranh, dữ liệu
+							OCR và từ vựng đã trích xuất của manga này. Bạn có chắc chắn muốn
+							tiếp tục?
+						</p>
+						<div className="flex justify-end space-x-3 pt-2">
+							<button
+								type="button"
+								onClick={() => setShowDeleteConfirm(false)}
+								disabled={isDeletingPanels}
+								className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+							>
+								Hủy
+							</button>
+							<button
+								type="button"
+								onClick={handleDeletePanels}
+								disabled={isDeletingPanels}
+								className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center space-x-2"
+							>
+								{isDeletingPanels ? (
+									<>
+										<Loader2 size={14} className="animate-spin" />
+										<span>Đang xóa...</span>
+									</>
+								) : (
+									<>
+										<Trash2 size={14} />
+										<span>Xóa toàn bộ dữ liệu</span>
+									</>
+								)}
 							</button>
 						</div>
 					</div>

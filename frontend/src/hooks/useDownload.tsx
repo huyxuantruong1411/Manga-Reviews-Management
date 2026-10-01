@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import type { ReactNode } from "react";
 import client from "../api/client";
 import { useAlert } from "./useAlert";
+import { notifyTaskCompleted } from "../services/notificationService";
 
 export interface DownloadTask {
   _id: string;
@@ -75,6 +76,22 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       const res = await client.get("/api/downloads/tasks", { params: { limit: 20 } });
       if (isMountedRef.current) {
+        const prevTasks = tasksRef.current;
+        for (const task of res.data as DownloadTask[]) {
+          const prev = prevTasks.find((p) => p._id === task._id);
+          if (
+            prev &&
+            (prev.status === "downloading" || prev.status === "pending") &&
+            task.status === "completed"
+          ) {
+            notifyTaskCompleted({
+              title: "Tải xuống hoàn tất!",
+              message: `Manga "${task.manga_title}" đã tải xong toàn bộ ${task.total_chapters} chapters.`,
+              badge: "TẢI XUỐNG HOÀN TẤT",
+              type: "success",
+            });
+          }
+        }
         setTasks(res.data);
       }
       return res.data;

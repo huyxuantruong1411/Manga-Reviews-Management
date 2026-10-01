@@ -6,10 +6,10 @@ Provides three modes:
   3. ideas: Generate review idea bullet points
 """
 
-import json
-import re
 import asyncio
+
 import httpx
+
 from backend.config import settings
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
@@ -54,9 +54,13 @@ def _build_manga_context(manga: dict, tags: list[dict] | None = None) -> str:
     return "\n".join(lines)
 
 
-def _build_prompt(mode: str, manga_context: str, selected_text: str = "", existing_review: str = "", rewrite_style: str = "") -> str:
+def _build_prompt(
+    mode: str, manga_context: str, selected_text: str = "", existing_review: str = "", rewrite_style: str = ""
+) -> str:
     if mode == "rewrite":
-        style_instruction = rewrite_style if rewrite_style else "Hãy viết lại hay hơn, kèm sửa lỗi văn phong, lỗi chính tả nếu có."
+        style_instruction = (
+            rewrite_style if rewrite_style else "Hãy viết lại hay hơn, kèm sửa lỗi văn phong, lỗi chính tả nếu có."
+        )
         return f"""Bạn là một trợ lý viết bài review manga chuyên nghiệp bằng tiếng Việt.
 
 Thông tin manga:
@@ -97,8 +101,14 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-async def call_gemini(mode: str, manga: dict, tags: list[dict] | None = None,
-                      selected_text: str = "", existing_review: str = "", rewrite_style: str = "") -> dict:
+async def call_gemini(
+    mode: str,
+    manga: dict,
+    tags: list[dict] | None = None,
+    selected_text: str = "",
+    existing_review: str = "",
+    rewrite_style: str = "",
+) -> dict:
     """
     Call Gemini Flash API.
     Returns: {"result": str, "prompt": str, "estimated_tokens": int}
@@ -115,7 +125,7 @@ async def call_gemini(mode: str, manga: dict, tags: list[dict] | None = None,
         "generationConfig": {
             "temperature": 0.8,
             "maxOutputTokens": 2048,
-        }
+        },
     }
 
     max_retries = 3
@@ -126,13 +136,13 @@ async def call_gemini(mode: str, manga: dict, tags: list[dict] | None = None,
             resp = await client.post(
                 f"{GEMINI_API_URL}?key={settings.gemini_api_key}",
                 json=payload,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
             if resp.status_code == 200:
                 break
             # If rate limited or server error, sleep and retry
             if (resp.status_code == 429 or resp.status_code >= 500) and attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay * (2 ** attempt))
+                await asyncio.sleep(retry_delay * (2**attempt))
             else:
                 break
 
@@ -145,8 +155,4 @@ async def call_gemini(mode: str, manga: dict, tags: list[dict] | None = None,
     except (KeyError, IndexError) as e:
         raise RuntimeError(f"Unexpected Gemini response structure: {e}")
 
-    return {
-        "result": result_text,
-        "prompt": prompt,
-        "estimated_tokens": estimated_tokens
-    }
+    return {"result": result_text, "prompt": prompt, "estimated_tokens": estimated_tokens}

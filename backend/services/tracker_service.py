@@ -1,8 +1,10 @@
-import httpx
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
+
+import httpx
+
 from backend.utils.rate_limiter import anilist_rate_limiter, jikan_rate_limiter
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,7 @@ query ($id: Int) {
   }
 }
 """
+
 
 def extract_tracker_ids(links: Any) -> Dict[str, str]:
     """
@@ -103,7 +106,6 @@ def extract_tracker_ids(links: Any) -> Dict[str, str]:
     return tracker_ids
 
 
-
 def format_fuzzy_date(year: Optional[int], month: Optional[int], day: Optional[int]) -> Optional[str]:
     """Format year, month, day into YYYY-MM-DD, YYYY-MM, or YYYY string."""
     if not year:
@@ -140,7 +142,7 @@ async def fetch_anilist_metadata(anilist_id: str) -> Optional[Dict[str, Any]]:
             response = await client.post(
                 ANILIST_GRAPHQL_URL,
                 json={"query": ANILIST_QUERY, "variables": {"id": int(anilist_id)}},
-                headers={"Content-Type": "application/json", "Accept": "application/json"}
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
             )
             if response.status_code == 200:
                 data = response.json().get("data", {}).get("Media")
@@ -165,7 +167,7 @@ async def fetch_anilist_metadata(anilist_id: str) -> Optional[Dict[str, Any]]:
                         "mean_score": data.get("meanScore"),
                         "popularity": data.get("popularity"),
                         "favourites": data.get("favourites"),
-                        "site_url": data.get("siteUrl")
+                        "site_url": data.get("siteUrl"),
                     }
             else:
                 logger.warning(f"AniList API error HTTP {response.status_code} for ID {anilist_id}: {response.text}")
@@ -224,7 +226,7 @@ async def fetch_jikan_metadata(mal_id: str) -> Optional[Dict[str, Any]]:
                         "genres": [g.get("name") for g in data.get("genres", []) if g.get("name")],
                         "authors": [a.get("name") for a in data.get("authors", []) if a.get("name")],
                         "serializations": [s.get("name") for s in data.get("serializations", []) if s.get("name")],
-                        "site_url": data.get("url")
+                        "site_url": data.get("url"),
                     }
             else:
                 logger.warning(f"Jikan API error HTTP {response.status_code} for ID {mal_id}: {response.text}")
@@ -243,7 +245,7 @@ async def fetch_tracker_metadata(links: Dict[str, str]) -> Dict[str, Any]:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "anilist": None,
         "myanimelist": None,
-        "combined": {}
+        "combined": {},
     }
 
     anilist_data = None
@@ -292,7 +294,7 @@ async def fetch_tracker_metadata(links: Dict[str, str]) -> Dict[str, Any]:
         "average_score": average_score,
         "popularity": popularity,
         "source": source,
-        "format": format_type
+        "format": format_type,
     }
 
     return result

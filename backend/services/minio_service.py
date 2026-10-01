@@ -1,10 +1,13 @@
-import logging
-from minio import Minio
-from datetime import timedelta
 import io
+import logging
+from datetime import timedelta
+
+from minio import Minio
+
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class MinioService:
     def __init__(self):
@@ -12,7 +15,7 @@ class MinioService:
             settings.minio_endpoint,
             access_key=settings.minio_access_key,
             secret_key=settings.minio_secret_key,
-            secure=False
+            secure=False,
         )
         self.bucket = settings.minio_bucket
 
@@ -24,15 +27,9 @@ class MinioService:
             # Ensure bucket exists (fallback)
             if not self.client.bucket_exists(self.bucket):
                 self.client.make_bucket(self.bucket)
-                
+
             data_stream = io.BytesIO(data)
-            self.client.put_object(
-                self.bucket,
-                object_name,
-                data_stream,
-                length=len(data),
-                content_type=content_type
-            )
+            self.client.put_object(self.bucket, object_name, data_stream, length=len(data), content_type=content_type)
             logger.info(f"Successfully uploaded {object_name} to MinIO bucket '{self.bucket}'.")
             return object_name
         except Exception as e:
@@ -46,12 +43,7 @@ class MinioService:
         if not object_name:
             return ""
         try:
-            url = self.client.get_presigned_url(
-                "GET",
-                self.bucket,
-                object_name,
-                expires=timedelta(hours=24)
-            )
+            url = self.client.get_presigned_url("GET", self.bucket, object_name, expires=timedelta(hours=24))
             # If minio runs in docker and is accessed from host via localhost:9000,
             # we need to ensure the url points to localhost:9000 rather than
             # internal container hostname if container hostname is used.
@@ -61,12 +53,15 @@ class MinioService:
             logger.error(f"Error generating presigned URL for {object_name}: {e}")
             return ""
 
-    def upload_chapter_page(self, manga_id: str, chapter_id: str, filename: str, data: bytes, content_type: str = "image/jpeg") -> tuple:
+    def upload_chapter_page(
+        self, manga_id: str, chapter_id: str, filename: str, data: bytes, content_type: str = "image/jpeg"
+    ) -> tuple:
         """
         Uploads a chapter page image to MinIO.
         Returns (object_key, file_size, width, height, md5_hash).
         """
         import hashlib
+
         from PIL import Image
 
         try:
@@ -85,13 +80,7 @@ class MinioService:
 
             object_name = f"chapters/{manga_id}/{chapter_id}/{filename}"
             data_stream = io.BytesIO(data)
-            self.client.put_object(
-                self.bucket,
-                object_name,
-                data_stream,
-                length=file_size,
-                content_type=content_type
-            )
+            self.client.put_object(self.bucket, object_name, data_stream, length=file_size, content_type=content_type)
             return object_name, file_size, width, height, md5_hash
         except Exception as e:
             logger.error(f"Error uploading chapter page {filename} to MinIO: {e}")
@@ -127,8 +116,9 @@ class MinioService:
             objects_to_delete = list(self.client.list_objects(self.bucket, prefix=prefix, recursive=True))
             if not objects_to_delete:
                 return 0
-            
+
             from minio.deleteobjects import DeleteObject
+
             delete_list = [DeleteObject(obj.object_name) for obj in objects_to_delete]
             errors = self.client.remove_objects(self.bucket, delete_list)
             err_count = sum(1 for _ in errors)
@@ -149,5 +139,5 @@ class MinioService:
                 results[key] = self.get_presigned_url(key)
         return results
 
-minio_service = MinioService()
 
+minio_service = MinioService()

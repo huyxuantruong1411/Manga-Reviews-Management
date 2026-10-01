@@ -1,15 +1,16 @@
-import os
-import hashlib
 import base64
+import hashlib
 import logging
-from io import BytesIO
-from typing import List, Dict, Any, Optional, Tuple
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
+from typing import Any, Dict, List, Optional, Tuple
+
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 MAX_WORKERS = 8
 
 
@@ -17,7 +18,7 @@ def _get_file_hash(filepath: str) -> Optional[str]:
     """Compute MD5 hash of a file using 128KB chunks."""
     hasher = hashlib.md5()
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             buf = f.read(131072)
             while len(buf) > 0:
                 hasher.update(buf)
@@ -96,40 +97,30 @@ def _convert_single_image(filepath: str, target_ext: str) -> Dict[str, Any]:
 class ImageToolsService:
     def __init__(self):
         self._duplicate_candidates = {}
-        self.progress = {
-            "total_files": 0,
-            "scanned_files": 0,
-            "duplicates_found": 0,
-            "is_active": False
-        }
+        self.progress = {"total_files": 0, "scanned_files": 0, "duplicates_found": 0, "is_active": False}
 
     def scan_duplicates(self, folder_path: str) -> Dict[str, Any]:
         """
         Scan a folder recursively for duplicate images using MD5 hashing.
         Returns duplicate groups (hash -> list of file paths).
         """
-        self.progress = {
-            "total_files": 0,
-            "scanned_files": 0,
-            "duplicates_found": 0,
-            "is_active": True
-        }
+        self.progress = {"total_files": 0, "scanned_files": 0, "duplicates_found": 0, "is_active": True}
         try:
             if not os.path.isdir(folder_path):
                 return {"error": f"Directory not found: {folder_path}", "groups": [], "stats": {}}
-    
+
             # Collect all image files
             all_files: List[str] = []
             for dirpath, _, filenames in os.walk(folder_path):
                 for f in filenames:
                     if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS:
                         all_files.append(os.path.join(dirpath, f))
-    
+
             self.progress["total_files"] = len(all_files)
-    
+
             if not all_files:
                 return {"groups": [], "stats": {"total_files": 0, "total_groups": 0, "total_wasted_bytes": 0}}
-    
+
             # Hash files in parallel
             hash_map: Dict[str, List[str]] = {}
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -173,28 +164,33 @@ class ImageToolsService:
             locations = []
             for p in paths:
                 rel = os.path.relpath(p, folder_path)
-                locations.append({
-                    "path": p,
-                    "relative": rel,
-                    "chapter": os.path.dirname(rel) or "(root)",
-                    "filename": os.path.basename(p),
-                })
+                locations.append(
+                    {
+                        "path": p,
+                        "relative": rel,
+                        "chapter": os.path.dirname(rel) or "(root)",
+                        "filename": os.path.basename(p),
+                    }
+                )
 
-            groups.append({
-                "hash": hash_val,
-                "count": len(paths),
-                "file_size": file_size,
-                "wasted_bytes": wasted,
-                "thumbnail": thumbnail,
-                "files": locations,
-            })
+            groups.append(
+                {
+                    "hash": hash_val,
+                    "count": len(paths),
+                    "file_size": file_size,
+                    "wasted_bytes": wasted,
+                    "thumbnail": thumbnail,
+                    "files": locations,
+                }
+            )
 
         # Sort by wasted space descending
         groups.sort(key=lambda g: g["wasted_bytes"], reverse=True)
 
         self._duplicate_candidates = {
             os.path.realpath(item["path"]): (group["hash"], [os.path.realpath(f["path"]) for f in group["files"]])
-            for group in groups for item in group["files"]
+            for group in groups
+            for item in group["files"]
         }
 
         return {
@@ -203,7 +199,7 @@ class ImageToolsService:
                 "total_files": len(all_files),
                 "total_groups": len(groups),
                 "total_wasted_bytes": total_wasted,
-            }
+            },
         }
 
     def delete_duplicates(self, file_paths: List[str]) -> Dict[str, Any]:
@@ -276,21 +272,25 @@ class ImageToolsService:
                     except Exception:
                         fsize = 0
 
-                    chapter_map.setdefault(rel_dir, []).append({
-                        "path": full_path,
-                        "filename": f,
-                        "size": fsize,
-                        "current_ext": ext,
-                    })
+                    chapter_map.setdefault(rel_dir, []).append(
+                        {
+                            "path": full_path,
+                            "filename": f,
+                            "size": fsize,
+                            "current_ext": ext,
+                        }
+                    )
 
         chapters = []
         for chapter_name, files in sorted(chapter_map.items()):
-            chapters.append({
-                "chapter": chapter_name,
-                "full_path": os.path.join(folder_path, chapter_name) if chapter_name != "(root)" else folder_path,
-                "file_count": len(files),
-                "files": files,
-            })
+            chapters.append(
+                {
+                    "chapter": chapter_name,
+                    "full_path": os.path.join(folder_path, chapter_name) if chapter_name != "(root)" else folder_path,
+                    "file_count": len(files),
+                    "files": files,
+                }
+            )
 
         return {
             "chapters": chapters,
@@ -298,7 +298,7 @@ class ImageToolsService:
                 "total_convertible": total_files,
                 "total_chapters": len(chapters),
                 "target_format": target_ext,
-            }
+            },
         }
 
     def convert_images(self, file_paths: List[str], target_format: str) -> Dict[str, Any]:
@@ -316,10 +316,7 @@ class ImageToolsService:
         errors: List[str] = []
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_path = {
-                executor.submit(_convert_single_image, p, target_ext): p
-                for p in file_paths
-            }
+            future_to_path = {executor.submit(_convert_single_image, p, target_ext): p for p in file_paths}
             for future in as_completed(future_to_path):
                 try:
                     result = future.result()

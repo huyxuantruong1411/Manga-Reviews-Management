@@ -1,34 +1,34 @@
-import os
 import asyncio
-import re
-import uuid
-import time
-import json
-import io
 import base64
+import io
+import json
 import logging
+import os
+import re
+import time
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
 from bson import ObjectId
 from PIL import Image
 
 from backend.database.connection import get_db
-from backend.services.minio_service import minio_service
-from backend.services.audit_service import audit_service
-from backend.utils.file_utils import clean_filename, normalize_windows_path
 from backend.models.chapter import (
-    PageItem,
-    ChapterInDB,
     DetectedChapter,
     FolderScanResponse,
-    ReadingProgress,
+    PageItem,
     StorageDuplicateGroup,
-    StorageDuplicateItem
+    StorageDuplicateItem,
 )
+from backend.services.audit_service import audit_service
+from backend.services.minio_service import minio_service
+from backend.utils.file_utils import normalize_windows_path
 
 logger = logging.getLogger(__name__)
 
-IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+
 
 def parse_chapter_numeric(chapter_str: str) -> float:
     """Extract float from chapter number string, or return fallback."""
@@ -40,13 +40,14 @@ def parse_chapter_numeric(chapter_str: str) -> float:
     if clean in ("prologue", "intro"):
         return -1.0
     # Try finding digits and optional decimal
-    match = re.search(r'(\d+(?:\.\d+)?)', clean)
+    match = re.search(r"(\d+(?:\.\d+)?)", clean)
     if match:
         try:
             return float(match.group(1))
         except ValueError:
             return 0.0
     return 0.0
+
 
 def parse_folder_name(folder_name: str) -> Dict[str, Any]:
     """
@@ -61,62 +62,56 @@ def parse_folder_name(folder_name: str) -> Dict[str, Any]:
       - Oneshot - Title
     """
     name = folder_name.strip()
-    result = {
-        "volume": None,
-        "chapter_number": "1",
-        "chapter_numeric": 1.0,
-        "title": "",
-        "scanlation_group": None
-    }
+    result = {"volume": None, "chapter_number": "1", "chapter_numeric": 1.0, "title": "", "scanlation_group": None}
 
     # Extract scanlation group from brackets [Group] or parentheses at end
-    group_match = re.search(r'\[([^\]]+)\]\s*$', name)
+    group_match = re.search(r"\[([^\]]+)\]\s*$", name)
     if group_match:
         result["scanlation_group"] = group_match.group(1).strip()
-        name = name[:group_match.start()].strip()
+        name = name[: group_match.start()].strip()
     else:
-        group_match2 = re.search(r'\(([^)]+)\)\s*$', name)
+        group_match2 = re.search(r"\(([^)]+)\)\s*$", name)
         if group_match2:
             potential_group = group_match2.group(1).strip()
             # If not a number, likely a group
-            if not re.match(r'^\d+(\.\d+)?$', potential_group):
+            if not re.match(r"^\d+(\.\d+)?$", potential_group):
                 result["scanlation_group"] = potential_group
-                name = name[:group_match2.start()].strip()
+                name = name[: group_match2.start()].strip()
 
     # Extract volume if present e.g. Vol. 1 or Volume 02
-    vol_match = re.search(r'(?:vol(?:ume)?\.?\s*(\d+))', name, re.IGNORECASE)
+    vol_match = re.search(r"(?:vol(?:ume)?\.?\s*(\d+))", name, re.IGNORECASE)
     if vol_match:
         result["volume"] = vol_match.group(1)
         # Remove volume part from name
-        name = name[:vol_match.start()] + name[vol_match.end():]
+        name = name[: vol_match.start()] + name[vol_match.end() :]
         name = name.strip()
 
     # Check for oneshot
-    if re.search(r'\b(oneshot|one-shot)\b', name, re.IGNORECASE):
+    if re.search(r"\b(oneshot|one-shot)\b", name, re.IGNORECASE):
         result["chapter_number"] = "oneshot"
         result["chapter_numeric"] = 0.0
         # Title might be after dash
-        parts = re.split(r'[-–:]', name, maxsplit=1)
+        parts = re.split(r"[-–:]", name, maxsplit=1)
         if len(parts) > 1:
             result["title"] = parts[1].strip()
         return result
 
     # Match Chapter number e.g. Chapter 1.5, Ch. 2, Chap 3, or leading numbers
-    chap_match = re.search(r'(?:ch(?:apter)?\.?|chap\.?|c)\s*([0-9]+(?:\.[0-9]+)?)', name, re.IGNORECASE)
+    chap_match = re.search(r"(?:ch(?:apter)?\.?|chap\.?|c)\s*([0-9]+(?:\.[0-9]+)?)", name, re.IGNORECASE)
     if chap_match:
         c_num = chap_match.group(1)
         result["chapter_number"] = c_num
         result["chapter_numeric"] = parse_chapter_numeric(c_num)
-        
+
         # Remaining text might be title
-        remainder = name[chap_match.end():].strip()
+        remainder = name[chap_match.end() :].strip()
         # Strip leading dash/colon
-        remainder = re.sub(r'^[-–:]\s*', '', remainder).strip()
+        remainder = re.sub(r"^[-–:]\s*", "", remainder).strip()
         if remainder:
             result["title"] = remainder
     else:
         # Check if folder starts with numbers e.g. "01 - The Beginning"
-        lead_num = re.match(r'^([0-9]+(?:\.[0-9]+)?)(?:\s*[-–:]\s*(.*))?$', name)
+        lead_num = re.match(r"^([0-9]+(?:\.[0-9]+)?)(?:\s*[-–:]\s*(.*))?$", name)
         if lead_num:
             c_num = lead_num.group(1)
             result["chapter_number"] = c_num
@@ -143,10 +138,7 @@ class ChapterService:
         return get_db().reading_progress
 
     async def get_manga_chapters(
-        self,
-        manga_id: str,
-        language: Optional[str] = None,
-        group: Optional[str] = None
+        self, manga_id: str, language: Optional[str] = None, group: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """List all stored chapters for a manga, sorted naturally by chapter number."""
         query: Dict[str, Any] = {"manga_id": manga_id}
@@ -155,11 +147,11 @@ class ChapterService:
         if group:
             query["scanlation_group"] = group
 
-        cursor = self._get_chapters_col().find(query).sort([
-            ("chapter_numeric", 1),
-            ("chapter_number", 1),
-            ("created_at", 1)
-        ])
+        cursor = (
+            self._get_chapters_col()
+            .find(query)
+            .sort([("chapter_numeric", 1), ("chapter_number", 1), ("created_at", 1)])
+        )
 
         chapters = []
         async for doc in cursor:
@@ -195,7 +187,7 @@ class ChapterService:
         """Create or update a chapter document."""
         c_num = str(chapter_data.get("chapter_number", "1"))
         c_numeric = parse_chapter_numeric(c_num)
-        
+
         pages = chapter_data.get("pages", [])
         page_count = len(pages)
 
@@ -225,31 +217,29 @@ class ChapterService:
             "local_path": chapter_data.get("local_path"),
             "pages": pages,
             "page_count": page_count,
-            "updated_at": now
+            "updated_at": now,
         }
 
         # Check if existing chapter matches (manga_id, source_id) or (manga_id, chapter_number, language, scanlation_group)
         existing = None
         if doc.get("source_id"):
-            existing = await self._get_chapters_col().find_one({
-                "manga_id": doc["manga_id"],
-                "source_id": doc["source_id"]
-            })
+            existing = await self._get_chapters_col().find_one(
+                {"manga_id": doc["manga_id"], "source_id": doc["source_id"]}
+            )
         if not existing and not doc.get("source_id"):
-            existing = await self._get_chapters_col().find_one({
-                "manga_id": doc["manga_id"],
-                "chapter_number": doc["chapter_number"],
-                "language": doc["language"],
-                "scanlation_group": doc["scanlation_group"],
-                "volume": doc["volume"],
-                "source_id": None,
-            })
+            existing = await self._get_chapters_col().find_one(
+                {
+                    "manga_id": doc["manga_id"],
+                    "chapter_number": doc["chapter_number"],
+                    "language": doc["language"],
+                    "scanlation_group": doc["scanlation_group"],
+                    "volume": doc["volume"],
+                    "source_id": None,
+                }
+            )
 
         if existing:
-            await self._get_chapters_col().update_one(
-                {"_id": existing["_id"]},
-                {"$set": doc}
-            )
+            await self._get_chapters_col().update_one({"_id": existing["_id"]}, {"$set": doc})
             return str(existing["_id"])
         else:
             doc["created_at"] = now
@@ -262,13 +252,14 @@ class ChapterService:
         from MangaDex for all stored chapters of this manga.
         """
         from backend.services.mangadex_service import mangadex_service
+
         filter_query = {"_id": ObjectId(manga_id)} if ObjectId.is_valid(manga_id) else {"_id": manga_id}
         manga = await self._get_mangas_col().find_one(filter_query)
         if not manga or not manga.get("mangadex_id"):
             return {"updated_count": 0, "message": "Manga không liên kết với MangaDex."}
 
         mangadex_id = manga["mangadex_id"]
-        
+
         # Get all distinct languages among existing stored chapters
         languages = await self._get_chapters_col().distinct("language", {"manga_id": manga_id})
         if not languages:
@@ -303,14 +294,20 @@ class ChapterService:
                     md_vol = matched_md.get("volume")
                     if md_vol is not None and doc.get("volume") != md_vol:
                         updates["volume"] = md_vol
-                    elif md_vol is None and doc.get("volume") is not None and str(doc.get("volume")).lower() in ("", "none", "null"):
+                    elif (
+                        md_vol is None
+                        and doc.get("volume") is not None
+                        and str(doc.get("volume")).lower() in ("", "none", "null")
+                    ):
                         updates["volume"] = None
-                    
+
                     # Update group
                     md_group = matched_md.get("group_name")
-                    if md_group and (not doc.get("scanlation_group") or doc.get("scanlation_group") in ("No Group", "")):
+                    if md_group and (
+                        not doc.get("scanlation_group") or doc.get("scanlation_group") in ("No Group", "")
+                    ):
                         updates["scanlation_group"] = md_group
-                    
+
                     # Update uploader
                     md_uploader = matched_md.get("uploader")
                     if md_uploader and not doc.get("uploader"):
@@ -337,7 +334,7 @@ class ChapterService:
         return {
             "success": True,
             "updated_count": updated_count,
-            "message": f"Đã đồng bộ và cập nhật metadata cho {updated_count} chapter(s) từ MangaDex."
+            "message": f"Đã đồng bộ và cập nhật metadata cho {updated_count} chapter(s) từ MangaDex.",
         }
 
     async def delete_chapter(self, chapter_id: str) -> bool:
@@ -359,18 +356,23 @@ class ChapterService:
 
         # Delete document from MongoDB
         await self._get_chapters_col().delete_one(filter_query)
-        await self._get_reading_col().update_many(
-            {"manga_id": manga_id}, {"$pull": {"read_chapter_ids": c_id_str}}
-        )
+        await self._get_reading_col().update_many({"manga_id": manga_id}, {"$pull": {"read_chapter_ids": c_id_str}})
         await self._get_reading_col().update_many(
             {"manga_id": manga_id, "last_read_chapter_id": c_id_str},
-            {"$set": {"last_read_chapter_id": None, "last_read_chapter_number": None,
-                      "last_read_page": 1, "updated_at": datetime.utcnow()}}
+            {
+                "$set": {
+                    "last_read_chapter_id": None,
+                    "last_read_chapter_number": None,
+                    "last_read_page": 1,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
         )
 
         # Cascading delete extracted panels and vision features
         try:
             from backend.services.panel_scanner_service import panel_scanner_service
+
             await panel_scanner_service.delete_panels_for_chapter(c_id_str)
         except Exception as pe:
             logger.warning(f"Error cascading delete panels for chapter {c_id_str}: {pe}")
@@ -389,7 +391,7 @@ class ChapterService:
                 new_value=None,
                 actor="user",
                 note=f"Deleted Chapter {chapter.get('chapter_number')} ({chapter.get('page_count', 0)} pages) from storage",
-                details={"chapter_id": c_id_str, "chapter_number": chapter.get("chapter_number")}
+                details={"chapter_id": c_id_str, "chapter_number": chapter.get("chapter_number")},
             )
         except Exception as e:
             logger.error(f"Error logging audit for chapter deletion: {e}")
@@ -429,6 +431,7 @@ class ChapterService:
         # Cascading delete panels for deleted pages and renumber remaining
         try:
             from backend.services.panel_scanner_service import panel_scanner_service
+
             await panel_scanner_service.delete_panels_for_pages(str(chapter["_id"]), list(page_numbers))
             await panel_scanner_service.renumber_panels_for_chapter(str(chapter["_id"]), old_to_new)
         except Exception as pe:
@@ -436,16 +439,12 @@ class ChapterService:
 
         await self._get_chapters_col().update_one(
             filter_query,
-            {
-                "$set": {
-                    "pages": pages_to_keep,
-                    "page_count": len(pages_to_keep),
-                    "updated_at": datetime.utcnow()
-                }
-            }
+            {"$set": {"pages": pages_to_keep, "page_count": len(pages_to_keep), "updated_at": datetime.utcnow()}},
         )
 
-        progress = await self._get_reading_col().find_one({"manga_id": chapter["manga_id"], "last_read_chapter_id": chapter_id})
+        progress = await self._get_reading_col().find_one(
+            {"manga_id": chapter["manga_id"], "last_read_chapter_id": chapter_id}
+        )
         if progress:
             old_page = progress.get("last_read_page", 1)
             new_page = old_to_new.get(old_page, max(1, min(old_page, len(pages_to_keep))))
@@ -454,13 +453,13 @@ class ChapterService:
                 fields.update({"last_read_chapter_id": None, "last_read_chapter_number": None})
             await self._get_reading_col().update_one(
                 {"manga_id": chapter["manga_id"], "last_read_chapter_id": chapter_id, "last_read_page": old_page},
-                {"$set": fields}
+                {"$set": fields},
             )
 
         return {
             "chapter_id": chapter_id,
             "deleted_pages_count": deleted_count,
-            "remaining_pages_count": len(pages_to_keep)
+            "remaining_pages_count": len(pages_to_keep),
         }
 
     async def scan_local_folder(self, folder_path: str, manga_id: str) -> FolderScanResponse:
@@ -476,7 +475,7 @@ class ChapterService:
                 message=f"Directory not found or inaccessible: {clean_path}",
                 total_folders=0,
                 detected_chapters=[],
-                unrecognized_folders=[]
+                unrecognized_folders=[],
             )
 
         entries = os.listdir(clean_path)
@@ -496,22 +495,27 @@ class ChapterService:
         # Case 1: Folder directly contains images (single chapter / oneshot)
         if direct_images and len(direct_images) > 0:
             parsed = parse_folder_name(os.path.basename(clean_path))
-            dup_key = (str(parsed["chapter_number"]).strip().lower(), (parsed.get("scanlation_group") or "").strip().lower())
+            dup_key = (
+                str(parsed["chapter_number"]).strip().lower(),
+                (parsed.get("scanlation_group") or "").strip().lower(),
+            )
             is_dup = dup_key in existing_map
 
-            detected_chapters.append(DetectedChapter(
-                folder_name=os.path.basename(clean_path),
-                folder_path=clean_path,
-                chapter_number=parsed["chapter_number"],
-                chapter_numeric=parsed["chapter_numeric"],
-                volume=parsed["volume"],
-                title=parsed["title"],
-                scanlation_group=parsed["scanlation_group"],
-                page_count=len(direct_images),
-                image_files=sorted(direct_images),
-                is_duplicate=is_dup,
-                existing_chapter_id=existing_map.get(dup_key)
-            ))
+            detected_chapters.append(
+                DetectedChapter(
+                    folder_name=os.path.basename(clean_path),
+                    folder_path=clean_path,
+                    chapter_number=parsed["chapter_number"],
+                    chapter_numeric=parsed["chapter_numeric"],
+                    volume=parsed["volume"],
+                    title=parsed["title"],
+                    scanlation_group=parsed["scanlation_group"],
+                    page_count=len(direct_images),
+                    image_files=sorted(direct_images),
+                    is_duplicate=is_dup,
+                    existing_chapter_id=existing_map.get(dup_key),
+                )
+            )
 
         # Case 2: Subdirectories containing chapters
         for sub in sorted(subdirs):
@@ -524,22 +528,27 @@ class ChapterService:
                     continue
 
                 parsed = parse_folder_name(sub)
-                dup_key = (str(parsed["chapter_number"]).strip().lower(), (parsed.get("scanlation_group") or "").strip().lower())
+                dup_key = (
+                    str(parsed["chapter_number"]).strip().lower(),
+                    (parsed.get("scanlation_group") or "").strip().lower(),
+                )
                 is_dup = dup_key in existing_map
 
-                detected_chapters.append(DetectedChapter(
-                    folder_name=sub,
-                    folder_path=sub_full,
-                    chapter_number=parsed["chapter_number"],
-                    chapter_numeric=parsed["chapter_numeric"],
-                    volume=parsed["volume"],
-                    title=parsed["title"],
-                    scanlation_group=parsed["scanlation_group"],
-                    page_count=len(images),
-                    image_files=sorted(images),
-                    is_duplicate=is_dup,
-                    existing_chapter_id=existing_map.get(dup_key)
-                ))
+                detected_chapters.append(
+                    DetectedChapter(
+                        folder_name=sub,
+                        folder_path=sub_full,
+                        chapter_number=parsed["chapter_number"],
+                        chapter_numeric=parsed["chapter_numeric"],
+                        volume=parsed["volume"],
+                        title=parsed["title"],
+                        scanlation_group=parsed["scanlation_group"],
+                        page_count=len(images),
+                        image_files=sorted(images),
+                        is_duplicate=is_dup,
+                        existing_chapter_id=existing_map.get(dup_key),
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Error scanning folder '{sub}': {e}")
                 unrecognized.append(sub)
@@ -553,7 +562,7 @@ class ChapterService:
             message=f"Found {len(detected_chapters)} valid chapter folder(s).",
             total_folders=len(subdirs) if subdirs else 1,
             detected_chapters=detected_chapters,
-            unrecognized_folders=unrecognized
+            unrecognized_folders=unrecognized,
         )
 
     async def import_local_folder(
@@ -563,7 +572,7 @@ class ChapterService:
         conflict_strategy: str = "skip",
         default_language: str = "en",
         default_group: Optional[str] = None,
-        selected_folders: Optional[List[str]] = None
+        selected_folders: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Imports detected chapters and image files into MinIO storage and creates MongoDB records.
@@ -613,18 +622,20 @@ class ChapterService:
                         chapter_id=chapter_id,
                         filename=target_filename,
                         data=file_data,
-                        content_type=content_type
+                        content_type=content_type,
                     )
 
-                    page_items.append(PageItem(
-                        page_number=idx + 1,
-                        filename=target_filename,
-                        object_key=obj_key,
-                        file_size=fsize,
-                        width=width,
-                        height=height,
-                        md5_hash=md5_h
-                    ))
+                    page_items.append(
+                        PageItem(
+                            page_number=idx + 1,
+                            filename=target_filename,
+                            object_key=obj_key,
+                            file_size=fsize,
+                            width=width,
+                            height=height,
+                            md5_hash=md5_h,
+                        )
+                    )
 
                 # Insert Chapter to DB
                 now = datetime.utcnow()
@@ -642,7 +653,7 @@ class ChapterService:
                     "pages": [p.dict() for p in page_items],
                     "page_count": len(page_items),
                     "created_at": now,
-                    "updated_at": now
+                    "updated_at": now,
                 }
 
                 await self._get_chapters_col().insert_one(chapter_doc)
@@ -671,8 +682,8 @@ class ChapterService:
                     "folder_path": folder_path,
                     "imported_count": imported_count,
                     "total_pages": total_pages_imported,
-                    "skipped_count": skipped_count
-                }
+                    "skipped_count": skipped_count,
+                },
             )
         except Exception as e:
             logger.error(f"Error logging import audit: {e}")
@@ -682,7 +693,7 @@ class ChapterService:
             "imported_chapters": imported_count,
             "skipped_chapters": skipped_count,
             "total_pages_imported": total_pages_imported,
-            "errors": errors
+            "errors": errors,
         }
 
     async def stream_import_local_folder(
@@ -692,7 +703,7 @@ class ChapterService:
         conflict_strategy: str = "skip",
         default_language: str = "en",
         default_group: Optional[str] = None,
-        selected_folders: Optional[List[str]] = None
+        selected_folders: Optional[List[str]] = None,
     ):
         """
         Async generator yielding SSE events with real-time granular progress for folder import.
@@ -752,18 +763,20 @@ class ChapterService:
                         chapter_id=chapter_id,
                         filename=target_filename,
                         data=file_data,
-                        content_type=content_type
+                        content_type=content_type,
                     )
 
-                    page_items.append(PageItem(
-                        page_number=page_idx,
-                        filename=target_filename,
-                        object_key=obj_key,
-                        file_size=fsize,
-                        width=width,
-                        height=height,
-                        md5_hash=md5_h
-                    ))
+                    page_items.append(
+                        PageItem(
+                            page_number=page_idx,
+                            filename=target_filename,
+                            object_key=obj_key,
+                            file_size=fsize,
+                            width=width,
+                            height=height,
+                            md5_hash=md5_h,
+                        )
+                    )
 
                     total_pages_imported += 1
                     total_bytes_uploaded += fsize
@@ -782,32 +795,38 @@ class ChapterService:
                                     thumb_img = thumb_img.convert("RGB")
                                 buf = io.BytesIO()
                                 thumb_img.save(buf, format="JPEG", quality=70)
-                                preview_base64 = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+                                preview_base64 = (
+                                    f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+                                )
                         except Exception:
                             pass
 
-                    yield f"data: {json.dumps({
-                        'type': 'page_progress',
-                        'chapter_number': ch.chapter_number,
-                        'chapter_title': ch.title,
-                        'chapter_index': chap_idx,
-                        'total_chapters': total_chapters,
-                        'remaining_chapters': max(0, total_chapters - chap_idx),
-                        'page_number': page_idx,
-                        'chapter_page_count': chap_pages_count,
-                        'total_pages_done': total_pages_imported,
-                        'total_pages_overall': total_pages_overall,
-                        'remaining_pages': remaining_pages,
-                        'filename': img_file,
-                        'file_size': fsize,
-                        'total_bytes_uploaded': total_bytes_uploaded,
-                        'speed_pages_per_sec': round(speed, 1),
-                        'speed_mb_per_sec': round((total_bytes_uploaded / (1024 * 1024)) / elapsed, 2),
-                        'elapsed_seconds': round(elapsed, 1),
-                        'eta_seconds': round(eta, 1),
-                        'percent': round(overall_percent, 1),
-                        'preview_base64': preview_base64
-                    })}\n\n"
+                    yield f"data: {
+                        json.dumps(
+                            {
+                                'type': 'page_progress',
+                                'chapter_number': ch.chapter_number,
+                                'chapter_title': ch.title,
+                                'chapter_index': chap_idx,
+                                'total_chapters': total_chapters,
+                                'remaining_chapters': max(0, total_chapters - chap_idx),
+                                'page_number': page_idx,
+                                'chapter_page_count': chap_pages_count,
+                                'total_pages_done': total_pages_imported,
+                                'total_pages_overall': total_pages_overall,
+                                'remaining_pages': remaining_pages,
+                                'filename': img_file,
+                                'file_size': fsize,
+                                'total_bytes_uploaded': total_bytes_uploaded,
+                                'speed_pages_per_sec': round(speed, 1),
+                                'speed_mb_per_sec': round((total_bytes_uploaded / (1024 * 1024)) / elapsed, 2),
+                                'elapsed_seconds': round(elapsed, 1),
+                                'eta_seconds': round(eta, 1),
+                                'percent': round(overall_percent, 1),
+                                'preview_base64': preview_base64,
+                            }
+                        )
+                    }\n\n"
 
                 # Insert Chapter to DB
                 now = datetime.utcnow()
@@ -825,31 +844,39 @@ class ChapterService:
                     "pages": [p.dict() for p in page_items],
                     "page_count": len(page_items),
                     "created_at": now,
-                    "updated_at": now
+                    "updated_at": now,
                 }
 
                 await self._get_chapters_col().insert_one(chapter_doc)
                 imported_count += 1
 
-                yield f"data: {json.dumps({
-                    'type': 'chapter_done',
-                    'chapter_number': ch.chapter_number,
-                    'chapter_title': ch.title,
-                    'chapter_index': chap_idx,
-                    'total_chapters': total_chapters,
-                    'page_count': len(page_items),
-                    'message': f'Hoàn thành Chapter {ch.chapter_number} ({len(page_items)} trang)'
-                })}\n\n"
+                yield f"data: {
+                    json.dumps(
+                        {
+                            'type': 'chapter_done',
+                            'chapter_number': ch.chapter_number,
+                            'chapter_title': ch.title,
+                            'chapter_index': chap_idx,
+                            'total_chapters': total_chapters,
+                            'page_count': len(page_items),
+                            'message': f'Hoàn thành Chapter {ch.chapter_number} ({len(page_items)} trang)',
+                        }
+                    )
+                }\n\n"
 
             except Exception as e:
                 logger.error(f"Error importing chapter '{ch.folder_name}': {e}")
                 errors.append({"folder": ch.folder_name, "error": str(e)})
-                yield f"data: {json.dumps({
-                    'type': 'chapter_error',
-                    'chapter_number': ch.chapter_number,
-                    'folder_name': ch.folder_name,
-                    'error': str(e)
-                })}\n\n"
+                yield f"data: {
+                    json.dumps(
+                        {
+                            'type': 'chapter_error',
+                            'chapter_number': ch.chapter_number,
+                            'folder_name': ch.folder_name,
+                            'error': str(e),
+                        }
+                    )
+                }\n\n"
 
         # Log audit event
         try:
@@ -869,25 +896,30 @@ class ChapterService:
                     "folder_path": folder_path,
                     "imported_count": imported_count,
                     "total_pages": total_pages_imported,
-                    "skipped_count": skipped_count
-                }
+                    "skipped_count": skipped_count,
+                },
             )
         except Exception as e:
             logger.error(f"Error logging import audit: {e}")
 
         total_elapsed = round(time.time() - start_time, 1)
-        yield f"data: {json.dumps({
-            'type': 'complete',
-            'imported_chapters': imported_count,
-            'total_pages_imported': total_pages_imported,
-            'skipped_chapters': skipped_count,
-            'total_bytes_uploaded': total_bytes_uploaded,
-            'elapsed_seconds': total_elapsed,
-            'errors': errors
-        })}\n\n"
+        yield f"data: {
+            json.dumps(
+                {
+                    'type': 'complete',
+                    'imported_chapters': imported_count,
+                    'total_pages_imported': total_pages_imported,
+                    'skipped_chapters': skipped_count,
+                    'total_bytes_uploaded': total_bytes_uploaded,
+                    'elapsed_seconds': total_elapsed,
+                    'errors': errors,
+                }
+            )
+        }\n\n"
 
-
-    async def scan_storage_duplicates(self, manga_id: str, chapter_id: Optional[str] = None) -> List[StorageDuplicateGroup]:
+    async def scan_storage_duplicates(
+        self, manga_id: str, chapter_id: Optional[str] = None
+    ) -> List[StorageDuplicateGroup]:
         """
         Scans all stored pages for duplicate image content using MD5 hashes.
         Returns groups of duplicate pages with preview URLs for side-by-side inspection.
@@ -924,7 +956,7 @@ class ChapterService:
                     filename=p.get("filename", ""),
                     object_key=obj_key,
                     file_size=p.get("file_size", 0),
-                    url=url
+                    url=url,
                 )
                 hash_map.setdefault(md5_val, []).append(item)
 
@@ -932,11 +964,7 @@ class ChapterService:
         duplicate_groups: List[StorageDuplicateGroup] = []
         for h, items in hash_map.items():
             if len(items) > 1:
-                duplicate_groups.append(StorageDuplicateGroup(
-                    md5_hash=h,
-                    file_size=items[0].file_size,
-                    items=items
-                ))
+                duplicate_groups.append(StorageDuplicateGroup(md5_hash=h, file_size=items[0].file_size, items=items))
 
         # Sort by wasted size desc
         duplicate_groups.sort(key=lambda g: g.file_size * (len(g.items) - 1), reverse=True)
@@ -979,9 +1007,9 @@ class ChapterService:
                         "$set": {
                             "pages": updated_pages,
                             "page_count": len(updated_pages),
-                            "updated_at": datetime.utcnow()
+                            "updated_at": datetime.utcnow(),
                         }
-                    }
+                    },
                 )
 
         return {"deleted_count": deleted_count}
@@ -997,7 +1025,7 @@ class ChapterService:
                 "last_read_page": 1,
                 "read_chapter_ids": [],
                 "reading_mode": "long_strip",
-                "fit_mode": "width"
+                "fit_mode": "width",
             }
         doc["_id"] = str(doc["_id"])
         return doc
@@ -1011,7 +1039,7 @@ class ChapterService:
         reading_mode: str = "long_strip",
         fit_mode: str = "width",
         mark_as_read: bool = False,
-        language: Optional[str] = None
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Save user reading position and settings."""
         key = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
@@ -1021,7 +1049,11 @@ class ChapterService:
         page_count = len(chapter.get("pages", []))
         if not 1 <= page <= page_count:
             raise ValueError("Page is outside the stored chapter")
-        if reading_mode not in {"long_strip", "single", "double_ltr", "double_rtl"} or fit_mode not in {"width", "height", "original"}:
+        if reading_mode not in {"long_strip", "single", "double_ltr", "double_rtl"} or fit_mode not in {
+            "width",
+            "height",
+            "original",
+        }:
             raise ValueError("Invalid reader settings")
         now = datetime.utcnow()
         update_data = {
@@ -1031,7 +1063,7 @@ class ChapterService:
             "last_read_page": max(1, page),
             "reading_mode": reading_mode,
             "fit_mode": fit_mode,
-            "updated_at": now
+            "updated_at": now,
         }
         chapter_language = chapter.get("language") or language
         if chapter_language:
@@ -1049,7 +1081,7 @@ class ChapterService:
             if manga and manga.get("read_status") in ["unread", "plan_to_read"]:
                 await self._get_mangas_col().update_one(
                     {"_id": ObjectId(manga_id)},
-                    {"$set": {"read_status": "reading", "reading_at": now, "updated_at": now}}
+                    {"$set": {"read_status": "reading", "reading_at": now, "updated_at": now}},
                 )
         except Exception as e:
             logger.warning(f"Failed to auto-update manga status on reading: {e}")
@@ -1065,10 +1097,7 @@ class ChapterService:
         if language:
             query["language"] = language.lower()
 
-        cursor = self._get_chapters_col().find(query).sort([
-            ("chapter_numeric", -1),
-            ("created_at", -1)
-        ]).limit(1)
+        cursor = self._get_chapters_col().find(query).sort([("chapter_numeric", -1), ("created_at", -1)]).limit(1)
 
         latest_chap = None
         async for doc in cursor:
@@ -1096,13 +1125,10 @@ class ChapterService:
             target = os.path.realpath(local_path)
             if root and target != root and os.path.commonpath([root, target]) == root and os.path.isdir(target):
                 import shutil
+
                 await asyncio.to_thread(shutil.rmtree, target)
 
-        return {
-            "chapter_id": c_id,
-            "chapter_number": c_num,
-            "title": c_title,
-            "language": c_lang
-        }
+        return {"chapter_id": c_id, "chapter_number": c_num, "title": c_title, "language": c_lang}
+
 
 chapter_service = ChapterService()

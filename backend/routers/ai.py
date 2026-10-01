@@ -1,9 +1,11 @@
 """AI Router — endpoints for Gemini-powered review writing assistance."""
 
+from typing import Any, Optional
+
+from bson import ObjectId
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List, Any
-from bson import ObjectId
+
 from backend.database.connection import get_db
 from backend.services.ai_service import call_gemini
 
@@ -76,6 +78,7 @@ async def preview_ai_request(req: AIRequest):
 
     # Build preview (we call without actually calling Gemini)
     from backend.services.ai_service import _build_manga_context, _build_prompt, _estimate_tokens
+
     manga_context = _build_manga_context(dict(manga), tags)
     prompt = _build_prompt(req.mode, manga_context, req.selected_text or "", existing_text, req.rewrite_style or "")
     estimated_tokens = _estimate_tokens(prompt)
@@ -122,7 +125,7 @@ async def generate_ai_content(req: AIRequest):
             tags=tags,
             selected_text=req.selected_text or "",
             existing_review=existing_text,
-            rewrite_style=req.rewrite_style or ""
+            rewrite_style=req.rewrite_style or "",
         )
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))

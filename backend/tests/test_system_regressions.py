@@ -6,13 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from bson import ObjectId
 from PIL import Image
+
 from backend.routers import chapters, reviews
+from backend.routers.analytics import parse_iso_date
 from backend.routers.downloads import DownloadRequest
 from backend.routers.sync_manager import SyncOptions
-from backend.services.chapter_service import ChapterService
 from backend.services.audit_service import AuditService
-from backend.services.image_tools_service import _convert_single_image, ImageToolsService
-from backend.routers.analytics import parse_iso_date
+from backend.services.chapter_service import ChapterService
+from backend.services.image_tools_service import ImageToolsService, _convert_single_image
 from backend.utils.remote_images import validate_public_url
 
 
@@ -21,7 +22,10 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
         review_id = str(ObjectId())
         collection = SimpleNamespace(find_one=AsyncMock(return_value={"content_json": {}}), update_one=AsyncMock())
         storage = MagicMock()
-        with patch.object(reviews, "get_db", return_value=SimpleNamespace(reviews=collection)), patch.object(reviews, "minio_service", storage):
+        with (
+            patch.object(reviews, "get_db", return_value=SimpleNamespace(reviews=collection)),
+            patch.object(reviews, "minio_service", storage),
+        ):
             result = await reviews.finalize_review("m", review_id)
         self.assertEqual(result["deleted_orphans"], 0)
         storage.client.remove_object.assert_not_called()
@@ -44,10 +48,16 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reading_progress_validates_page_and_atomically_marks_read(self):
         service = ChapterService()
-        chapters_col = SimpleNamespace(find_one=AsyncMock(return_value={"pages": [{}, {}], "chapter_number": "7", "language": "en"}))
+        chapters_col = SimpleNamespace(
+            find_one=AsyncMock(return_value={"pages": [{}, {}], "chapter_number": "7", "language": "en"})
+        )
         reading_col = SimpleNamespace(update_one=AsyncMock())
         manga_col = SimpleNamespace(find_one=AsyncMock(return_value=None))
-        with patch.object(service, "_get_chapters_col", return_value=chapters_col), patch.object(service, "_get_reading_col", return_value=reading_col), patch.object(service, "_get_mangas_col", return_value=manga_col):
+        with (
+            patch.object(service, "_get_chapters_col", return_value=chapters_col),
+            patch.object(service, "_get_reading_col", return_value=reading_col),
+            patch.object(service, "_get_mangas_col", return_value=manga_col),
+        ):
             with self.assertRaises(ValueError):
                 await service.save_reading_progress(str(ObjectId()), "c", "wrong", page=3)
             result = await service.save_reading_progress(str(ObjectId()), "c", "wrong", page=2, mark_as_read=True)
@@ -58,7 +68,11 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_different_source_chapters_do_not_overwrite_each_other(self):
         service = ChapterService()
-        col = SimpleNamespace(find_one=AsyncMock(return_value=None), insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id=ObjectId())), update_one=AsyncMock())
+        col = SimpleNamespace(
+            find_one=AsyncMock(return_value=None),
+            insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id=ObjectId())),
+            update_one=AsyncMock(),
+        )
         with patch.object(service, "_get_chapters_col", return_value=col):
             await service.create_or_update_chapter({"manga_id": "m", "chapter_number": "1", "source_id": "source-2"})
         col.find_one.assert_awaited_once_with({"manga_id": "m", "source_id": "source-2"})

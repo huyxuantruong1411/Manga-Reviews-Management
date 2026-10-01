@@ -1,7 +1,10 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict
 from datetime import datetime
+from typing import Dict, Optional
+
+from pydantic import BaseModel, Field
+
 from backend.models.pyobjectid import PyObjectId
+
 
 class TagBase(BaseModel):
     mangadex_id: Optional[str] = None
@@ -11,14 +14,17 @@ class TagBase(BaseModel):
     description: Optional[Dict[str, str]] = None
     color: Optional[str] = None  # UI tag badge color, especially for custom tags
 
+
 class TagCreate(TagBase):
     pass
+
 
 class TagUpdate(BaseModel):
     name: Optional[Dict[str, str]] = None
     group: Optional[str] = None
     description: Optional[Dict[str, str]] = None
     color: Optional[str] = None
+
 
 class TagResponse(TagBase):
     id: PyObjectId = Field(alias="_id")

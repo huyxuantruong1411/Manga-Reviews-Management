@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Path, HTTPException
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, Path
+
 from backend.services.cover_art_service import cover_art_service
 
 router = APIRouter(prefix="/api/manga", tags=["Cover Arts"])
+
 
 @router.get("/{manga_id}/covers")
 async def get_manga_covers(manga_id: str = Path(...)):
@@ -15,6 +16,7 @@ async def get_manga_covers(manga_id: str = Path(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting cover arts: {e}")
 
+
 @router.post("/{manga_id}/covers/sync")
 async def sync_manga_covers(manga_id: str = Path(...)):
     """Trigger a sync of all cover arts from MangaDex for a manga."""
@@ -25,6 +27,7 @@ async def sync_manga_covers(manga_id: str = Path(...)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing cover arts: {e}")
+
 
 @router.delete("/{manga_id}/covers")
 async def delete_manga_covers(manga_id: str = Path(...)):

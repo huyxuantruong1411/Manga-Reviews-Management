@@ -1,13 +1,16 @@
 import logging
 from datetime import datetime
+from typing import Any, Dict, List
+
 from bson import ObjectId
-from typing import List, Dict, Any, Optional
+
 from backend.database.connection import get_db
+from backend.services.manga_service import serialize_doc
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
-from backend.services.manga_service import serialize_doc
 
 logger = logging.getLogger(__name__)
+
 
 class CoverArtService:
     async def sync_covers_for_manga(self, manga_id: str) -> Dict[str, Any]:
@@ -18,11 +21,11 @@ class CoverArtService:
         db = get_db()
         if not ObjectId.is_valid(manga_id):
             raise ValueError(f"Invalid manga ID format: {manga_id}")
-            
+
         manga = await db.mangas.find_one({"_id": ObjectId(manga_id)})
         if not manga:
             raise ValueError(f"Manga with ID {manga_id} not found")
-            
+
         mangadex_id = manga.get("mangadex_id")
         if not mangadex_id:
             logger.warning(f"Manga {manga_id} does not have a MangaDex ID. Skipping cover sync.")
@@ -35,7 +38,7 @@ class CoverArtService:
             resolution = settings_doc["value"].get("cover_resolution", "original")
 
         logger.info(f"Syncing cover arts for manga '{manga.get('title')}' ({manga_id}) with resolution: {resolution}")
-        
+
         try:
             covers_metadata = await mangadex_service.get_manga_covers(mangadex_id)
         except Exception as e:
@@ -50,7 +53,7 @@ class CoverArtService:
             try:
                 file_name = cover["file_name"]
                 cover_id = cover["mangadex_cover_id"]
-                
+
                 # Determine source URL according to resolution setting
                 if resolution == "512":
                     source_url = f"https://uploads.mangadex.org/covers/{mangadex_id}/{file_name}.512.jpg"
@@ -60,10 +63,10 @@ class CoverArtService:
                     source_url = f"https://uploads.mangadex.org/covers/{mangadex_id}/{file_name}"
 
                 minio_key = f"cover-arts/{mangadex_id}/{cover_id}.jpg"
-                
+
                 # Download image
                 image_bytes = await mangadex_service.download_image_bytes(source_url)
-                
+
                 # If chosen resolution is not found, fallback to original as a safety measure
                 if not image_bytes and resolution in ["512", "256"]:
                     logger.warning(f"Failed to fetch {resolution} cover. Falling back to original resolution.")
@@ -108,13 +111,11 @@ class CoverArtService:
                     "version": cover["version"],
                     "created_at": created_dt,
                     "updated_at": updated_dt,
-                    "synced_at": datetime.utcnow()
+                    "synced_at": datetime.utcnow(),
                 }
 
                 await db.cover_arts.update_one(
-                    {"manga_id": manga_id, "mangadex_cover_id": cover_id},
-                    {"$set": cover_doc},
-                    upsert=True
+                    {"manga_id": manga_id, "mangadex_cover_id": cover_id}, {"$set": cover_doc}, upsert=True
                 )
                 synced_count += 1
             except Exception as e:
@@ -122,11 +123,7 @@ class CoverArtService:
                 failed_count += 1
                 errors.append(f"Cover {cover.get('mangadex_cover_id')}: {str(e)}")
 
-        return {
-            "covers_synced": synced_count,
-            "covers_failed": failed_count,
-            "errors": errors
-        }
+        return {"covers_synced": synced_count, "covers_failed": failed_count, "errors": errors}
 
     async def get_covers_for_manga(self, manga_id: str) -> List[Dict[str, Any]]:
         """
@@ -139,7 +136,7 @@ class CoverArtService:
             if doc.get("minio_key"):
                 doc["cover_url"] = minio_service.get_presigned_url(doc["minio_key"])
             covers.append(serialize_doc(doc))
-            
+
         # Sort covers by volume number (using float-compatible sorting if possible)
         def get_volume_sort_key(c):
             vol = c.get("volume")
@@ -149,7 +146,7 @@ class CoverArtService:
                 return float(vol)
             except ValueError:
                 return 999998.0
-                
+
         covers.sort(key=get_volume_sort_key)
         return covers
 
@@ -164,5 +161,6 @@ class CoverArtService:
                 minio_service.delete_cover(doc["minio_key"])
         await db.cover_arts.delete_many({"manga_id": manga_id})
         return True
+
 
 cover_art_service = CoverArtService()

@@ -1,4 +1,5 @@
-from typing import Annotated, Any
+from typing import Annotated
+
 from bson import ObjectId
 from pydantic import BeforeValidator, WithJsonSchema
 
@@ -8,5 +9,5 @@ from pydantic import BeforeValidator, WithJsonSchema
 PyObjectId = Annotated[
     str,
     BeforeValidator(lambda v: str(v) if isinstance(v, ObjectId) or ObjectId.is_valid(v) else v),
-    WithJsonSchema({"type": "string"})
+    WithJsonSchema({"type": "string"}),
 ]

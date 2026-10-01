@@ -21,6 +21,8 @@ dependencies = [
     "spacy>=3.8",
     "wordninja>=2.0",
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "imagehash>=4.3.2",
+    "playwright>=1.63.0",
 ]
 
 [build-system]

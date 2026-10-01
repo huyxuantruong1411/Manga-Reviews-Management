@@ -1,8 +1,11 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
 from backend.models.pyobjectid import PyObjectId
+
 
 class ReadStatus(str, Enum):
     UNREAD = "unread"
@@ -13,9 +16,11 @@ class ReadStatus(str, Enum):
     PLAN_TO_READ = "plan_to_read"
     RE_READING = "re_reading"
 
+
 class MangaLink(BaseModel):
     title: str
     url: str
+
 
 class MangaBase(BaseModel):
     mangadex_id: Optional[str] = None
@@ -51,16 +56,19 @@ class MangaBase(BaseModel):
                 raise ValueError("Rating must be a multiple of 0.5")
         return v
 
+
 class MangaCreate(MangaBase):
     cover_url: Optional[str] = None
     # For manual entry, the user can upload an image.
     # We will upload it to MinIO and set minio_cover_key.
+
 
 class MangaCreateDex(BaseModel):
     mangadex_id: str
     read_status: ReadStatus = ReadStatus.UNREAD
     personal_rating: Optional[float] = None
     tag_ids: List[str] = Field(default_factory=list)
+
 
 class MangaUpdate(BaseModel):
     title: Optional[str] = None
@@ -84,7 +92,6 @@ class MangaUpdate(BaseModel):
     chapters: Optional[int] = None
     tracker_metadata: Optional[Dict[str, Any]] = None
 
-    
     @field_validator("personal_rating")
     @classmethod
     def validate_rating(cls, v):
@@ -94,6 +101,7 @@ class MangaUpdate(BaseModel):
             if (v * 2) % 1 != 0:
                 raise ValueError("Rating must be a multiple of 0.5")
         return v
+
 
 class MangaResponse(MangaBase):
     id: PyObjectId = Field(alias="_id")
@@ -117,13 +125,13 @@ class MangaResponse(MangaBase):
                 "mangadex_id": "32d76d88-f3b7-4a1b-97d8-3011a0172bd6",
                 "title": "Frieren: Beyond Journey's End",
                 "read_status": "reading",
-                "personal_rating": 9.5
+                "personal_rating": 9.5,
             }
         }
+
 
 class MangaPaginationResponse(BaseModel):
     total: int
     items: List[MangaResponse]
     skip: int
     limit: int
-

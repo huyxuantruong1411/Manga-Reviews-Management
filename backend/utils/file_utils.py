@@ -15,7 +15,7 @@ def clean_filename(filename: str, max_length: int = 120) -> str:
     # Replace invalid chars with empty string
     cleaned = re.sub(r'[\\/*?:"<>|]', "", filename)
     # Collapse consecutive whitespace and strip
-    cleaned = re.sub(r'\s+', " ", cleaned).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     # Strip trailing dots and spaces — Windows silently removes these from
     # folder names, causing os.path.exists() mismatches and WinError 3.
     cleaned = cleaned.rstrip(". ")
@@ -31,7 +31,7 @@ def normalize_windows_path(path: str) -> str:
     Strips trailing dots and spaces from every path component, because Windows
     silently removes them when creating directories — causing os.makedirs()
     to create 'FolderName' but Python to reference 'FolderName...' → WinError 3.
-    
+
     Preserves the drive letter / UNC prefix and uses os.path.abspath for cleanup.
     """
     if not path:
@@ -48,4 +48,3 @@ def normalize_windows_path(path: str) -> str:
         stripped = part.rstrip(". ")
         cleaned_parts.append(stripped if stripped else part)
     return drive + os.sep.join(cleaned_parts)
-

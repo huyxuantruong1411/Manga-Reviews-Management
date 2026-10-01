@@ -1,18 +1,21 @@
+import logging
 import os
 import uuid
-import logging
-from fastapi import APIRouter, Path, Query, Body, BackgroundTasks, HTTPException, status
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+
 from bson import ObjectId
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
+
+from backend.config import settings
 from backend.database.connection import get_db
 from backend.services.download_service import download_service
-from backend.config import settings
 from backend.utils.file_utils import clean_filename, normalize_windows_path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Downloads"])
+
 
 @router.get("/downloads/base-path")
 async def get_base_path():
@@ -22,8 +25,10 @@ async def get_base_path():
     path = doc.get("base_path") if doc else None
     return {"base_path": path or settings.download_dir}
 
+
 class UpdateBasePathPayload(BaseModel):
     base_path: str
+
 
 @router.put("/downloads/base-path")
 async def update_base_path(payload: UpdateBasePathPayload = Body(...)):
@@ -31,7 +36,7 @@ async def update_base_path(payload: UpdateBasePathPayload = Body(...)):
     new_path = payload.base_path.strip()
     if not new_path:
         raise HTTPException(status_code=400, detail="Base path cannot be empty")
-        
+
     try:
         # Validate path feasibility/writeability before saving
         abs_path = os.path.abspath(new_path)
@@ -49,16 +54,13 @@ async def update_base_path(payload: UpdateBasePathPayload = Body(...)):
         raise HTTPException(status_code=400, detail=f"Invalid or unwriteable base path: {str(e)}")
 
     db = get_db()
-    await db.settings.update_one(
-        {"_id": "download_config"},
-        {"$set": {"base_path": abs_path}},
-        upsert=True
-    )
+    await db.settings.update_one({"_id": "download_config"}, {"$set": {"base_path": abs_path}}, upsert=True)
     return {"base_path": abs_path, "message": "Base path updated successfully"}
 
 
 class VerifyPathPayload(BaseModel):
     path: str
+
 
 @router.post("/downloads/verify-path")
 async def verify_download_path(payload: VerifyPathPayload = Body(...)):
@@ -66,11 +68,11 @@ async def verify_download_path(payload: VerifyPathPayload = Body(...)):
     path_str = payload.path.strip()
     if not path_str:
         raise HTTPException(status_code=400, detail="Đường dẫn không được để trống")
-        
+
     try:
         abs_path = os.path.abspath(path_str)
         exists = os.path.exists(abs_path) and os.path.isdir(abs_path)
-        
+
         # Test write access
         writable = False
         test_dir = abs_path
@@ -82,7 +84,7 @@ async def verify_download_path(payload: VerifyPathPayload = Body(...)):
                 test_dir = parent_dir
             else:
                 test_dir = "."
-                
+
         test_file = os.path.join(test_dir, f".test_write_{str(uuid.uuid4())}")
         try:
             with open(test_file, "w") as f:
@@ -91,32 +93,32 @@ async def verify_download_path(payload: VerifyPathPayload = Body(...)):
             writable = True
         except Exception:
             writable = False
-            
+
         if exists:
             if writable:
                 return {
                     "exists": True,
                     "writable": True,
-                    "message": "Thư mục đã tồn tại sẵn trên hệ thống và có quyền ghi."
+                    "message": "Thư mục đã tồn tại sẵn trên hệ thống và có quyền ghi.",
                 }
             else:
                 return {
                     "exists": True,
                     "writable": False,
-                    "message": "Thư mục đã tồn tại sẵn nhưng không có quyền ghi (thiếu quyền truy cập)."
+                    "message": "Thư mục đã tồn tại sẵn nhưng không có quyền ghi (thiếu quyền truy cập).",
                 }
         else:
             if writable:
                 return {
                     "exists": False,
                     "writable": True,
-                    "message": "Thư mục chưa tồn tại (sẽ được tự động tạo mới khi bắt đầu tải)."
+                    "message": "Thư mục chưa tồn tại (sẽ được tự động tạo mới khi bắt đầu tải).",
                 }
             else:
                 return {
                     "exists": False,
                     "writable": False,
-                    "message": "Thư mục chưa tồn tại và không thể tạo mới trong đường dẫn cha (đường dẫn không hợp lệ hoặc thiếu quyền)."
+                    "message": "Thư mục chưa tồn tại và không thể tạo mới trong đường dẫn cha (đường dẫn không hợp lệ hoặc thiếu quyền).",
                 }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Đường dẫn không hợp lệ: {str(e)}")
@@ -134,6 +136,7 @@ class DownloadChapterPayload(BaseModel):
     uploader: Optional[str] = None
     pages: Optional[int] = None
 
+
 class DownloadRequest(BaseModel):
     chapters: List[DownloadChapterPayload] = Field(..., min_length=1)
     lang: str = "en"
@@ -141,23 +144,22 @@ class DownloadRequest(BaseModel):
     save_to_disk: bool = False
     force: bool = False
 
+
 @router.post("/manga/{manga_id}/download", status_code=status.HTTP_202_ACCEPTED)
 async def download_manga_chapters(
-    background_tasks: BackgroundTasks,
-    manga_id: str = Path(...),
-    req: DownloadRequest = Body(...)
+    background_tasks: BackgroundTasks, manga_id: str = Path(...), req: DownloadRequest = Body(...)
 ):
     """Start background downloading for selected chapters of a manga (saves to internal storage by default)."""
     if not ObjectId.is_valid(manga_id):
         raise HTTPException(status_code=400, detail="Invalid manga ID")
-        
+
     manga = await get_db().mangas.find_one({"_id": ObjectId(manga_id)})
     if not manga:
         raise HTTPException(status_code=404, detail="Manga not found")
 
     # Format payload
     chapters_list = [c.dict() for c in req.chapters]
-    
+
     # Path validation only if saving duplicate to disk
     if req.save_to_disk:
         base_dir = req.download_path
@@ -166,10 +168,10 @@ async def download_manga_chapters(
             base_dir = db_config.get("base_path") if db_config else None
         if not base_dir:
             base_dir = settings.download_dir
-            
+
         if not base_dir:
             raise HTTPException(status_code=400, detail="Download path cannot be empty when save_to_disk is enabled")
-            
+
         try:
             # Resolve path to absolute and normalize (strip trailing dots from each component)
             abs_path = normalize_windows_path(base_dir)
@@ -205,7 +207,7 @@ async def download_manga_chapters(
                                     is_dirty = True
                                     break
                                 ext = os.path.splitext(item)[1].lower()
-                                if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                                if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
                                     is_dirty = True
                                     break
                         else:
@@ -219,11 +221,11 @@ async def download_manga_chapters(
                                     break
                 except Exception as le:
                     logger.error(f"Error listing target directory contents: {le}")
-                    
+
             if is_dirty:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Thư mục tải xuống chứa các tệp hoặc thư mục khác. Tiếp tục tải xuống có thể ghi đè các tệp trùng tên. Bạn có muốn tiếp tục không?"
+                    detail="Thư mục tải xuống chứa các tệp hoặc thư mục khác. Tiếp tục tải xuống có thể ghi đè các tệp trùng tên. Bạn có muốn tiếp tục không?",
                 )
 
     # Create task in DB
@@ -233,23 +235,24 @@ async def download_manga_chapters(
         chapters=chapters_list,
         save_to_disk=req.save_to_disk,
         lang=req.lang,
-        download_path=req.download_path if req.save_to_disk else None
+        download_path=req.download_path if req.save_to_disk else None,
     )
-    
+
     # Run in background
     background_tasks.add_task(
         download_service.start_download_background,
         task_id=task_id,
-        download_path=req.download_path if req.save_to_disk else None
+        download_path=req.download_path if req.save_to_disk else None,
     )
 
-    
     return {"task_id": task_id, "status": "pending"}
+
 
 @router.get("/downloads/tasks")
 async def list_download_tasks(limit: int = Query(20, ge=1, le=100)):
     """List recent download tasks."""
     return await download_service.list_tasks(limit)
+
 
 @router.get("/downloads/tasks/{task_id}")
 async def get_download_task(task_id: str = Path(...)):
@@ -259,6 +262,7 @@ async def get_download_task(task_id: str = Path(...)):
         raise HTTPException(status_code=404, detail="Download task not found")
     return task
 
+
 @router.post("/downloads/tasks/{task_id}/cancel")
 async def cancel_download_task(task_id: str = Path(...)):
     """Cancel a running download task."""
@@ -267,16 +271,15 @@ async def cancel_download_task(task_id: str = Path(...)):
         raise HTTPException(status_code=400, detail="Task cannot be cancelled or already finished")
     return {"message": "Cancellation request submitted"}
 
+
 @router.post("/downloads/tasks/{task_id}/resume")
-async def resume_download_task(
-    background_tasks: BackgroundTasks,
-    task_id: str = Path(...)
-):
+async def resume_download_task(background_tasks: BackgroundTasks, task_id: str = Path(...)):
     """Resume a download task that is stuck, failed, or cancelled."""
     resumed = await download_service.resume_task(task_id, background_tasks)
     if not resumed:
         raise HTTPException(status_code=400, detail="Task cannot be resumed or not found")
     return {"message": "Download task resume request submitted"}
+
 
 @router.delete("/downloads/tasks/{task_id}")
 async def delete_download_task(task_id: str = Path(...)):
@@ -284,7 +287,6 @@ async def delete_download_task(task_id: str = Path(...)):
     deleted = await download_service.delete_task(task_id)
     if not deleted:
         raise HTTPException(
-            status_code=400, 
-            detail="Nhiệm vụ tải xuống không thể xóa (có thể do đang chạy hoặc không tìm thấy)"
+            status_code=400, detail="Nhiệm vụ tải xuống không thể xóa (có thể do đang chạy hoặc không tìm thấy)"
         )
     return {"message": "Nhiệm vụ tải xuống đã được xóa thành công"}

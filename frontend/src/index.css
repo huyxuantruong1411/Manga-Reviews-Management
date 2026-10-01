@@ -39,10 +39,20 @@
   }
 }
 
-/* Custom Scrollbar for modern aesthetics */
+/* Sleek Auto-Hiding Scrollbar with subtle contrast */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+*:hover {
+  scrollbar-color: rgba(160, 160, 175, 0.22) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -50,11 +60,26 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-zinc-800 rounded-full;
+  background: transparent;
+  border-radius: 9999px;
+  transition: background 0.3s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-zinc-700;
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 175, 0.2);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 160, 175, 0.38);
+}
+
+@keyframes move-stripes {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 24px 0;
+  }
 }
 
 /* Editor utilities and Tiptap custom styling */

@@ -1,14 +1,16 @@
-import os
 import asyncio
 import logging
-from fastapi import APIRouter, Path, HTTPException, Query
-from fastapi.responses import FileResponse
+import os
 from typing import List, Optional
-from pydantic import BaseModel, Field
+
 from bson import ObjectId
+from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+from backend.config import settings
 from backend.database.connection import get_db
 from backend.services.image_tools_service import image_tools_service
-from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/api/image-tools", tags=["Image Tools"])
 
 
 # ─── Request / Response models ────────────────────────────────────────
+
 
 class ScanDuplicatesRequest(BaseModel):
     path: Optional[str] = None
@@ -38,6 +41,7 @@ class ConvertFormatRequest(BaseModel):
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────
+
 
 async def _resolve_scan_path(path: Optional[str], manga_id: Optional[str]) -> str:
     """
@@ -72,17 +76,18 @@ async def _resolve_scan_path(path: Optional[str], manga_id: Optional[str]) -> st
         return base_path
 
     raise HTTPException(
-        status_code=400,
-        detail="No valid scan path found. Please provide a path or ensure a manga has a download path."
+        status_code=400, detail="No valid scan path found. Please provide a path or ensure a manga has a download path."
     )
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────
 
+
 @router.get("/scan-progress")
 async def get_scan_progress():
     """Get the progress of the active duplicate images scan."""
     return image_tools_service.progress
+
 
 @router.post("/scan-duplicates")
 async def scan_duplicates(req: ScanDuplicatesRequest):
@@ -151,10 +156,10 @@ async def get_local_image_file(path: str = Query(..., description="Absolute path
         raise HTTPException(status_code=404, detail="File not found")
     if not os.path.isfile(path):
         raise HTTPException(status_code=400, detail="Path is not a file")
-    
+
     # Simple extension check to prevent arbitrary file reading
     ext = os.path.splitext(path)[1].lower()
-    if ext not in {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}:
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
         raise HTTPException(status_code=400, detail="Only image files can be served")
-        
+
     return FileResponse(path)
