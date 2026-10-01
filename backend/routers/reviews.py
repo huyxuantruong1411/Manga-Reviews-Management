@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Path, UploadFile, stat
 from pydantic import BaseModel
 
 from backend.config import settings
+from backend.core.redis import delete_cache, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.review import ReviewCreate, ReviewResponse, ReviewUpdate
 from backend.services.audit_service import audit_service
@@ -50,6 +51,11 @@ def clean_tiptap_node(node: Any) -> Any:
 @router.get("/{manga_id}/reviews", response_model=List[ReviewResponse])
 async def list_reviews(manga_id: str = Path(...)):
     """List all active reviews for a manga."""
+    cache_key = f"reviews:manga:{manga_id}"
+    cached_reviews = await get_cache(cache_key)
+    if cached_reviews is not None:
+        return cached_reviews
+
     coll = get_db().reviews
     cursor = coll.find({"manga_id": manga_id, "is_deleted": {"$ne": True}}).sort("created_at", -1)
     reviews = []
@@ -57,6 +63,8 @@ async def list_reviews(manga_id: str = Path(...)):
         if "_id" in doc:
             doc["_id"] = str(doc["_id"])
         reviews.append(doc)
+
+    await set_cache(cache_key, reviews, ttl=180)
     return reviews
 
 
@@ -112,6 +120,7 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
         details={"review_id": str(res.inserted_id), "title": data.title},
     )
 
+    await delete_cache(f"reviews:manga:{manga_id}")
     return review_doc
 
 
@@ -155,6 +164,7 @@ async def update_review(manga_id: str = Path(...), review_id: str = Path(...), d
             details={"review_id": review_id, "title": review_title},
         )
 
+    await delete_cache(f"reviews:manga:{manga_id}")
     updated = await coll.find_one({"_id": ObjectId(review_id)})
     if updated and "_id" in updated:
         updated["_id"] = str(updated["_id"])
@@ -190,6 +200,7 @@ async def delete_review(manga_id: str = Path(...), review_id: str = Path(...)):
         note=f"Deleted review: {review_title}",
         details={"review_id": review_id, "title": review_title},
     )
+    await delete_cache(f"reviews:manga:{manga_id}")
     return None
 
 

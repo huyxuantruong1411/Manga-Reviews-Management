@@ -22,6 +22,7 @@ from backend.routers import (
     reviews,
     sync_manager,
     tags,
+    tasks,
     vision,
 )
 
@@ -32,10 +33,16 @@ logger = logging.getLogger("backend")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: connect to Mongo, init indexes
+    # Startup: connect to Mongo, init indexes, connect to Redis
     try:
         await connect_to_mongo()
         await init_db_indexes()
+
+        # Initialize Redis connection pool (graceful fallback if offline)
+        from backend.core.redis import init_redis_pool
+
+        await init_redis_pool()
+
         # Auto-resume stuck or pending downloads
         from backend.services.download_service import download_service
 
@@ -45,7 +52,11 @@ async def lifespan(app: FastAPI):
         await close_mongo_connection()
         raise
     yield
-    # Shutdown: close Mongo
+    # Shutdown: close Redis & Mongo connections
+    from backend.core.redis import close_arq_pool, close_redis_pool
+
+    await close_arq_pool()
+    await close_redis_pool()
     await close_mongo_connection()
 
 
@@ -89,11 +100,19 @@ app.include_router(sync_manager.router)
 app.include_router(audit_logs.router)
 app.include_router(chapters.router)
 app.include_router(vision.router)
+app.include_router(tasks.router)
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "manga-library-backend"}
+    from backend.core.redis import check_redis_health
+
+    redis_stat = await check_redis_health()
+    return {
+        "status": "ok",
+        "service": "manga-library-backend",
+        "redis": redis_stat,
+    }
 
 
 if __name__ == "__main__":

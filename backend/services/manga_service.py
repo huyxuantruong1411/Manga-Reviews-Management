@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 
+from backend.core.redis import delete_cache, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.manga import MangaCreate, MangaCreateDex, MangaUpdate, ReadStatus
 from backend.services.audit_service import audit_service
@@ -315,6 +316,13 @@ class MangaService:
     async def get_manga_by_id(self, manga_id: str) -> Optional[Dict[str, Any]]:
         if not ObjectId.is_valid(manga_id):
             return None
+
+        # Check Redis cache first
+        cache_key = f"manga:detail:{manga_id}"
+        cached_doc = await get_cache(cache_key)
+        if cached_doc is not None:
+            return cached_doc
+
         doc = await self._get_mangas_collection().find_one({"_id": ObjectId(manga_id)})
         if not doc:
             return None
@@ -327,7 +335,11 @@ class MangaService:
             if recovered_url:
                 doc["cover_url"] = recovered_url
                 doc["minio_cover_key"] = f"covers/{doc['_id']}.jpg"
-        return serialize_doc(doc)
+
+        result = serialize_doc(doc)
+        if result:
+            await set_cache(cache_key, result, ttl=300)
+        return result
 
     async def get_manga_by_any_id(self, identifier: str) -> Optional[Dict[str, Any]]:
         coll = self._get_mangas_collection()
@@ -838,6 +850,7 @@ class MangaService:
 
         update_dict["updated_at"] = datetime.utcnow()
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_dict})
+        await delete_cache(f"manga:detail:{manga_id}")
 
         updated_doc = await coll.find_one({"_id": ObjectId(manga_id)})
         if updated_doc.get("minio_cover_key"):
@@ -885,6 +898,7 @@ class MangaService:
 
         # Delete manga
         await coll.delete_one({"_id": ObjectId(manga_id)})
+        await delete_cache(f"manga:detail:{manga_id}")
 
         # Note: We preserve audit logs so historical operations remain trackable.
         return True
