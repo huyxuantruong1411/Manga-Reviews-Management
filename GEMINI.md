@@ -13,3 +13,9 @@ When pair programming or performing development tasks:
 - **AST Pattern Search (`ast-grep`)**: Prefer `ast-grep run -p '<pattern>'` over raw regex when inspecting function/class structures.
 - **Auto Linting & Formatting**: Run `ruff check --fix` + `ruff format` on edited Python files, and `biome check --write` on edited TS/TSX files.
 - **Context Packing (`repomix`)**: Use `repomix` when bundling modules for deep architectural analysis. Never commit context outputs (`repomix-output.*`) or linter caches.
+
+## Mandatory Pre-Execution Skill Lookup Directive
+Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, hãy tự tra cứu xem yêu cầu đó thuộc Skill nào và tự động tuân thủ toàn bộ quy trình của Skill đó:
+- **`tdd-workflow`** ([`.antigravity/skills/tdd-workflow.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/tdd-workflow.md)): Viết test FAIL trước, viết code PASS sau, tự sửa tối đa 3 lần theo stack trace.
+- **`architecture-guard`** ([`.antigravity/skills/architecture-guard.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/architecture-guard.md)): Cấm query DB hay tính toán trong Controller, ép buộc validate Pydantic DTO.
+- **`db-migration-safety`** ([`.antigravity/skills/db-migration-safety.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/db-migration-safety.md)): Bắt buộc Up/Down migration, bắt buộc đánh index khóa ngoại (`manga_id`, `created_at`, `timestamp`).
