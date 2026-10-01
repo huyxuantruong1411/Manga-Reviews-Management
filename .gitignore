@@ -61,3 +61,9 @@ graphify-out/
 *.db-shm
 *.db-wal
 .graphify*
+
+# Tooling Ecosystem Caches & Context Snapshots
+repomix-output.*
+.biome/
+.ruff_cache/
+.ast-grep-cache/

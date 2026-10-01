@@ -1,0 +1,33 @@
+# Ruff configuration for Manga-Reviews-Management
+target-version = "py312"
+line-length = 120
+extend-exclude = [
+    ".venv",
+    "venv",
+    "backend/scratch",
+    "backend/minio_data",
+    "graphify-out",
+    ".codegraph",
+    "node_modules",
+]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (auto organize imports)
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501", # line too long
+    "B008", # function calls in argument defaults (FastAPI Depends/Query/Body pattern)
+    "B904", # raise ... from err
+]
+
+[lint.isort]
+known-first-party = ["backend"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

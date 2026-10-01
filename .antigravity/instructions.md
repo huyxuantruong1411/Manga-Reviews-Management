@@ -43,3 +43,19 @@ Mọi AI Agent trong Antigravity IDE khi làm việc trên repository này **b�
   - `codegraph impact <symbol>`
   - `codegraph status`
   - `codegraph sync`
+
+---
+
+## AI Workflow & Precision Tooling Ecosystem
+
+Bên cạnh CodeGraph, dự án tích hợp bộ công cụ siêu tốc phục vụ quá trình coding của Agent:
+
+1. **`ast-grep` (AST-first Pattern Search)**:
+   - Ưu tiên dùng `ast-grep run -p '<pattern>'` để tìm kiếm hàm, JSX tag, decorator hoặc class thay vì dùng regex thô.
+2. **`repomix` (Context Packing & Token Optimization)**:
+   - Đóng gói ngữ cảnh module lớn khi cần phân tích toàn diện: `repomix`. Output tự động cấu hình trong `repomix.config.json` và đã được chặn trong `.gitignore`.
+3. **Linter & Formatter Tự Động (Tốc độ cao)**:
+   - **Python/Backend**: Chạy `ruff check --fix <file>` và `ruff format <file>` sau mỗi lần sửa code Python.
+   - **TypeScript/Frontend**: Chạy `biome check --write <file>` sau mỗi lần sửa code TS/TSX.
+4. **Git Hygiene**:
+   - Không commit các tệp context snapshot (`repomix-output.*`) hoặc thư mục cache (`.ruff_cache/`, `.biome/`, `.ast-grep-cache/`).
