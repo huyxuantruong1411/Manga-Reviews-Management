@@ -20,11 +20,7 @@ def get_tracked_python_files(repo_root: Path) -> list[str]:
             check=True,
         )
         raw_files = result.stdout.split(b"\0")
-        files = [
-            f.decode("utf-8")
-            for f in raw_files
-            if f and (repo_root / f.decode("utf-8")).is_file()
-        ]
+        files = [f.decode("utf-8") for f in raw_files if f and (repo_root / f.decode("utf-8")).is_file()]
         return files
     except Exception as e:
         print(f"Error reading git tracked files: {e}", file=sys.stderr)
@@ -32,18 +28,10 @@ def get_tracked_python_files(repo_root: Path) -> list[str]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run Ruff lint and format checks on tracked Python files."
-    )
-    parser.add_argument(
-        "--lint-only", action="store_true", help="Run ruff check only"
-    )
-    parser.add_argument(
-        "--format-only", action="store_true", help="Run ruff format only"
-    )
-    parser.add_argument(
-        "--fix", action="store_true", help="Automatically fix issues where possible"
-    )
+    parser = argparse.ArgumentParser(description="Run Ruff lint and format checks on tracked Python files.")
+    parser.add_argument("--lint-only", action="store_true", help="Run ruff check only")
+    parser.add_argument("--format-only", action="store_true", help="Run ruff format only")
+    parser.add_argument("--fix", action="store_true", help="Automatically fix issues where possible")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent.parent

@@ -101,12 +101,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.24.3"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
       - name: Run Gitleaks Scan
-        uses: gitleaks/gitleaks-action@7899be7815de59dd9559c5d19d6796c73dfab99b # v2.3.8
-        env:
-          GITLEAKS_ENABLE_COMMENTS: "false"
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
-          GITLEAKS_ENABLE_SUMMARY: "false"
+        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --log-opts="--all"
 
   docs:
     name: Documentation & Route Integrity

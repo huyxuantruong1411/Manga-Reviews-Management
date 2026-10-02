@@ -1,0 +1,22 @@
+# Gitleaks Configuration
+# See: https://github.com/gitleaks/gitleaks#configuration
+title = "Manga Reviews Management - Gitleaks Config"
+
+# Allowlist rules for known safe patterns
+[allowlist]
+  description = "Allowlist for known safe patterns"
+
+  # .env.example contains only placeholder/default credentials
+  paths = [
+    '''\.env\.example$''',
+    '''\.env\.sample$''',
+  ]
+
+  # Safe placeholder strings used in examples and documentation
+  regexTarget = "match"
+  regexes = [
+    '''your_\w+_here''',
+    '''placeholder''',
+    '''changeme''',
+    '''example''',
+  ]

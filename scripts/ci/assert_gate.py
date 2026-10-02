@@ -81,7 +81,7 @@ def main():
 
     has_error = False
 
-    for job_name, is_unconditional, is_required in job_specs:
+    for job_name, _is_unconditional, is_required in job_specs:
         job_data = needs.get(job_name)
         if not job_data:
             print(f"[FAIL] {job_name:18} : MISSING from needs context")
@@ -94,17 +94,13 @@ def main():
             if result == "success":
                 print(f"[PASS] {job_name:18} : SUCCESS (required)")
             else:
-                print(
-                    f"[FAIL] {job_name:18} : {result.upper()} (expected SUCCESS, required)"
-                )
+                print(f"[FAIL] {job_name:18} : {result.upper()} (expected SUCCESS, required)")
                 has_error = True
         else:
             if result in ("skipped", "success"):
                 print(f"[PASS] {job_name:18} : {result.upper()} (optional/not-required)")
             else:
-                print(
-                    f"[FAIL] {job_name:18} : {result.upper()} (unexpected failure/cancellation)"
-                )
+                print(f"[FAIL] {job_name:18} : {result.upper()} (unexpected failure/cancellation)")
                 has_error = True
 
     print("=" * 60)
