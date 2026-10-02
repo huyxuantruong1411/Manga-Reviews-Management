@@ -144,6 +144,50 @@ class TestPanelReportService(unittest.TestCase):
         self.assertIn("PP-OCRv4", html_out)
         self.assertIn("MangaOCRService", html_out)
 
+    def test_render_html_report_with_pages_and_raw_original_images(self):
+        """Verify that intact raw original page images are rendered before extracted panels."""
+        data_with_pages = dict(self.mock_data)
+        data_with_pages["report_metadata"] = dict(self.mock_data["report_metadata"])
+        data_with_pages["report_metadata"]["total_pages_in_report"] = 1
+
+        raw_page_data_url = "data:image/jpeg;base64,mockraworiginalpagebytes12345"
+        data_with_pages["pages"] = [
+            {
+                "page_key": "mock_chap_1_p1_pages_mock_p1_jpg",
+                "chapter_id": "mock_chap_1",
+                "chapter_number": "1",
+                "chapter_title": "Romance Dawn",
+                "volume": "1",
+                "page_number": 1,
+                "page_minio_key": "pages/mock_p1.jpg",
+                "original_image_data_url": raw_page_data_url,
+                "panels_count": 2,
+                "panels": self.mock_data["panels"],
+            }
+        ]
+
+        html_out = self.service.render_html_report(data_with_pages)
+
+        # 1. Verify Part 1 Raw Original Page section appears first
+        self.assertIn("1. Ảnh Gốc Nguyên Vẹn Ban Đầu (Raw Original Manga Page)", html_out)
+        self.assertIn(raw_page_data_url, html_out)
+        self.assertIn("raw-page-img", html_out)
+        self.assertIn("raw-page-block", html_out)
+
+        # 2. Verify Part 2 Extracted Panels section appears corresponding to this page
+        self.assertIn("2. Kết Quả Trích Xuất Khung Tranh Tương Ứng", html_out)
+        self.assertIn("extracted-panels-block", html_out)
+        self.assertIn("data:image/jpeg;base64,mockpanelbytes", html_out)
+        self.assertIn("I am going to be the pirate king!", html_out)
+
+        # 3. Check page metadata and metrics
+        self.assertIn("Trang Gốc (Original Pages)", html_out)
+        self.assertIn("Trang Gốc (Original Page) #1", html_out)
+        self.assertIn("Key: pages/mock_p1.jpg", html_out)
+
+        # 4. Check AI Prompt instructs comparison between raw original page and crops
+        self.assertIn("Đối chiếu ảnh gốc nguyên vẹn ban đầu (Raw Original Page)", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()

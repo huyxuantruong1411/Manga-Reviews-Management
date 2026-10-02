@@ -77,6 +77,7 @@ class PanelReportService:
 
         # Cache page image bytes in memory during report generation
         page_cache: Dict[str, Optional[bytes]] = {}
+        encoded_page_cache: Dict[str, Optional[str]] = {}
 
         def _fetch_page_bytes(obj_key: str) -> Optional[bytes]:
             if not obj_key:
@@ -97,8 +98,31 @@ class PanelReportService:
                 page_cache[obj_key] = None
                 return None
 
-        # Process each panel and embed crops if requested
+        def _encode_original_page_image(page_bytes: bytes, max_width: int = 1200, quality: int = 75) -> str:
+            """Encode intact original page image to Base64 data URL, optimizing dimensions if necessary."""
+            try:
+                import io
+
+                from PIL import Image
+
+                with Image.open(io.BytesIO(page_bytes)) as img:
+                    if img.mode in ("RGBA", "LA", "P"):
+                        img = img.convert("RGB")
+                    if img.width > max_width:
+                        new_height = int(img.height * (max_width / img.width))
+                        img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+                    out_buf = io.BytesIO()
+                    img.save(out_buf, format="JPEG", quality=quality, optimize=True)
+                    b64_str = base64.b64encode(out_buf.getvalue()).decode("utf-8")
+                    return f"data:image/jpeg;base64,{b64_str}"
+            except Exception as pe:
+                logger.warning(f"Error optimizing original page image: {pe}")
+                b64_raw = base64.b64encode(page_bytes).decode("utf-8")
+                return f"data:image/jpeg;base64,{b64_raw}"
+
+        # Process each panel and embed crops if requested; group into pages
         processed_panels: List[Dict[str, Any]] = []
+        pages_dict: Dict[str, Dict[str, Any]] = {}
         unique_vocabulary: Dict[str, Dict[str, Any]] = {}
         total_word_count = 0
 
@@ -109,6 +133,34 @@ class PanelReportService:
             raw_text = doc.get("raw_text", "")
             cleaned_text = doc.get("cleaned_text", "")
             vocab_list = doc.get("vocabulary", [])
+            chap_id_str = str(doc.get("chapter_id", ""))
+            page_num = doc.get("page_number", 1)
+
+            # Build unique page key to group panels hierarchically
+            page_id_key = f"{chap_id_str}_p{page_num}_{obj_key or 'unknown'}"
+            if page_id_key not in pages_dict:
+                original_page_data_url = None
+                if include_images and obj_key:
+                    if obj_key in encoded_page_cache:
+                        original_page_data_url = encoded_page_cache[obj_key]
+                    else:
+                        page_bytes = await asyncio.to_thread(_fetch_page_bytes, obj_key)
+                        if page_bytes:
+                            original_page_data_url = await asyncio.to_thread(_encode_original_page_image, page_bytes)
+                        encoded_page_cache[obj_key] = original_page_data_url
+
+                pages_dict[page_id_key] = {
+                    "page_key": page_id_key,
+                    "chapter_id": chap_id_str,
+                    "chapter_number": doc.get("chapter_number", ""),
+                    "chapter_title": doc.get("chapter_title", ""),
+                    "volume": doc.get("volume"),
+                    "page_number": page_num,
+                    "page_minio_key": obj_key,
+                    "original_image_data_url": original_page_data_url,
+                    "panels_count": 0,
+                    "panels": [],
+                }
 
             # Count words
             words = (cleaned_text or raw_text).split()
@@ -138,39 +190,40 @@ class PanelReportService:
                             tuple(coords),
                             75,
                         )
-                        # Downscale if excessively large to keep report lightweight
                         crop_bytes = crop_stream.getvalue()
                         b64_str = base64.b64encode(crop_bytes).decode("utf-8")
                         image_data_url = f"data:image/jpeg;base64,{b64_str}"
                     except Exception as ce:
                         logger.warning(f"Error encoding crop for panel {p_id}: {ce}")
 
-            processed_panels.append(
-                {
-                    "panel_id": p_id,
-                    "panel_index": doc.get("panel_index", 0),
-                    "chapter_id": str(doc.get("chapter_id", "")),
-                    "chapter_number": doc.get("chapter_number", ""),
-                    "chapter_title": doc.get("chapter_title", ""),
-                    "volume": doc.get("volume"),
-                    "page_number": doc.get("page_number", 1),
-                    "page_minio_key": obj_key,
-                    "coords": coords,
-                    "width": doc.get("width"),
-                    "height": doc.get("height"),
-                    "raw_text": raw_text,
-                    "cleaned_text": cleaned_text,
-                    "language": doc.get("language", "en"),
-                    "scan_mode": doc.get("scan_mode", "panel"),
-                    "lemmas": doc.get("lemmas", []),
-                    "vocabulary": vocab_list,
-                    "narration": doc.get("narration"),
-                    "created_at": doc.get("created_at", datetime.now(timezone.utc)).isoformat()
-                    if isinstance(doc.get("created_at"), datetime)
-                    else str(doc.get("created_at", "")),
-                    "image_data_url": image_data_url,
-                }
-            )
+            panel_data = {
+                "panel_id": p_id,
+                "panel_index": doc.get("panel_index", 0),
+                "chapter_id": chap_id_str,
+                "chapter_number": doc.get("chapter_number", ""),
+                "chapter_title": doc.get("chapter_title", ""),
+                "volume": doc.get("volume"),
+                "page_number": page_num,
+                "page_minio_key": obj_key,
+                "coords": coords,
+                "width": doc.get("width"),
+                "height": doc.get("height"),
+                "raw_text": raw_text,
+                "cleaned_text": cleaned_text,
+                "language": doc.get("language", "en"),
+                "scan_mode": doc.get("scan_mode", "panel"),
+                "lemmas": doc.get("lemmas", []),
+                "vocabulary": vocab_list,
+                "narration": doc.get("narration"),
+                "created_at": doc.get("created_at", datetime.now(timezone.utc)).isoformat()
+                if isinstance(doc.get("created_at"), datetime)
+                else str(doc.get("created_at", "")),
+                "image_data_url": image_data_url,
+            }
+
+            processed_panels.append(panel_data)
+            pages_dict[page_id_key]["panels"].append(panel_data)
+            pages_dict[page_id_key]["panels_count"] += 1
 
         # Manga cover base64 / URL
         manga_cover_data = None
@@ -199,6 +252,7 @@ class PanelReportService:
                 "ocr_model": "RapidOCR PP-OCRv4 (ONNX Runtime, DBNet + CRNN)",
                 "post_processing_engine": "MangaOCRService (Comic Glyphs, De-hyphenation, wordninja segmentation)",
                 "nlp_model": "spaCy en_core_web_sm / Monosyllabic Vietnamese rules",
+                "total_pages_in_report": len(pages_dict),
                 "total_panels_in_report": len(processed_panels),
                 "total_matching_panels_in_db": total_matching_panels,
                 "total_word_count": total_word_count,
@@ -262,13 +316,14 @@ class PanelReportService:
             },
             "ai_optimization_directive": {
                 "role": "Computer Vision & NLP Autonomous Optimization Agent",
-                "task_objective": "Evaluate extraction quality across each panel crop vs output text. Identify OCR misreads, segmentation boundary anomalies, and linguistic errors, then formulate a concrete optimization plan.",
+                "task_objective": "Evaluate extraction quality across intact original manga page baselines vs panel crops & OCR texts. Identify OCR misreads, segmentation boundary anomalies, and linguistic errors, then formulate a concrete optimization plan.",
                 "review_checklist": [
-                    "1. Panel Crop Accuracy: Did the segmentation cut through speech bubbles or characters?",
-                    "2. Comic Lettering OCR: Were hand-drawn sound effects (SFX) incorrectly parsed as speech?",
-                    "3. De-hyphenation Quality: Were compound hyphenated words ('multi-speed') preserved while broken words ('recom-mend') cleanly rejoined?",
-                    "4. Word Segmentation: Did wordninja over-split proper manga character names or foreign terms?",
-                    "5. Vocabulary Relevance: Are extracted lemmas appropriate for language learning?",
+                    "1. Raw Page Baseline vs Segmentation: Compare full intact page against detected panel crops to verify no cut-off panels, missed text in margins, or lost art.",
+                    "2. Panel Crop Accuracy: Did the segmentation cut through speech bubbles or characters?",
+                    "3. Comic Lettering OCR: Were hand-drawn sound effects (SFX) incorrectly parsed as speech?",
+                    "4. De-hyphenation Quality: Were compound hyphenated words ('multi-speed') preserved while broken words ('recom-mend') cleanly rejoined?",
+                    "5. Word Segmentation: Did wordninja over-split proper manga character names or foreign terms?",
+                    "6. Vocabulary Relevance: Are extracted lemmas appropriate for language learning?",
                 ],
                 "downstream_action": "Synthesize observed failure modes and propose code changes or threshold recalibrations for vision_service.py and manga_ocr_service.py.",
             },
@@ -276,6 +331,7 @@ class PanelReportService:
                 "top_terms": top_vocab,
                 "total_unique": len(unique_vocabulary),
             },
+            "pages": list(pages_dict.values()),
             "panels": processed_panels,
         }
 
@@ -286,31 +342,50 @@ class PanelReportService:
         Render a self-contained, publication-grade HTML report with embedded Base64 images,
         print-to-PDF styles, and an embedded JSON-LD script for AI evaluation.
         """
-        meta = data["report_metadata"]
-        manga = data["manga"]
-        pipeline = data["pipeline_technical_specification"]
-        ai_dir = data["ai_optimization_directive"]
-        panels = data["panels"]
-        vocab_summary = data["vocabulary_summary"]
+        meta = data.get("report_metadata", {})
+        manga = data.get("manga", {})
+        pipeline = data.get("pipeline_technical_specification", {})
+        ai_dir = data.get("ai_optimization_directive", {})
+        panels = data.get("panels", [])
+        vocab_summary = data.get("vocabulary_summary", {})
+
+        # Resolve page-level hierarchy: either data["pages"] or dynamically group panels
+        pages = data.get("pages")
+        if not pages:
+            pages_grouped: Dict[str, Dict[str, Any]] = {}
+            for p in panels:
+                p_key = f"{p.get('chapter_id', '')}_p{p.get('page_number', 1)}"
+                if p_key not in pages_grouped:
+                    pages_grouped[p_key] = {
+                        "page_key": p_key,
+                        "chapter_id": p.get("chapter_id", ""),
+                        "chapter_number": p.get("chapter_number", ""),
+                        "chapter_title": p.get("chapter_title", ""),
+                        "volume": p.get("volume"),
+                        "page_number": p.get("page_number", 1),
+                        "page_minio_key": p.get("page_minio_key"),
+                        "original_image_data_url": p.get("original_image_data_url"),
+                        "panels_count": 0,
+                        "panels": [],
+                    }
+                pages_grouped[p_key]["panels"].append(p)
+                pages_grouped[p_key]["panels_count"] += 1
+            pages = list(pages_grouped.values())
 
         # Serialize full JSON for AI ingestion block
         json_for_ai = json.dumps(data, ensure_ascii=False, indent=2)
 
-        # Build panel HTML cards
-        panel_cards_html = []
-        for p in panels:
+        def _render_panel_card(p: Dict[str, Any]) -> str:
             p_img = p.get("image_data_url")
             img_tag = (
-                f'<img src="{p_img}" alt="Panel {p["panel_index"] + 1}" class="panel-img" loading="lazy" />'
+                f'<img src="{p_img}" alt="Panel {p.get("panel_index", 0) + 1}" class="panel-img" loading="lazy" />'
                 if p_img
-                else '<div class="no-img">[No Image Data Available]</div>'
+                else '<div class="no-img">[No Crop Image Available]</div>'
             )
 
-            # Highlight diffs between raw_text and cleaned_text
             raw_text = html.escape(p.get("raw_text", "")).replace("\n", "<br/>")
             cleaned_text = html.escape(p.get("cleaned_text", ""))
 
-            # Vocabulary tags
             vocab_badges = "".join(
                 f'<span class="badge badge-pos" title="Lemma: {html.escape(v.get("lemma", ""))} ({v.get("pos_tag", "")})">'
                 f"{html.escape(v.get('term', ''))} <small>{html.escape(v.get('pos_tag', ''))}</small></span>"
@@ -326,14 +401,14 @@ class PanelReportService:
 
             coords_str = ", ".join(f"{c:.3f}" for c in p.get("coords", []))
 
-            panel_cards_html.append(f"""
-            <div class="panel-card" id="panel-{p["panel_id"]}">
+            return f"""
+            <div class="panel-card" id="panel-{p.get("panel_id")}">
               <div class="panel-header">
                 <div class="panel-tags">
-                  <span class="badge badge-primary">Panel #{p["panel_index"] + 1}</span>
-                  <span class="badge badge-secondary">Trang {p["page_number"]}</span>
-                  <span class="badge badge-chapter">Ch. {p["chapter_number"]}</span>
-                  {f'<span class="badge badge-vol">Vol. {p["volume"]}</span>' if p.get("volume") else ""}
+                  <span class="badge badge-primary">Panel #{p.get("panel_index", 0) + 1}</span>
+                  <span class="badge badge-secondary">Trang {p.get("page_number", 1)}</span>
+                  <span class="badge badge-chapter">Ch. {html.escape(str(p.get("chapter_number", "")))}</span>
+                  {f'<span class="badge badge-vol">Vol. {p.get("volume")}</span>' if p.get("volume") else ""}
                 </div>
                 <div class="panel-meta-coords font-mono">Coords: [{coords_str}]</div>
               </div>
@@ -367,9 +442,76 @@ class PanelReportService:
                 </div>
               </div>
             </div>
+            """
+
+        # Build pages HTML sections: Part 1 Raw Page Image -> Part 2 Extracted Panels
+        page_sections_html = []
+        for pg_idx, pg in enumerate(pages, 1):
+            pg_img = pg.get("original_image_data_url")
+            if pg_img:
+                raw_page_img_tag = f'<img src="{pg_img}" alt="Trang Gốc #{pg.get("page_number", pg_idx)}" class="raw-page-img" loading="lazy" />'
+            else:
+                raw_page_img_tag = (
+                    '<div class="no-img">[Không có ảnh gốc ban đầu hoặc tùy chọn include_images=false]</div>'
+                )
+
+            page_panels = pg.get("panels", [])
+            rendered_panels_for_page = "\n".join(_render_panel_card(p) for p in page_panels)
+            if not rendered_panels_for_page:
+                rendered_panels_for_page = (
+                    '<div class="empty">Chưa có khung tranh nào được trích xuất trên trang này.</div>'
+                )
+
+            vol_badge = f'<span class="badge badge-vol">Vol. {pg.get("volume")}</span>' if pg.get("volume") else ""
+            minio_key_display = html.escape(str(pg.get("page_minio_key") or "N/A"))
+
+            page_sections_html.append(f"""
+            <article class="page-audit-card" id="page-{pg.get("chapter_id", "chap")}-{pg.get("page_number", pg_idx)}">
+              <div class="page-header">
+                <div class="page-meta-tags">
+                  <span class="badge badge-page-num">Trang Gốc (Original Page) #{pg.get("page_number", pg_idx)}</span>
+                  <span class="badge badge-chapter">Ch. {html.escape(str(pg.get("chapter_number", "")))}</span>
+                  {vol_badge}
+                  <span class="badge badge-secondary">{len(page_panels)} Khung Tranh Đã Trích Xuất</span>
+                </div>
+                <div class="page-meta-path font-mono" title="MinIO Object Key">Key: {minio_key_display}</div>
+              </div>
+
+              <div class="page-body">
+                <!-- Part 1: Raw Intact Original Page Image Baseline -->
+                <section class="raw-page-block">
+                  <div class="raw-page-banner">
+                    <div class="raw-page-title">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                      <strong>1. Ảnh Gốc Nguyên Vẹn Ban Đầu (Raw Original Manga Page)</strong>
+                    </div>
+                    <span class="raw-page-sub">Dữ liệu thô ban đầu đưa vào pipeline &mdash; Cơ sở trực quan đối chiếu kiểm tra bounding box &amp; thoại bị bỏ sót cho AI &amp; Human</span>
+                  </div>
+
+                  <div class="raw-page-viewport">
+                    {raw_page_img_tag}
+                  </div>
+                </section>
+
+                <!-- Part 2: Extracted Panels & OCR Transcriptions for this Page -->
+                <section class="extracted-panels-block">
+                  <div class="extracted-header">
+                    <div class="extracted-title">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                      <strong>2. Kết Quả Trích Xuất Khung Tranh Tương Ứng ({len(page_panels)} Panels)</strong>
+                    </div>
+                    <span class="extracted-sub">Các phân vùng được cắt (crop) và kết quả nhận dạng thoại/từ vựng tương ứng từ trang này</span>
+                  </div>
+
+                  <div class="panels-list">
+                    {rendered_panels_for_page}
+                  </div>
+                </section>
+              </div>
+            </article>
             """)
 
-        panels_rendered = "\n".join(panel_cards_html)
+        pages_rendered = "\n".join(page_sections_html)
 
         # Top vocabulary list
         top_vocab_html = "".join(
@@ -669,6 +811,137 @@ class PanelReportService:
       line-height: 1.45;
     }}
 
+    /* Page Audit Card & Raw Page Styles */
+    .pages-list {{
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+    }}
+
+    .page-audit-card {{
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }}
+
+    .page-header {{
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--border-color);
+      padding: 14px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }}
+
+    .page-meta-tags {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+
+    .page-meta-path {{
+      font-size: 0.76rem;
+      color: var(--text-muted);
+    }}
+
+    .badge-page-num {{
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 800;
+      font-size: 0.8rem;
+    }}
+
+    .page-body {{
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }}
+
+    .raw-page-block {{
+      background: #080c16;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }}
+
+    .raw-page-banner {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+
+    .raw-page-title {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      color: #38bdf8;
+    }}
+
+    .raw-page-sub {{
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }}
+
+    .raw-page-viewport {{
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #03050a;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 16px;
+      min-height: 250px;
+    }}
+
+    .raw-page-img {{
+      max-width: 100%;
+      max-height: 720px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      display: block;
+    }}
+
+    .extracted-panels-block {{
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }}
+
+    .extracted-header {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+    }}
+
+    .extracted-title {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      color: var(--accent);
+    }}
+
+    .extracted-sub {{
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }}
+
     /* Panel Card */
     .panels-list {{
       display: flex;
@@ -862,7 +1135,7 @@ class PanelReportService:
       body {{ background: #fff !important; color: #000 !important; }}
       .top-bar, .btn {{ display: none !important; }}
       .container {{ max-width: 100% !important; padding: 0 !important; }}
-      .manga-hero, .panel-card, .metric-card, .pipeline-card {{
+      .manga-hero, .panel-card, .metric-card, .pipeline-card, .page-audit-card {{
         background: #fff !important;
         border: 1px solid #ccc !important;
         color: #000 !important;
@@ -870,6 +1143,23 @@ class PanelReportService:
         box-shadow: none !important;
         margin-bottom: 16px !important;
       }}
+      .page-audit-card {{
+        page-break-before: always;
+        break-before: page;
+      }}
+      .raw-page-block {{
+        background: #fff !important;
+        border: 1px solid #ddd !important;
+      }}
+      .raw-page-viewport {{
+        background: #fff !important;
+        min-height: auto !important;
+      }}
+      .raw-page-img {{
+        max-height: 480px !important;
+      }}
+      .raw-page-title {{ color: #0369a1 !important; }}
+      .extracted-title {{ color: #b45309 !important; }}
       .panel-body {{ grid-template-columns: 240px 1fr !important; }}
       .dialogue-box.cleaned {{ background: #f0fdf4 !important; border-color: #86efac !important; color: #000 !important; }}
       .dialogue-box.raw {{ background: #f8fafc !important; border-color: #cbd5e1 !important; color: #334155 !important; }}
@@ -923,6 +1213,10 @@ class PanelReportService:
     <!-- Metrics Overview -->
     <section class="metrics-grid">
       <div class="metric-card">
+        <div class="val">{meta.get("total_pages_in_report", len(pages))}</div>
+        <div class="lbl">Trang Gốc (Original Pages)</div>
+      </div>
+      <div class="metric-card">
         <div class="val">{meta.get("total_panels_in_report", 0)}</div>
         <div class="lbl">Số Khung Tranh (Panels)</div>
       </div>
@@ -974,13 +1268,13 @@ class PanelReportService:
       {top_vocab_html or '<div class="empty">Chưa có dữ liệu từ vựng</div>'}
     </section>
 
-    <!-- Detailed Panels List -->
+    <!-- Detailed Pages & Panels List -->
     <h3 class="section-title">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-      Chi Tiết Từng Khung Tranh Trích Xuất ({len(panels)} Khung Tranh)
+      Chi Tiết Trang Gốc &amp; Khung Tranh Trích Xuất ({len(pages)} Trang Gốc / {len(panels)} Panels)
     </h3>
-    <section class="panels-list">
-      {panels_rendered or '<div class="empty">Không tìm thấy khung tranh nào theo tùy chọn lọc đã chọn.</div>'}
+    <section class="pages-list">
+      {pages_rendered or '<div class="empty">Không tìm thấy dữ liệu trang hoặc khung tranh nào theo tùy chọn lọc đã chọn.</div>'}
     </section>
   </main>
 
@@ -995,10 +1289,11 @@ class PanelReportService:
       const prompt = `BẠN LÀ MỘT CHUYÊN GIA COMPUTER VISION & NLP TRÍCH XUẤT TRUYỆN TRANH.
 Hãy phân tích báo cáo kỹ thuật sau đây đối với bộ manga "${manga.get("title", "")}".
 Nhiệm vụ của bạn:
-1. Đánh giá chất lượng phân vùng khung tranh (Panel Segmentation) và độ chính xác của OCR (RapidOCR PP-OCRv4 + MangaOCRService).
-2. Phát hiện các trường hợp lỗi: Dính chữ, lỗi font chữ truyện tranh, nhận diện sai hiệu ứng âm thanh (SFX) thành thoại, ngắt dòng bị mất từ.
-3. Đánh giá chất lượng tách từ vựng & lemmatization.
-4. Lập bản kế hoạch hành động cụ thể để cải tiến các tham số và thuật toán hậu xử lý.
+1. Đối chiếu ảnh gốc nguyên vẹn ban đầu (Raw Original Page) với từng bounding box và ảnh trích xuất (Panel Crops) tương ứng để phát hiện vùng bị bỏ sót, cắt lẹm thoại hoặc bóng thoại bị chia đôi.
+2. Đánh giá chất lượng phân vùng khung tranh (Panel Segmentation) và độ chính xác của OCR (RapidOCR PP-OCRv4 + MangaOCRService).
+3. Phát hiện các trường hợp lỗi: Dính chữ, lỗi font chữ truyện tranh, nhận diện sai hiệu ứng âm thanh (SFX) thành thoại, ngắt dòng bị mất từ.
+4. Đánh giá chất lượng tách từ vựng & lemmatization.
+5. Lập bản kế hoạch hành động cụ thể để cải tiến các tham số và thuật toán hậu xử lý.
 
 DỮ LIỆU CẤU TRÚC CHI TIẾT (JSON):
 ` + dataEl.textContent;
