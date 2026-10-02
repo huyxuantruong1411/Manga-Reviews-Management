@@ -20,3 +20,8 @@ All agent interactions must adhere to the following governance directives:
 3. **Restrained Indexing**:
    - Only execute a full project re-index (`codegraph index`) during major architectural overhauls or structural reorganizations.
    - For routine small edits, use incremental sync (`codegraph sync`) rather than rebuilding the full graph.
+
+4. **Automated Post-Commit Sync & Persistent Memory**:
+   - The repository uses `.git/hooks/post-commit` (via `scripts/sync_codebase_memory.py`) to automatically execute `codegraph sync` and record commit diffs and active context into `.antigravity/codebase-memory.json`.
+   - Before beginning deep architectural work, agents should inspect `.antigravity/codebase-memory.json` to instantly recall architectural decisions (ADRs) and recent system modifications to prevent context amnesia.
+

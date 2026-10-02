@@ -25,3 +25,6 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, Agent **B�
    - Tự động chạy `ruff check --fix` + `ruff format` (Python) và `biome check --write` (TS/TSX) sau mỗi lần sửa file.
 6. **`ui-ux-design`**:
    - Khi nhận bất kỳ yêu cầu nào liên quan đến phát triển Frontend, Component, Page, hoặc sửa đổi Layout/UX, agent **BẮT BUỘC** phải đọc và tuân thủ `.antigravity/skills/ui-ux-design.md`, ưu tiên dùng shadcn CLI để lấy component trước khi tự viết mới.
+7. **`web-performance-and-a11y`**:
+   - Bắt buộc tuân thủ Core Web Vitals (lazy loading, skeleton, decoding="async"), WCAG AA contrast cho OCR text, bàn phím điều hướng (keyboard accessibility), và triệt tiêu re-render thừa.
+   - Sau khi hoàn thành UI phức tạp, tự động chạy test Playwright headless (`pnpm --dir frontend test:e2e`) xác nhận không vỡ layout trên Mobile 375px và Desktop 1440px.

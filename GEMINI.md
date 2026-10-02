@@ -8,6 +8,7 @@ When pair programming or performing development tasks:
 1. **Always consult Code Knowledge Graph / Dependency Tree first**: Before doing wide `grep` searches or guessing codebase flow, use `codegraph_explore` / `codegraph explore <symbol>` / `codegraph callers <symbol>` to inspect definitions, callers, and callees.
 2. **Mandatory Impact Analysis before refactoring**: For any refactoring, function renaming, or interface/schema alteration, execute `codegraph impact <symbol>` to determine the blast radius across dependent routers, services, models, and tests before writing code.
 3. **Controlled re-indexing**: Only run `codegraph index` on major architectural changes. For minor file changes, use incremental `codegraph sync`.
+4. **Automated Incremental Sync & Persistent Codebase Memory**: Every git commit automatically triggers incremental `codegraph sync` via local `.git/hooks/post-commit` (and `scripts/sync_codebase_memory.py`), recording commit diffs and active context into [`.antigravity/codebase-memory.json`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/codebase-memory.json) to eliminate context amnesia.
 
 ## AI Workflow & Precision Tooling Guidelines
 - **AST Pattern Search (`ast-grep`)**: Prefer `ast-grep run -p '<pattern>'` over raw regex when inspecting function/class structures.
@@ -20,6 +21,10 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, hãy tự t
 - **`architecture-guard`** ([`.antigravity/skills/architecture-guard.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/architecture-guard.md)): Cấm query DB hay tính toán trong Controller, ép buộc validate Pydantic DTO.
 - **`db-migration-safety`** ([`.antigravity/skills/db-migration-safety.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/db-migration-safety.md)): Bắt buộc Up/Down migration, bắt buộc đánh index khóa ngoại (`manga_id`, `created_at`, `timestamp`).
 - **`ui-ux-design`** ([`.antigravity/skills/ui-ux-design.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/ui-ux-design.md)): Khi nhận bất kỳ yêu cầu nào liên quan đến phát triển Frontend, Component, Page, hoặc sửa đổi Layout/UX, agent BẮT BUỘC phải đọc và tuân thủ `.antigravity/skills/ui-ux-design.md`, ưu tiên dùng shadcn CLI để lấy component trước khi tự viết mới.
+- **`web-performance-and-a11y`** ([`.antigravity/skills/web-performance-and-a11y.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/web-performance-and-a11y.md)):
+  - Khi nhận tác vụ thay đổi giao diện, tối ưu render hoặc thêm trang mới, Agent BẮT BUỘC phải đọc và tuân thủ `.antigravity/skills/web-performance-and-a11y.md`.
+  - Tối ưu Core Web Vitals cho manga reader (lazy loading, skeleton placeholder, `decoding="async"`), chuẩn truy cập A11y WCAG AA (độ tương phản màu chữ OCR, phím điều hướng rating/modal), và ngăn ngừa re-render thừa trong danh sách nhiều phần tử.
+  - Sau khi hoàn thành UI phức tạp, Agent tự động chạy test Playwright headless (`pnpm --dir frontend test:e2e`) để xác nhận không có lỗi layout ở cả 2 viewport (Mobile 375px & Desktop 1440px) trước khi báo cáo hoàn tất.
 
 ## Redis Caching & Async Task Worker (ARQ) Architecture
 

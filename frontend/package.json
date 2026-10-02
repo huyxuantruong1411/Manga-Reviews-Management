@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:a11y": "axe http://localhost:5173",
-    "test:visual": "uv run --project ../backend python ../scripts/visual_responsive_check.py"
+    "test:visual": "uv run --project ../backend python ../scripts/visual_responsive_check.py",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@axe-core/cli": "^4.13.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

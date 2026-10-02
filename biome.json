@@ -7,7 +7,11 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["frontend/src/**/*"]
+		"includes": [
+			"frontend/src/**/*",
+			"frontend/tests/**/*",
+			"frontend/playwright.config.ts"
+		]
 	},
 	"formatter": {
 		"enabled": true,
