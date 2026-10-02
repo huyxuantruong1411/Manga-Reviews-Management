@@ -558,5 +558,16 @@ class VisionService:
             buffer.seek(0)
             return buffer
 
+    def analyze_page_v3(
+        self,
+        image_bytes: bytes,
+        context: Any,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Compatibility facade delegating to VisionPipelineV3."""
+        from backend.services.vision.pipeline import vision_pipeline_v3
+
+        return vision_pipeline_v3.analyze_page(image_bytes, context, options=options)
+
 
 vision_service = VisionService()

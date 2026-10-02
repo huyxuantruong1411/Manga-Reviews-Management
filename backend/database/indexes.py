@@ -156,6 +156,18 @@ async def init_db_indexes():
         await db.manga_panels.create_index([("scan_mode", 1)])
         await db.manga_panels.create_index([("lemmas", 1)])
 
+        # vision_page_analyses (Vision Pipeline V3)
+        await db.vision_page_analyses.create_index([("manga_id", 1), ("chapter_id", 1), ("page_number", 1)])
+        await db.vision_page_analyses.create_index([("chapter_id", 1)])
+        await db.vision_page_analyses.create_index([("page_hash", 1)])
+        await db.vision_page_analyses.create_index([("created_at", -1)])
+
+        # vision_regions (Vision Pipeline V3)
+        await db.vision_regions.create_index([("page_analysis_id", 1), ("region_type", 1)])
+        await db.vision_regions.create_index([("panel_region_id", 1)])
+        await db.vision_regions.create_index([("balloon_region_id", 1)])
+        await db.vision_regions.create_index([("tokens.lemma", 1)])
+
         # Run backfill
         await backfill_manga_status_timestamps()
 

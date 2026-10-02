@@ -1178,6 +1178,74 @@ class PanelScannerService:
         panels_coords: List[Tuple[float, float, float, float]] = []
         panel_texts_list: List[List[Dict[str, Any]]] = []
 
+        if mode == "v3":
+            from backend.services.vision.pipeline import vision_pipeline_v3
+            from backend.services.vision.types import PageAnalysisContext
+
+            ctx = PageAnalysisContext(
+                manga_id=manga_id,
+                chapter_id=chapter_id,
+                page_number=page_num,
+                page_hash=obj_key,
+                image_width=width,
+                image_height=height,
+                chapter_language=language,
+                reading_direction="rtl" if reading_direction == "rtl" else "ltr",
+            )
+            analysis = vision_pipeline_v3.analyze_page(img, ctx)
+            result_docs = []
+            now = datetime.utcnow()
+            for p_idx, frame in enumerate(analysis.frames):
+                frame_texts = [t for t in analysis.texts if t.panel_region_id == frame.id]
+                raw_lines = [t.ocr_raw for t in frame_texts if t.ocr_raw]
+                clean_lines = [
+                    t.corrected_text or t.normalized_text
+                    for t in frame_texts
+                    if (t.corrected_text or t.normalized_text)
+                ]
+
+                raw_text = "\n".join(raw_lines)
+                cleaned_text = " ".join(clean_lines)
+
+                lemmas_set = set()
+                vocab_list = []
+                for t in frame_texts:
+                    for tok in t.tokens:
+                        lemmas_set.add(tok.lemma)
+                        vocab_list.append(
+                            {
+                                "term": tok.surface,
+                                "lemma": tok.lemma,
+                                "pos_tag": tok.pos,
+                                "frequency": 1,
+                            }
+                        )
+
+                panel_doc = {
+                    "manga_id": manga_id,
+                    "manga_title": manga_title,
+                    "chapter_id": chapter_id,
+                    "chapter_number": chapter_num,
+                    "chapter_title": chapter_title or "",
+                    "volume": vol_num,
+                    "page_number": page_num,
+                    "page_minio_key": obj_key,
+                    "panel_index": p_idx,
+                    "coords": list(frame.bbox),
+                    "width": width,
+                    "height": height,
+                    "raw_text": raw_text,
+                    "cleaned_text": cleaned_text,
+                    "lemmas": list(lemmas_set),
+                    "vocabulary": vocab_list,
+                    "language": language,
+                    "scan_mode": "v3",
+                    "pipeline_version": 3,
+                    "created_at": now,
+                }
+                result_docs.append(panel_doc)
+            return result_docs
+
         if mode == "bubble":
             # Direct Speech Bubble Clustering Mode (MangaTranslator style)
             bubbles = vision_service.cluster_text_into_bubbles(detections, reading_direction=reading_direction)

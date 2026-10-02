@@ -46,6 +46,7 @@ downloads/
 backend/minio_data/
 backend/redis_data/
 backend/scratch/
+artifacts/
 ref/
 note.txt
 *_source_dump.txt
