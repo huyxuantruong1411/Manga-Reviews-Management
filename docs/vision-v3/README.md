@@ -2,7 +2,7 @@
 
 ## 1. Overview & Baseline
 
-- **Plan Reference**: [`ref/plan/Manga_Reviews_Management_Vision_Pipeline_V3_Plan.md`](../../ref/plan/Manga_Reviews_Management_Vision_Pipeline_V3_Plan.md)
+- **Plan Reference**: `ref/plan/Manga_Reviews_Management_Vision_Pipeline_V3_Plan.md`
 - **Baseline Commit**: `3faafb0` (V2 Baseline)
 - **Key Shift**: Move from *"panel as a crop containing OCR text"* to *"page as a semantic region graph: frame → balloon → text → OCR → language routing → conservative normalization → NLP"*.
 

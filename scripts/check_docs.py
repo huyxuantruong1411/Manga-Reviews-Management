@@ -53,7 +53,7 @@ def check_markdown_file(
             continue
 
         # Reject private/ignored directories in links
-        if any(raw_target.startswith(p) for p in ("ref/", "../ref/", "note.txt", "../note.txt")):
+        if any(p in raw_target for p in ("ref/", "note.txt")):
             errors.append(f"{md_file.name}: Points to private/ignored target: '{raw_target}'")
             continue
 
