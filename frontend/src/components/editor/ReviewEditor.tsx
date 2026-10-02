@@ -501,10 +501,11 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 		const docText = editorInstance.state.doc.textContent;
 		const regex =
 			/@([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}|[a-fA-F0-9]{24})/g;
-		let match;
+		let match: RegExpExecArray | null = regex.exec(docText);
 		const matches: { text: string; id: string }[] = [];
-		while ((match = regex.exec(docText)) !== null) {
+		while (match !== null) {
 			matches.push({ text: match[0], id: match[1] });
+			match = regex.exec(docText);
 		}
 
 		// Replace matches backwards so we don't mess up document indices

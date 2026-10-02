@@ -25,6 +25,12 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, hãy tự t
   - Khi nhận tác vụ thay đổi giao diện, tối ưu render hoặc thêm trang mới, Agent BẮT BUỘC phải đọc và tuân thủ `.antigravity/skills/web-performance-and-a11y.md`.
   - Tối ưu Core Web Vitals cho manga reader (lazy loading, skeleton placeholder, `decoding="async"`), chuẩn truy cập A11y WCAG AA (độ tương phản màu chữ OCR, phím điều hướng rating/modal), và ngăn ngừa re-render thừa trong danh sách nhiều phần tử.
   - Sau khi hoàn thành UI phức tạp, Agent tự động chạy test Playwright headless (`pnpm --dir frontend test:e2e`) để xác nhận không có lỗi layout ở cả 2 viewport (Mobile 375px & Desktop 1440px) trước khi báo cáo hoàn tất.
+- **`ci-cd-guardian`** ([`.antigravity/skills/ci-cd-guardian.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/ci-cd-guardian.md)):
+  - Khi thay đổi code, toolchain hoặc workflow, tuân thủ CI Guardian.
+  - Trước push, chạy các local checks áp dụng cho diff bằng toolchain của CI (`scripts/ci/check_python.py`, `pytest`, `biome check`, `tsc -b`, `build`).
+  - Khi đã có quyền push và truy cập GitHub, xác minh `ci-gate` cùng các checks bắt buộc trên đúng source revision và run tương ứng.
+  - Chỉ báo "remote verified" khi các checks đó thành công; nếu chưa push, không có run hoặc thiếu quyền truy cập, báo đúng trạng thái "local verified" hoặc "remote verification pending", nêu nguyên nhân. Không bypass checks để hoàn tất tác vụ.
+
 
 ## Redis Caching & Async Task Worker (ARQ) Architecture
 

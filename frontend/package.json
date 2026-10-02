@@ -2,9 +2,12 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@12.8.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "check": "biome check --config-path=.. .",
+    "typecheck": "tsc -b --pretty false",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -54,6 +57,7 @@
   },
   "devDependencies": {
     "@axe-core/cli": "^4.13.0",
+    "@biomejs/biome": "2.5.15",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.12.3",

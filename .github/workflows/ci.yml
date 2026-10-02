@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Change Detection
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend_required: ${{ steps.normalize.outputs.backend_required }}
+      frontend_required: ${{ steps.normalize.outputs.frontend_required }}
+      ui_required: ${{ steps.normalize.outputs.ui_required }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Detect Changed Paths
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'ruff.toml'
+              - 'pyrightconfig.json'
+              - '*.py'
+              - 'scripts/**/*.py'
+              - '.antigravity/skills/**/*.py'
+            frontend:
+              - 'frontend/**'
+              - 'biome.json'
+            api_contract:
+              - 'backend/main.py'
+              - 'backend/routers/**'
+              - 'backend/models/**'
+            pipeline:
+              - '.github/workflows/**'
+              - 'scripts/ci/**'
+            policy:
+              - 'AGENTS.md'
+              - 'GEMINI.md'
+              - '.agents/**'
+              - '.antigravity/**'
+              - 'docs/**'
+
+      - name: Normalize Classification Outputs
+        id: normalize
+        shell: bash
+        run: |
+          IS_DISPATCH="${{ github.event_name == 'workflow_dispatch' }}"
+          FILTER_BACKEND="${{ steps.filter.outputs.backend }}"
+          FILTER_FRONTEND="${{ steps.filter.outputs.frontend }}"
+          FILTER_API="${{ steps.filter.outputs.api_contract }}"
+          FILTER_PIPELINE="${{ steps.filter.outputs.pipeline }}"
+
+          # Backend required if backend, pipeline, or dispatch
+          if [ "$IS_DISPATCH" = "true" ] || [ "$FILTER_BACKEND" = "true" ] || [ "$FILTER_PIPELINE" = "true" ]; then
+            echo "backend_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Frontend required if frontend, pipeline, or dispatch
+          if [ "$IS_DISPATCH" = "true" ] || [ "$FILTER_FRONTEND" = "true" ] || [ "$FILTER_PIPELINE" = "true" ]; then
+            echo "frontend_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # UI required if frontend, api_contract, pipeline, or dispatch
+          if [ "$IS_DISPATCH" = "true" ] || [ "$FILTER_FRONTEND" = "true" ] || [ "$FILTER_API" = "true" ] || [ "$FILTER_PIPELINE" = "true" ]; then
+            echo "ui_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ui_required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  secrets:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Full Repository History
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Gitleaks Scan
+        uses: gitleaks/gitleaks-action@7899be7815de59dd9559c5d19d6796c73dfab99b # v2.3.8
+        env:
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
+
+  docs:
+    name: Documentation & Route Integrity
+    needs: secrets
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate Documentation Integrity & Links
+        run: python scripts/check_docs.py
+
+      - name: Verify API Route Reference Synchronization
+        run: python scripts/generate_api_routes.py --check
+
+  backend-quality:
+    name: Backend Lint & Formatting
+    needs: [changes, secrets]
+    if: needs.changes.outputs.backend_required == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f368150db74caa394a11f26a1 # v5.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Locked Lint Tooling
+        run: uv sync --project backend --locked --only-group lint --no-install-project
+
+      - name: Run Ruff Lint & Format Checks
+        run: uv run --project backend --no-sync python scripts/ci/check_python.py
+
+  backend-tests:
+    name: Backend Tests & Regressions
+    needs: [changes, secrets]
+    if: needs.changes.outputs.backend_required == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f368150db74caa394a11f26a1 # v5.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Locked Test Dependencies
+        run: uv sync --project backend --locked --group test --no-install-project
+
+      - name: Run Backend Pytest Suite
+        run: uv run --project backend --no-sync python -m pytest backend/tests
+
+  frontend:
+    name: Frontend Quality & Build
+    needs: [changes, secrets]
+    if: needs.changes.outputs.frontend_required == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a6425f204c059079782477139372b83f56ba0ff0 # v4.1.0
+        with:
+          run_install: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: "frontend/pnpm-lock.yaml"
+
+      - name: Install Locked Frontend Dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Run Biome Checks
+        run: pnpm --dir frontend run check
+
+      - name: Run TypeScript Typecheck
+        run: pnpm --dir frontend run typecheck
+
+      - name: Run Frontend Build
+        run: pnpm --dir frontend run build
+
+  ui-smoke:
+    name: UI Smoke & E2E Tests
+    needs: [changes, secrets]
+    if: needs.changes.outputs.ui_required == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a6425f204c059079782477139372b83f56ba0ff0 # v4.1.0
+        with:
+          run_install: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: "frontend/pnpm-lock.yaml"
+
+      - name: Install Locked Frontend Dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+
+      - name: Run Playwright Smoke Tests
+        env:
+          CI: "true"
+        run: pnpm --dir frontend run test:e2e
+
+  ci-gate:
+    name: CI Gate
+    if: ${{ always() }}
+    needs:
+      - changes
+      - secrets
+      - docs
+      - backend-quality
+      - backend-tests
+      - frontend
+      - ui-smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate All Required CI Checks
+        env:
+          CI_NEEDS_JSON: ${{ toJson(needs) }}
+          CI_CHANGES_JSON: ${{ toJson(needs.changes.outputs) }}
+        run: python scripts/ci/assert_gate.py

@@ -1,15 +1,17 @@
-import sys
-import os
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-from minio import Minio
+import os
+import sys
 from datetime import datetime
+
+from minio import Minio
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Adjust Python path to load backend module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from backend.config import settings
 from backend.database.indexes import init_db_indexes
+
 
 async def seed_tags(db):
     print("Checking tags collection...")
@@ -45,13 +47,14 @@ async def seed_tags(db):
                 "group": t["group"],
                 "description": {"en": f"Pre-seeded custom genre: {en_name}"},
                 "color": t["color"],
-                "created_at": datetime.utcnow()
+                "created_at": datetime.utcnow(),
             }
             await db.tags.insert_one(tag_doc)
             inserted_count += 1
             print(f"Pre-seeded tag: {en_name}")
 
     print(f"Pre-seeding done. Seeded {inserted_count} new tags.")
+
 
 def setup_minio():
     print(f"Checking MinIO bucket: '{settings.minio_bucket}'...")
@@ -60,7 +63,7 @@ def setup_minio():
             settings.minio_endpoint,
             access_key=settings.minio_access_key,
             secret_key=settings.minio_secret_key,
-            secure=False
+            secure=False,
         )
         if not client.bucket_exists(settings.minio_bucket):
             client.make_bucket(settings.minio_bucket)
@@ -70,37 +73,40 @@ def setup_minio():
     except Exception as e:
         print(f"WARNING: Could not connect to MinIO or initialize bucket: {e}")
 
+
 async def main():
     print("--- Starting Project Setup Script ---")
-    
+
     # Setup MinIO
     setup_minio()
-    
+
     # Setup MongoDB
     print(f"Connecting to MongoDB at: {settings.mongodb_uri} ...")
     try:
         client = AsyncIOMotorClient(settings.mongodb_uri)
         db = client[settings.database_name]
-        
+
         # Test connection
-        await client.admin.command('ping')
+        await client.admin.command("ping")
         print("Connected to MongoDB successfully!")
-        
+
         # Seed tags
         await seed_tags(db)
-        
+
         # Initialize Indexes
         # Need to ensure the connection.py client is also initialized for connection reference
         # But connection helper has its own globals. Let's patch it
         from backend.database.connection import db_instance
+
         db_instance.client = client
         db_instance.db = db
         await init_db_indexes()
-        
+
         print("--- Setup script completed successfully! ---")
     except Exception as e:
         print(f"CRITICAL ERROR during setup: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     if sys.platform == "win32":

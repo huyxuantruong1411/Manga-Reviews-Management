@@ -28,3 +28,9 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, Agent **B�
 7. **`web-performance-and-a11y`**:
    - Bắt buộc tuân thủ Core Web Vitals (lazy loading, skeleton, decoding="async"), WCAG AA contrast cho OCR text, bàn phím điều hướng (keyboard accessibility), và triệt tiêu re-render thừa.
    - Sau khi hoàn thành UI phức tạp, tự động chạy test Playwright headless (`pnpm --dir frontend test:e2e`) xác nhận không vỡ layout trên Mobile 375px và Desktop 1440px.
+8. **`ci-cd-guardian`**:
+   - Khi thay đổi code, toolchain hoặc workflow, tuân thủ CI Guardian ([`.antigravity/skills/ci-cd-guardian.md`](file:///d:/Projects/Manga/Manga-Reviews-Management/.antigravity/skills/ci-cd-guardian.md)).
+   - Trước push, chạy các local checks áp dụng cho diff bằng toolchain của CI (`scripts/ci/check_python.py`, `pytest`, `biome check`, `tsc -b`, `build`).
+   - Khi đã có quyền push và truy cập GitHub, xác minh `ci-gate` cùng các checks bắt buộc trên đúng source revision và run tương ứng.
+   - Chỉ báo "remote verified" khi các checks đó thành công; nếu chưa push, không có run hoặc thiếu quyền truy cập, báo đúng trạng thái "local verified" hoặc "remote verification pending", nêu nguyên nhân. Không bypass checks để hoàn tất tác vụ.
+

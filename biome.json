@@ -3,15 +3,23 @@
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
-		"useIgnoreFile": true
+		"useIgnoreFile": false
 	},
 	"files": {
 		"ignoreUnknown": true,
 		"includes": [
+			"src/**/*",
+			"tests/**/*",
+			"playwright.config.ts",
 			"frontend/src/**/*",
 			"frontend/tests/**/*",
 			"frontend/playwright.config.ts"
 		]
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
 	},
 	"formatter": {
 		"enabled": true,
@@ -20,7 +28,29 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"a11y": {
+				"useButtonType": "warn",
+				"useMediaCaption": "warn",
+				"noLabelWithoutControl": "warn",
+				"noStaticElementInteractions": "warn",
+				"useKeyWithClickEvents": "warn",
+				"useSemanticElements": "warn",
+				"noSvgWithoutTitle": "warn",
+				"noPositiveTabindex": "warn",
+				"useValidAriaRole": "warn",
+				"noNoninteractiveElementToInteractiveRole": "warn",
+				"noAutofocus": "warn",
+				"useKeyWithMouseEvents": "warn"
+			},
+			"suspicious": {
+				"noExplicitAny": "warn",
+				"noArrayIndexKey": "warn",
+				"useIterableCallbackReturn": "warn"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": "warn"
+			}
 		}
 	},
 	"javascript": {

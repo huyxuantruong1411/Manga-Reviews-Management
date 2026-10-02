@@ -39,24 +39,30 @@
 - **Mobile-First**: Responsive down to 375px mobile viewport.
 - Full details: [`.antigravity/skills/ui-ux-design.md`](.antigravity/skills/ui-ux-design.md).
 
+### E. CI/CD Guardian & Verification Gate
+- When modifying code, toolchains, or workflows, adhere to [`.antigravity/skills/ci-cd-guardian.md`](.antigravity/skills/ci-cd-guardian.md).
+- Prior to push, run local verification checks matching CI (`pytest`, `check_python.py`, `biome check`, `tsc -b`, `build`).
+- When remote push and GitHub access are available, verify `ci-gate` on the exact source revision. Only report "remote verified" when all required checks succeed. Never bypass or suppress checks.
+
 ---
 
 ## 3. Tooling Ecosystem & Verification
 
-After editing files, run appropriate formatters and linters:
+After editing files, run appropriate formatters, linters, and verification suites:
 - **Backend (Python)**:
   ```bash
-  uv run --project backend ruff check --fix <modified_files>
-  uv run --project backend ruff format <modified_files>
+  uv run --project backend python scripts/ci/check_python.py
+  uv run --project backend python -m pytest backend/tests
   ```
 - **Frontend (TypeScript / React)**:
   ```bash
-  npx @biomejs/biome check --write <modified_files>
+  pnpm --dir frontend run check
+  pnpm --dir frontend run typecheck
+  pnpm --dir frontend run build
   ```
-- **Verification Tests**:
-  - Backend unit tests: `uv run --project backend python -m unittest backend/tests/<test_file>.py`
-  - Frontend typecheck & build: `pnpm --dir frontend tsc -b` and `pnpm --dir frontend build`
-  - Responsive visual check: `python scripts/visual_responsive_check.py --routes /`
+- **Documentation & Verification Tests**:
+  - Docs & Route sync: `python scripts/check_docs.py` and `python scripts/generate_api_routes.py --check`
+  - Playwright smoke: `pnpm --dir frontend run test:e2e`
 
 ---
 

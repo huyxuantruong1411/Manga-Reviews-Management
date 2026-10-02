@@ -2,6 +2,7 @@
 
 import os
 import sys
+import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -10,26 +11,34 @@ import cv2
 from backend.services.manga_ocr_service import manga_ocr_service
 from backend.services.vision_service import vision_service
 
-img_path = r"ref\Panel-words-detector\backend\data\manga\Sample Manga\Chapter 001 - The Beginning\001.jpg"
 
-img = cv2.imread(os.path.join(os.path.dirname(__file__), "..", "..", img_path))
-if img is None:
-    print("ERROR: Could not read image")
-    sys.exit(1)
+class TestOCRE2E(unittest.TestCase):
+    def test_sample_manga_page_ocr(self):
+        img_rel_path = os.path.join(
+            "ref",
+            "Panel-words-detector",
+            "backend",
+            "data",
+            "manga",
+            "Sample Manga",
+            "Chapter 001 - The Beginning",
+            "001.jpg",
+        )
+        full_path = os.path.join(os.path.dirname(__file__), "..", "..", img_rel_path)
+        if not os.path.exists(full_path):
+            self.skipTest(f"Sample image not found at {full_path}; skipping e2e local test.")
 
-print("Image shape:", img.shape)
-detections = vision_service.detect_text(img)
-print("OCR detections:", len(detections))
-for d in detections[:10]:
-    conf = d["confidence"]
-    text = d["text"]
-    print(f"  [{conf:.2f}] {text}")
+        img = cv2.imread(full_path)
+        self.assertIsNotNone(img, f"Failed to load image from {full_path}")
 
-# Process through MangaOCRService
-result = manga_ocr_service.process_detections(detections)
-print("\n--- MangaOCRService Output ---")
-print("raw_text:")
-print(result["raw_text"][:400])
-print("\nclean_text:")
-print(result["clean_text"][:400])
-print("\ndetected_tokens:", result["detected_tokens"][:20])
+        detections = vision_service.detect_text(img)
+        self.assertIsInstance(detections, list)
+
+        result = manga_ocr_service.process_detections(detections)
+        self.assertIn("raw_text", result)
+        self.assertIn("clean_text", result)
+        self.assertIn("detected_tokens", result)
+
+
+if __name__ == "__main__":
+    unittest.main()
