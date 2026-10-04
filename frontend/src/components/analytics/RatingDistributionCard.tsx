@@ -116,8 +116,8 @@ export const RatingDistributionCard: React.FC<RatingDistributionCardProps> = ({
 						<Star size={20} />
 					</div>
 					<div>
-						<h3 className="text-lg font-bold text-[var(--text-primary)] font-spartan">
-							Phân Bố Điểm Đánh Giá (Rating Distribution)
+						<h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] font-spartan tracking-tight">
+							Phân Bố Điểm Đánh Giá
 						</h3>
 						<p className="text-xs text-[var(--text-secondary)]">
 							{ratedCount.toLocaleString()} manga đã chấm điểm (
@@ -129,7 +129,7 @@ export const RatingDistributionCard: React.FC<RatingDistributionCardProps> = ({
 				</div>
 
 				{/* Mode Tabs */}
-				<div className="flex items-center p-1 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] text-xs font-semibold self-start sm:self-auto">
+				<div className="flex items-center p-1 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] text-xs font-semibold self-start sm:self-auto shrink-0">
 					<button
 						type="button"
 						onClick={() => setViewMode("histogram")}
@@ -175,7 +175,7 @@ export const RatingDistributionCard: React.FC<RatingDistributionCardProps> = ({
 			</div>
 
 			{/* Main Chart Area */}
-			<div className="h-72 w-full outline-none">
+			<div className="h-80 w-full outline-none">
 				{data.length === 0 ? (
 					<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
 						Chưa có dữ liệu đánh giá điểm số nào.
@@ -314,19 +314,28 @@ export const RatingDistributionCard: React.FC<RatingDistributionCardProps> = ({
 					</ResponsiveContainer>
 				) : (
 					/* 3. Tiers View */
-					<div className="h-full flex flex-col justify-center space-y-3 px-2 overflow-y-auto">
+					<div className="h-full flex flex-col justify-between py-1 px-0.5">
 						{tiersData.map((tier) => (
 							<div
 								key={tier.name}
-								className="p-3 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-primary)] space-y-1.5"
+								role="button"
+								tabIndex={0}
+								onClick={() => onSelectScore?.(tier.range[0])}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										onSelectScore?.(tier.range[0]);
+									}
+								}}
+								className="px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] space-y-1.5 hover:border-[var(--brand-orange)]/50 hover:bg-[var(--bg-card)]/80 transition cursor-pointer group shadow-2xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]/50"
 							>
 								<div className="flex justify-between items-center text-xs">
 									<div className="flex items-center space-x-2">
 										<span
-											className="w-2.5 h-2.5 rounded-full"
+											className="w-2.5 h-2.5 rounded-full shrink-0 group-hover:scale-125 transition-transform"
 											style={{ backgroundColor: tier.color }}
 										/>
-										<span className="font-bold text-[var(--text-primary)]">
+										<span className="font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition-colors">
 											{tier.name}
 										</span>
 									</div>
@@ -340,7 +349,7 @@ export const RatingDistributionCard: React.FC<RatingDistributionCardProps> = ({
 									</div>
 								</div>
 
-								<div className="h-2 w-full rounded-full bg-[var(--border-primary)] overflow-hidden">
+								<div className="h-2 w-full rounded-full bg-[var(--border-primary)]/60 overflow-hidden">
 									<div
 										className="h-full rounded-full transition-all duration-500"
 										style={{

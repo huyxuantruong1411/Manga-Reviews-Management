@@ -306,7 +306,7 @@ export const ReadStatusDistributionCard: React.FC<
 						</div>
 					) : viewMode === "bars" ? (
 						/* VIEW 2: RANKED HORIZONTAL BARS */
-						<div className="w-full h-full flex flex-col justify-center space-y-3 px-2 overflow-y-auto">
+						<div className="w-full h-full flex flex-col justify-start py-1 space-y-2.5 px-2 overflow-y-auto">
 							{sortedData.map((item, idx) => {
 								const pct = totalVal > 0 ? (item.value / totalVal) * 100 : 0;
 								const viName = VIETNAMESE_LABELS[item.name] || item.name;
