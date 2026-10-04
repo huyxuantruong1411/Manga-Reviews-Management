@@ -28,7 +28,11 @@ class TestRedisCacheAndWorker(unittest.IsolatedAsyncioTestCase):
         img.save(self.test_img_path)
 
         # Initialize redis pool for tests
-        await init_redis_pool()
+        self.redis_client = await init_redis_pool()
+
+    def _require_redis(self):
+        if not self.redis_client:
+            self.skipTest("Live Redis server is not available; skipping live Redis test.")
 
     async def asyncTearDown(self):
         if os.path.exists(self.test_img_path):
@@ -68,6 +72,7 @@ class TestRedisCacheAndWorker(unittest.IsolatedAsyncioTestCase):
     # 2. Redis Cache Operations (CRUD & Fallback)
     # -----------------------------------------------------------------------
     async def test_redis_cache_crud(self):
+        self._require_redis()
         key = "test:manga:999"
         val = {"title": "Berserk", "chapters": 375}
 
@@ -88,6 +93,7 @@ class TestRedisCacheAndWorker(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(miss)
 
     async def test_redis_pattern_deletion(self):
+        self._require_redis()
         await set_cache("test:pattern:1", {"a": 1})
         await set_cache("test:pattern:2", {"b": 2})
         await set_cache("test:other:1", {"c": 3})
@@ -132,6 +138,7 @@ class TestRedisCacheAndWorker(unittest.IsolatedAsyncioTestCase):
             self.assertIn("vocabulary", res)
 
     async def test_process_manga_panel_ocr_arq_context_call(self):
+        self._require_redis()
         # Test ARQ worker call signature: (ctx, panel_id, image_path)
         ctx = {"job_id": "test_job_12345"}
         with patch(
@@ -157,6 +164,7 @@ class TestRedisCacheAndWorker(unittest.IsolatedAsyncioTestCase):
     # 4. Task Status Resolver Endpoint Logic
     # -----------------------------------------------------------------------
     async def test_resolve_task_status_from_cache(self):
+        self._require_redis()
         job_id = "test_job_resolved"
         await set_cache(
             f"task:ocr:{job_id}",
