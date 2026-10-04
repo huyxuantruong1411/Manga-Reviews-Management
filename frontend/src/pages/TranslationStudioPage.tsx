@@ -168,11 +168,19 @@ export const TranslationStudioPage: React.FC = () => {
 							<Cpu size={18} className="text-[var(--brand-orange)]" />
 						</div>
 						<div className="text-xl font-bold text-gray-900 dark:text-white">
-							{capabilities?.cuda_available ? "CUDA (GPU)" : "CPU Only"}
+							{(capabilities?.cuda?.available ?? capabilities?.cuda_available)
+								? "CUDA (GPU)"
+								: "CPU Only"}
 						</div>
 						<div className="text-[11px] text-zinc-500 mt-1">
-							Python {capabilities?.python_version || "3.12"} •{" "}
-							{capabilities?.platform || "Windows"}
+							Python{" "}
+							{typeof capabilities?.platform?.python_version === "string"
+								? capabilities.platform.python_version.split(" ")[0]
+								: capabilities?.python_version || "3.12"}{" "}
+							•{" "}
+							{typeof capabilities?.platform === "string"
+								? capabilities.platform
+								: capabilities?.platform?.system || "Windows"}
 						</div>
 					</div>
 

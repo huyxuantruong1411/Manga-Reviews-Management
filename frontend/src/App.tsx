@@ -21,6 +21,7 @@ const TranslationStudioPage = lazy(
 );
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 import { AlertProvider } from "./hooks/useAlert";
 import { DownloadProvider } from "./hooks/useDownload";
 
@@ -30,55 +31,57 @@ export const App: React.FC = () => {
 			<AlertProvider>
 				<DownloadProvider>
 					<TooltipProvider>
-						<Suspense
-							fallback={
-								<div role="status" className="p-8 text-center">
-									Đang tải trang...
-								</div>
-							}
-						>
-							<Routes>
-								{/* Dedicated full-screen MangaDex-style reader route */}
-								<Route
-									path="manga/:id/read/:chapterId"
-									element={<MangaReaderPage />}
-								/>
+						<ErrorBoundary>
+							<Suspense
+								fallback={
+									<div role="status" className="p-8 text-center">
+										Đang tải trang...
+									</div>
+								}
+							>
+								<Routes>
+									{/* Dedicated full-screen MangaDex-style reader route */}
+									<Route
+										path="manga/:id/read/:chapterId"
+										element={<MangaReaderPage />}
+									/>
 
-								<Route path="/" element={<Layout />}>
-									<Route index element={<MangaListPage />} />
-									<Route path="manga/:id" element={<MangaDetailPage />} />
-									<Route
-										path="panel-words-detector"
-										element={<PanelWordsDetectorPage />}
-									/>
-									<Route path="panels" element={<PanelWordsDetectorPage />} />
-									<Route path="analytics" element={<AnalyticsPage />} />
-									<Route path="tags" element={<TagsPage />} />
-									<Route path="author/:name" element={<AuthorDetailPage />} />
-									<Route path="tools" element={<ImageToolsPage />} />
-									<Route path="downloads" element={<DownloadsPage />} />
-									<Route path="sync" element={<SyncManagerPage />} />
-									<Route path="audit-logs" element={<AuditLogsPage />} />
-									<Route path="audit" element={<AuditLogsPage />} />
-									<Route
-										path="translation"
-										element={<TranslationStudioPage />}
-									/>
-									<Route path="studio" element={<TranslationStudioPage />} />
-									<Route
-										path="*"
-										element={
-											<div className="p-8 text-center space-y-4">
-												<h1>Không tìm thấy trang</h1>
-												<Link to="/" className="underline">
-													Về thư viện manga
-												</Link>
-											</div>
-										}
-									/>
-								</Route>
-							</Routes>
-						</Suspense>
+									<Route path="/" element={<Layout />}>
+										<Route index element={<MangaListPage />} />
+										<Route path="manga/:id" element={<MangaDetailPage />} />
+										<Route
+											path="panel-words-detector"
+											element={<PanelWordsDetectorPage />}
+										/>
+										<Route path="panels" element={<PanelWordsDetectorPage />} />
+										<Route path="analytics" element={<AnalyticsPage />} />
+										<Route path="tags" element={<TagsPage />} />
+										<Route path="author/:name" element={<AuthorDetailPage />} />
+										<Route path="tools" element={<ImageToolsPage />} />
+										<Route path="downloads" element={<DownloadsPage />} />
+										<Route path="sync" element={<SyncManagerPage />} />
+										<Route path="audit-logs" element={<AuditLogsPage />} />
+										<Route path="audit" element={<AuditLogsPage />} />
+										<Route
+											path="translation"
+											element={<TranslationStudioPage />}
+										/>
+										<Route path="studio" element={<TranslationStudioPage />} />
+										<Route
+											path="*"
+											element={
+												<div className="p-8 text-center space-y-4">
+													<h1>Không tìm thấy trang</h1>
+													<Link to="/" className="underline">
+														Về thư viện manga
+													</Link>
+												</div>
+											}
+										/>
+									</Route>
+								</Routes>
+							</Suspense>
+						</ErrorBoundary>
 					</TooltipProvider>
 				</DownloadProvider>
 			</AlertProvider>
