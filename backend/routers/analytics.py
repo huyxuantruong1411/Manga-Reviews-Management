@@ -1,9 +1,19 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
+from backend.models.review_export import (
+    ReviewCorpusExportRequest,
+    ReviewCorpusExportResponse,
+    ReviewCorpusSummaryResponse,
+    ReviewManagementResponse,
+)
 from backend.services.analytics_service import analytics_service
+from backend.services.review_export_service import review_export_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
@@ -553,4 +563,125 @@ async def get_creators_details(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/review-corpus/summary", response_model=ReviewCorpusSummaryResponse)
+async def get_review_corpus_summary():
+    """Get aggregated metrics and overview statistics of all reviews written by the author."""
+    try:
+        return await review_export_service.get_review_corpus_summary()
+    except Exception as e:
+        logger.error(f"Failed to calculate review corpus summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate review summary: {str(e)}")
+
+
+@router.post("/review-corpus/export", response_model=ReviewCorpusExportResponse)
+async def export_review_corpus(req: ReviewCorpusExportRequest):
+    """Compile and export all reviews into a unified corpus document (Markdown, JSON, or Plain Text)
+
+    specifically formatted with metadata and system prompt instructions for LLM style emulation.
+    """
+    try:
+        return await review_export_service.export_corpus(req)
+    except Exception as e:
+        logger.error(f"Failed to export review corpus: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export review corpus: {str(e)}")
+
+
+@router.get("/review-corpus/download")
+async def download_review_corpus(
+    format: str = Query("markdown", description="'markdown', 'json', or 'txt'"),
+    read_statuses: Optional[List[str]] = Query(None),
+    rating_min: Optional[float] = Query(None),
+    rating_max: Optional[float] = Query(None),
+    sort_by: str = Query("created_at_desc"),
+    include_synopsis: bool = Query(True),
+    include_system_prompt: bool = Query(True),
+    include_manga_meta: bool = Query(True),
+    include_alt_titles: bool = Query(True),
+):
+    """Direct file download of compiled review corpus."""
+    try:
+
+        def _resolve_val(val, default):
+            if hasattr(val, "default"):
+                return default
+            return val
+
+        actual_format = _resolve_val(format, "markdown")
+        actual_rating_min = _resolve_val(rating_min, None)
+        actual_rating_max = _resolve_val(rating_max, None)
+        actual_sort_by = _resolve_val(sort_by, "created_at_desc")
+        actual_synopsis = _resolve_val(include_synopsis, True)
+        actual_sys_prompt = _resolve_val(include_system_prompt, True)
+        actual_manga_meta = _resolve_val(include_manga_meta, True)
+        actual_alt_titles = _resolve_val(include_alt_titles, True)
+        actual_read_statuses = _resolve_val(read_statuses, None)
+
+        parsed_read_statuses = parse_list_param(actual_read_statuses)
+        req = ReviewCorpusExportRequest(
+            format=actual_format,
+            read_statuses=parsed_read_statuses,
+            rating_min=actual_rating_min,
+            rating_max=actual_rating_max,
+            sort_by=actual_sort_by,
+            include_synopsis=actual_synopsis,
+            include_system_prompt=actual_sys_prompt,
+            include_manga_meta=actual_manga_meta,
+            include_alt_titles=actual_alt_titles,
+        )
+        res = await review_export_service.export_corpus(req)
+
+        media_types = {
+            "json": "application/json",
+            "txt": "text/plain; charset=utf-8",
+            "markdown": "text/markdown; charset=utf-8",
+        }
+        media_type = media_types.get(res.format.lower(), "text/markdown; charset=utf-8")
+
+        return Response(
+            content=res.content,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{res.filename}"',
+                "Content-Type": media_type,
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to download review corpus: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to download review corpus: {str(e)}")
+
+
+@router.get("/reviews-management", response_model=ReviewManagementResponse)
+async def get_reviews_management(
+    search: Optional[str] = Query(None),
+    read_status: Optional[str] = Query(None),
+    rating_min: Optional[float] = Query(None),
+    rating_max: Optional[float] = Query(None),
+    sort_by: str = Query("created_at_desc"),
+):
+    """List and filter all reviews across the manga library for centralized management."""
+    try:
+
+        def _resolve_val(val, default):
+            if hasattr(val, "default"):
+                return default
+            return val
+
+        actual_search = _resolve_val(search, None)
+        actual_read_status = _resolve_val(read_status, None)
+        actual_rating_min = _resolve_val(rating_min, None)
+        actual_rating_max = _resolve_val(rating_max, None)
+        actual_sort_by = _resolve_val(sort_by, "created_at_desc")
+
+        return await review_export_service.get_reviews_management_list(
+            search=actual_search,
+            read_status=actual_read_status,
+            rating_min=actual_rating_min,
+            rating_max=actual_rating_max,
+            sort_by=actual_sort_by,
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch reviews management list: {e}")
         raise HTTPException(status_code=500, detail=str(e))

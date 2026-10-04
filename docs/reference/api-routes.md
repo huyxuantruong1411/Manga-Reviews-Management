@@ -3,21 +3,25 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **126**
+Total Endpoints Discovered: **130**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
 | `POST` | `/api/ai/generate` | `generate_ai_content` | AI | [`ai.py:90`](../../backend/routers/ai.py#L90) | Yes |
 | `POST` | `/api/ai/preview` | `preview_ai_request` | AI | [`ai.py:47`](../../backend/routers/ai.py#L47) | Yes |
-| `GET` | `/api/analytics` | `get_all_analytics` | Analytics | [`analytics.py:83`](../../backend/routers/analytics.py#L83) | Yes |
-| `GET` | `/api/analytics/completed-timeline` | `get_completed_timeline` | Analytics | [`analytics.py:408`](../../backend/routers/analytics.py#L408) | Yes |
-| `GET` | `/api/analytics/creators-details` | `get_creators_details` | Analytics | [`analytics.py:512`](../../backend/routers/analytics.py#L512) | Yes |
-| `GET` | `/api/analytics/manga-timeline` | `get_manga_timeline` | Analytics | [`analytics.py:299`](../../backend/routers/analytics.py#L299) | Yes |
-| `GET` | `/api/analytics/overview` | `get_overview` | Analytics | [`analytics.py:155`](../../backend/routers/analytics.py#L155) | Yes |
-| `GET` | `/api/analytics/review-timeline` | `get_review_timeline` | Analytics | [`analytics.py:352`](../../backend/routers/analytics.py#L352) | Yes |
-| `GET` | `/api/analytics/score-distribution` | `get_score_distribution` | Analytics | [`analytics.py:203`](../../backend/routers/analytics.py#L203) | Yes |
-| `GET` | `/api/analytics/tags-details` | `get_tags_details` | Analytics | [`analytics.py:464`](../../backend/routers/analytics.py#L464) | Yes |
-| `GET` | `/api/analytics/top-tags` | `get_top_tags` | Analytics | [`analytics.py:251`](../../backend/routers/analytics.py#L251) | Yes |
+| `GET` | `/api/analytics` | `get_all_analytics` | Analytics | [`analytics.py:93`](../../backend/routers/analytics.py#L93) | Yes |
+| `GET` | `/api/analytics/completed-timeline` | `get_completed_timeline` | Analytics | [`analytics.py:418`](../../backend/routers/analytics.py#L418) | Yes |
+| `GET` | `/api/analytics/creators-details` | `get_creators_details` | Analytics | [`analytics.py:522`](../../backend/routers/analytics.py#L522) | Yes |
+| `GET` | `/api/analytics/manga-timeline` | `get_manga_timeline` | Analytics | [`analytics.py:309`](../../backend/routers/analytics.py#L309) | Yes |
+| `GET` | `/api/analytics/overview` | `get_overview` | Analytics | [`analytics.py:165`](../../backend/routers/analytics.py#L165) | Yes |
+| `GET` | `/api/analytics/review-corpus/download` | `download_review_corpus` | Analytics | [`analytics.py:593`](../../backend/routers/analytics.py#L593) | Yes |
+| `POST` | `/api/analytics/review-corpus/export` | `export_review_corpus` | Analytics | [`analytics.py:580`](../../backend/routers/analytics.py#L580) | Yes |
+| `GET` | `/api/analytics/review-corpus/summary` | `get_review_corpus_summary` | Analytics | [`analytics.py:570`](../../backend/routers/analytics.py#L570) | Yes |
+| `GET` | `/api/analytics/review-timeline` | `get_review_timeline` | Analytics | [`analytics.py:362`](../../backend/routers/analytics.py#L362) | Yes |
+| `GET` | `/api/analytics/reviews-management` | `get_reviews_management` | Analytics | [`analytics.py:657`](../../backend/routers/analytics.py#L657) | Yes |
+| `GET` | `/api/analytics/score-distribution` | `get_score_distribution` | Analytics | [`analytics.py:213`](../../backend/routers/analytics.py#L213) | Yes |
+| `GET` | `/api/analytics/tags-details` | `get_tags_details` | Analytics | [`analytics.py:474`](../../backend/routers/analytics.py#L474) | Yes |
+| `GET` | `/api/analytics/top-tags` | `get_top_tags` | Analytics | [`analytics.py:261`](../../backend/routers/analytics.py#L261) | Yes |
 | `GET` | `/api/audit-logs` | `list_audit_logs` | audit-logs | [`audit_logs.py:28`](../../backend/routers/audit_logs.py#L28) | Yes |
 | `GET` | `/api/audit-logs/actions` | `get_audit_actions` | audit-logs | [`audit_logs.py:63`](../../backend/routers/audit_logs.py#L63) | Yes |
 | `GET` | `/api/audit-logs/stats` | `get_audit_stats` | audit-logs | [`audit_logs.py:69`](../../backend/routers/audit_logs.py#L69) | Yes |

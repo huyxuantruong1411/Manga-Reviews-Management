@@ -2866,9 +2866,6 @@ export const MangaDetailPage: React.FC = () => {
 								</select>
 							</div>
 
-							{/* Publication Status Highlight Badge */}
-							{manga.status && renderPublicationStatusBadge(manga.status)}
-
 							{/* Personal Rating Interactive Select */}
 							<div
 								className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
@@ -2895,7 +2892,7 @@ export const MangaDetailPage: React.FC = () => {
 										value=""
 										className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
 									>
-										★ No Rating
+										No Rating
 									</option>
 									{Array.from({ length: 21 }, (_, i) => {
 										const num = 10 - i * 0.5;

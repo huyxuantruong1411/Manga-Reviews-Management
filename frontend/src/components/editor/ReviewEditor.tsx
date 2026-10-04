@@ -19,7 +19,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import Youtube from "@tiptap/extension-youtube";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -32,7 +32,7 @@ import {
 	PlayCircle as YoutubeIcon,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
@@ -234,6 +234,63 @@ const getYoutubeId = (url: string): string | null => {
 
 	return null;
 };
+
+interface LiveWordCounterProps {
+	editor: Editor | null;
+}
+
+const LiveWordCounter = memo(({ editor }: LiveWordCounterProps) => {
+	const [counts, setCounts] = useState<{ words: number; chars: number }>({
+		words: 0,
+		chars: 0,
+	});
+
+	useEffect(() => {
+		if (!editor) return;
+
+		const computeCounts = () => {
+			const text = editor.getText() || "";
+			const trimmed = text.trim();
+			const words = trimmed ? trimmed.split(/\s+/).length : 0;
+			const chars = text.length;
+			setCounts({ words, chars });
+		};
+
+		// Initial calculation
+		computeCounts();
+
+		// Debounce by 50ms so typing never drops frames or lags
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		const handleUpdate = () => {
+			if (timer) clearTimeout(timer);
+			timer = setTimeout(computeCounts, 50);
+		};
+
+		editor.on("update", handleUpdate);
+		return () => {
+			editor.off("update", handleUpdate);
+			if (timer) clearTimeout(timer);
+		};
+	}, [editor]);
+
+	return (
+		<div className="flex items-center space-x-3">
+			<span>
+				<strong className="text-[var(--text-primary)] font-bold">
+					{counts.words.toLocaleString()}
+				</strong>{" "}
+				từ (words)
+			</span>
+			<span>•</span>
+			<span>
+				<strong className="text-[var(--text-primary)] font-bold">
+					{counts.chars.toLocaleString()}
+				</strong>{" "}
+				ký tự (chars)
+			</span>
+		</div>
+	);
+});
 
 interface ReviewEditorProps {
 	mangaId: string;
@@ -1378,7 +1435,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
 	return (
 		<div
-			className={`review-editor-container mx-auto space-y-6 py-4 pb-24 animate-in fade-in duration-300 ${WIDTH_MAP[editorWidth]}`}
+			className={`review-editor-container mx-auto space-y-6 py-4 pb-24 transition-[max-width,width] duration-350 ease-in-out ${WIDTH_MAP[editorWidth]}`}
 		>
 			{/* Hidden file inputs for various media types */}
 			<input
@@ -1903,25 +1960,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
 					{/* Word Count & Status Bar */}
 					<div className="flex items-center justify-between px-4 py-2 border-t border-[var(--border-primary)] bg-[var(--bg-primary)]/40 text-[11px] text-[var(--text-secondary)] font-mono select-none">
-						<div className="flex items-center space-x-3">
-							<span>
-								<strong className="text-[var(--text-primary)] font-bold">
-									{(() => {
-										const text = editor?.getText() || "";
-										const trimmed = text.trim();
-										return trimmed ? trimmed.split(/\s+/).length : 0;
-									})()}
-								</strong>{" "}
-								từ (words)
-							</span>
-							<span>•</span>
-							<span>
-								<strong className="text-[var(--text-primary)] font-bold">
-									{editor?.getText().length || 0}
-								</strong>{" "}
-								ký tự (chars)
-							</span>
-						</div>
+						<LiveWordCounter editor={editor} />
 						<div className="text-[10px] text-zinc-400 dark:text-zinc-500 hidden sm:block">
 							Gõ{" "}
 							<kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[9px] font-mono font-bold">

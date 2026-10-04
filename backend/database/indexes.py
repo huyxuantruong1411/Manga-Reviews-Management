@@ -105,6 +105,7 @@ async def init_db_indexes():
         # reviews
         await db.reviews.create_index("manga_id")
         await db.reviews.create_index("created_at")
+        await db.reviews.create_index([("is_deleted", 1), ("created_at", -1)])
 
         # audit_logs
         await db.audit_logs.create_index([("entity_id", 1), ("timestamp", -1)])

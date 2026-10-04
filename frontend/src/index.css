@@ -57,6 +57,14 @@
 	}
 }
 
+/* Smooth Container Width Transition for Review Editor & Dynamic Layouts */
+.review-editor-container {
+	transition:
+		max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+		width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+	will-change: max-width;
+}
+
 /* Sleek Auto-Hiding Scrollbar with subtle contrast */
 * {
 	scrollbar-width: thin;
