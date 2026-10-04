@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.database.connection import get_db
@@ -197,11 +197,95 @@ class AnalyticsService:
             if status not in status_dist:
                 status_dist[status] = 0
 
+        # Calculate reading velocity and timeframe comparisons
+        now = datetime.now(timezone.utc)
+        seven_days_ago = now - timedelta(days=7)
+        fourteen_days_ago = now - timedelta(days=14)
+        thirty_days_ago = now - timedelta(days=30)
+        sixty_days_ago = now - timedelta(days=60)
+
+        audit_coll = self._get_audit_collection()
+        base_audit_filter = {
+            "entity_type": "manga",
+            "action": "update_status",
+            "field": "read_status",
+            "new_value": {"$in": ["completed", "ReadStatus.COMPLETED"]},
+        }
+        if manga_ids:
+            base_audit_filter["entity_id"] = {"$in": manga_ids}
+
+        completed_last_7d = await audit_coll.count_documents(
+            {**base_audit_filter, "timestamp": {"$gte": seven_days_ago, "$lte": now}}
+        )
+        completed_prev_7d = await audit_coll.count_documents(
+            {**base_audit_filter, "timestamp": {"$gte": fourteen_days_ago, "$lt": seven_days_ago}}
+        )
+        completed_last_30d = await audit_coll.count_documents(
+            {**base_audit_filter, "timestamp": {"$gte": thirty_days_ago, "$lte": now}}
+        )
+        completed_prev_30d = await audit_coll.count_documents(
+            {**base_audit_filter, "timestamp": {"$gte": sixty_days_ago, "$lt": thirty_days_ago}}
+        )
+
+        # Fallback to mangas completed_at if audit logs were not yet populated
+        m_comp_7d = await mangas_coll.count_documents(
+            {**filter_query, "completed_at": {"$gte": seven_days_ago, "$lte": now}}
+        )
+        if m_comp_7d > completed_last_7d:
+            completed_last_7d = m_comp_7d
+
+        m_comp_30d = await mangas_coll.count_documents(
+            {**filter_query, "completed_at": {"$gte": thirty_days_ago, "$lte": now}}
+        )
+        if m_comp_30d > completed_last_30d:
+            completed_last_30d = m_comp_30d
+
+        added_last_7d = await mangas_coll.count_documents(
+            {**filter_query, "added_at": {"$gte": seven_days_ago, "$lte": now}}
+        )
+        added_prev_7d = await mangas_coll.count_documents(
+            {**filter_query, "added_at": {"$gte": fourteen_days_ago, "$lt": seven_days_ago}}
+        )
+        added_last_30d = await mangas_coll.count_documents(
+            {**filter_query, "added_at": {"$gte": thirty_days_ago, "$lte": now}}
+        )
+        added_prev_30d = await mangas_coll.count_documents(
+            {**filter_query, "added_at": {"$gte": sixty_days_ago, "$lt": thirty_days_ago}}
+        )
+
+        completed_count = status_dist.get("completed", 0)
+        backlog_count = status_dist.get("unread", 0) + status_dist.get("plan_to_read", 0)
+        in_progress_count = status_dist.get("reading", 0) + status_dist.get("re_reading", 0)
+
+        completion_rate = round((completed_count / total_manga * 100), 1) if total_manga > 0 else 0.0
+        backlog_rate = round((backlog_count / total_manga * 100), 1) if total_manga > 0 else 0.0
+        review_coverage_rate = round((total_reviews / completed_count * 100), 1) if completed_count > 0 else 0.0
+
+        rated_count = await mangas_coll.count_documents({**filter_query, "personal_rating": {"$ne": None}})
+        unrated_count = total_manga - rated_count
+
         return {
             "total_manga": total_manga,
             "total_reviews": total_reviews,
             "average_rating": average_rating,
             "status_distribution": status_dist,
+            "velocity": {
+                "completed_last_7d": completed_last_7d,
+                "completed_prev_7d": completed_prev_7d,
+                "completed_last_30d": completed_last_30d,
+                "completed_prev_30d": completed_prev_30d,
+                "added_last_7d": added_last_7d,
+                "added_prev_7d": added_prev_7d,
+                "added_last_30d": added_last_30d,
+                "added_prev_30d": added_prev_30d,
+                "completion_rate": completion_rate,
+                "backlog_count": backlog_count,
+                "backlog_rate": backlog_rate,
+                "in_progress_count": in_progress_count,
+                "review_coverage_rate": review_coverage_rate,
+                "rated_count": rated_count,
+                "unrated_count": unrated_count,
+            },
         }
 
     async def get_score_distribution(self, filter_query: Dict[str, Any]) -> List[Dict[str, Any]]:

@@ -7,7 +7,6 @@ import {
 	ChevronDown,
 	ChevronUp,
 	Filter,
-	Layers,
 	RefreshCw,
 	Search,
 	SlidersHorizontal,
@@ -27,16 +26,22 @@ import {
 	Cell,
 	Line,
 	LineChart,
-	Pie,
-	PieChart,
 	ResponsiveContainer,
 	Tooltip,
 	XAxis,
 	YAxis,
 } from "recharts";
 import client from "../api/client";
+import { MetadataDistributionCard } from "../components/analytics/MetadataDistributionCard";
+import { RatingDistributionCard } from "../components/analytics/RatingDistributionCard";
+import { ReadingProgressStoryBanner } from "../components/analytics/ReadingProgressStoryBanner";
+import { ReadStatusDistributionCard } from "../components/analytics/ReadStatusDistributionCard";
 import ReviewCorpusExport from "../components/analytics/ReviewCorpusExport";
 import ReviewsManagement from "../components/analytics/ReviewsManagement";
+import {
+	type OverviewVelocity,
+	StorytellingKPIDeck,
+} from "../components/analytics/StorytellingKPIDeck";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 
 interface Tag {
@@ -60,6 +65,7 @@ interface OverviewStats {
 		plan_to_read: number;
 		re_reading: number;
 	};
+	velocity?: OverviewVelocity;
 }
 
 interface ScoreDist {
@@ -133,61 +139,6 @@ interface TimelineDateRange {
 	earliest_completed: string | null;
 	latest_completed: string | null;
 }
-
-const RADIAN = Math.PI / 180;
-
-const renderCustomPieLabel = ({
-	cx,
-	cy,
-	midAngle,
-	outerRadius,
-	percent,
-}: any) => {
-	const pct = typeof percent === "number" ? percent : 0;
-	if (pct < 0.015) return null;
-
-	const sin = Math.sin(-RADIAN * midAngle);
-	const cos = Math.cos(-RADIAN * midAngle);
-	const sx = cx + outerRadius * cos;
-	const sy = cy + outerRadius * sin;
-	const mx = cx + (outerRadius + 8) * cos;
-	const my = cy + (outerRadius + 8) * sin;
-	const ex = mx + (cos >= 0 ? 1 : -1) * 12;
-	const ey = my;
-	const textAnchor = cos >= 0 ? "start" : "end";
-
-	return (
-		<g className="pie-percent-label">
-			{/* Connector line */}
-			<path
-				d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
-				stroke="var(--text-secondary)"
-				strokeWidth={1}
-				fill="none"
-				opacity={0.5}
-			/>
-			{/* Dot at start of line */}
-			<circle
-				cx={sx}
-				cy={sy}
-				r={2}
-				fill="var(--text-secondary)"
-				opacity={0.5}
-			/>
-			{/* Percentage text */}
-			<text
-				x={ex + (cos >= 0 ? 1 : -1) * 4}
-				y={ey}
-				dy={4}
-				textAnchor={textAnchor}
-				fill="var(--text-primary)"
-				className="text-[10px] font-bold"
-			>
-				{`${(pct * 100).toFixed(1)}%`}
-			</text>
-		</g>
-	);
-};
 
 const getReadStatusColor = (name: string): string => {
 	const map: Record<string, string> = {
@@ -1911,436 +1862,77 @@ export const AnalyticsPage: React.FC = () => {
 			{currentTab === "manga" && (
 				<div className="space-y-8 animate-in fade-in duration-200">
 					{renderFiltersPool()}
-					{/* Overview Stats Cards */}
+					{/* Storytelling Banner & Interactive KPI Deck */}
 					{overview && (
-						<div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex items-center space-x-4 shadow-sm hover:shadow-md transition">
-								<div className="p-4 bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-xl">
-									<BookOpen size={24} />
-								</div>
-								<div>
-									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
-										Filtered Manga
-									</span>
-									<span className="text-3xl font-bold">
-										{overview.total_manga}
-									</span>
-								</div>
-							</div>
-
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex items-center space-x-4 shadow-sm hover:shadow-md transition">
-								<div className="p-4 bg-orange-50 dark:bg-zinc-800 text-[var(--brand-coral)] rounded-xl">
-									<Layers size={24} />
-								</div>
-								<div>
-									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
-										Reviews Logged
-									</span>
-									<span className="text-3xl font-bold">
-										{overview.total_reviews}
-									</span>
-								</div>
-							</div>
-
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex items-center space-x-4 shadow-sm hover:shadow-md transition">
-								<div className="p-4 bg-yellow-50 dark:bg-zinc-800 text-yellow-500 rounded-xl">
-									<Star size={24} />
-								</div>
-								<div>
-									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
-										Avg Rating
-									</span>
-									<span className="text-3xl font-bold flex items-center">
-										{overview.average_rating}{" "}
-										<span className="text-xs text-yellow-500 ml-1">★</span>
-									</span>
-								</div>
-							</div>
-
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex items-center space-x-4 shadow-sm hover:shadow-md transition">
-								<div className="p-4 bg-green-50 dark:bg-zinc-800 text-green-500 rounded-xl">
-									<Award size={24} />
-								</div>
-								<div>
-									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block font-poppins">
-										Completed
-									</span>
-									<span className="text-3xl font-bold">
-										{overview.status_distribution.completed}
-									</span>
-								</div>
-							</div>
+						<div className="space-y-6">
+							<ReadingProgressStoryBanner
+								overview={overview}
+								topTags={topTags}
+								onFilterStatus={(st) => {
+									setSelectedReadStatuses([st]);
+									setExcludeReadStatuses([]);
+								}}
+							/>
+							<StorytellingKPIDeck overview={overview} />
 						</div>
 					)}
 
-					<div className="grid grid-cols-1 gap-8">
-						{/* Read Status Distribution Pie */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-							<h3 className="text-lg font-bold">Read Status Distribution</h3>
-							<div className="h-72 relative flex flex-col justify-center">
-								{pieData.length > 0 ? (
-									<>
-										<div className="h-52">
-											<ResponsiveContainer width="100%" height="100%">
-												<PieChart>
-													<Pie
-														data={pieData}
-														cx="50%"
-														cy="50%"
-														innerRadius={52}
-														outerRadius={72}
-														paddingAngle={5}
-														dataKey="value"
-														label={renderCustomPieLabel}
-														labelLine={false}
-													>
-														{pieData.map((entry, index) => (
-															<Cell key={`cell-${index}`} fill={entry.color} />
-														))}
-													</Pie>
-													<Tooltip
-														contentStyle={{
-															backgroundColor: "var(--bg-card)",
-															borderColor: "var(--border-primary)",
-															color: "var(--text-primary)",
-															borderRadius: "12px",
-															fontSize: "12px",
-														}}
-														itemStyle={{ color: "var(--text-primary)" }}
-														labelStyle={{
-															color: "var(--text-secondary)",
-															fontWeight: "bold",
-														}}
-													/>
-												</PieChart>
-											</ResponsiveContainer>
-										</div>
-										<div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-											{(() => {
-												const totalVal = pieData.reduce(
-													(sum, item) => sum + item.value,
-													0,
-												);
-												return pieData.map((item, idx) => {
-													const percentage =
-														totalVal > 0
-															? ((item.value / totalVal) * 100).toFixed(1)
-															: "0.0";
-													return (
-														<div
-															key={idx}
-															className="flex items-center space-x-1.5"
-														>
-															<span
-																className="w-2.5 h-2.5 rounded-full"
-																style={{ backgroundColor: item.color }}
-															/>
-															<span className="text-[var(--text-secondary)]">
-																{item.name} ({item.value} - {percentage}%)
-															</span>
-														</div>
-													);
-												});
-											})()}
-										</div>
-									</>
-								) : (
-									<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
-										No status data found.
-									</div>
-								)}
-							</div>
-						</div>
+					{/* Read Status Distribution Multi-View Card */}
+					<div className="w-full">
+						<ReadStatusDistributionCard
+							data={pieData}
+							totalManga={overview?.total_manga}
+							onSelectStatus={(statusName) => {
+								const map: Record<string, string> = {
+									Unread: "unread",
+									Reading: "reading",
+									Completed: "completed",
+									Dropped: "dropped",
+									"On Hold": "on_hold",
+									"Plan to Read": "plan_to_read",
+									"Re-reading": "re_reading",
+									"Re-Reading": "re_reading",
+								};
+								const key =
+									map[statusName] ||
+									statusName.toLowerCase().replace(/\s+/g, "_");
+								setSelectedReadStatuses([key]);
+								setExcludeReadStatuses([]);
+							}}
+						/>
 					</div>
 					{/* Demographic, Publishing Status & Original Language Row */}
 					{metadataDists && (
 						<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-							{/* Demographic Pie */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-								<h3 className="text-lg font-bold">Demographic Distribution</h3>
-								<div className="h-72 flex flex-col justify-center">
-									{metadataDists.demographic.filter((d) => d.value > 0).length >
-									0 ? (
-										<>
-											<div className="h-52">
-												<ResponsiveContainer width="100%" height="100%">
-													<PieChart>
-														<Pie
-															data={metadataDists.demographic.filter(
-																(d) => d.value > 0,
-															)}
-															cx="50%"
-															cy="50%"
-															innerRadius={52}
-															outerRadius={72}
-															paddingAngle={5}
-															dataKey="value"
-															label={renderCustomPieLabel}
-															labelLine={false}
-														>
-															{metadataDists.demographic
-																.filter((d) => d.value > 0)
-																.map((entry, index) => (
-																	<Cell
-																		key={`cell-${index}`}
-																		fill={DEMO_COLORS[entry.name] || "#6B7280"}
-																	/>
-																))}
-														</Pie>
-														<Tooltip
-															contentStyle={{
-																backgroundColor: "var(--bg-card)",
-																borderColor: "var(--border-primary)",
-																color: "var(--text-primary)",
-																borderRadius: "12px",
-																fontSize: "12px",
-															}}
-															itemStyle={{ color: "var(--text-primary)" }}
-															labelStyle={{
-																color: "var(--text-secondary)",
-																fontWeight: "bold",
-															}}
-														/>
-													</PieChart>
-												</ResponsiveContainer>
-											</div>
-											<div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-												{(() => {
-													const activeDemos = metadataDists.demographic.filter(
-														(d) => d.value > 0,
-													);
-													const totalVal = activeDemos.reduce(
-														(sum, item) => sum + item.value,
-														0,
-													);
-													return activeDemos.map((item, idx) => {
-														const percentage =
-															totalVal > 0
-																? ((item.value / totalVal) * 100).toFixed(1)
-																: "0.0";
-														return (
-															<div
-																key={idx}
-																className="flex items-center space-x-1.5"
-															>
-																<span
-																	className="w-2.5 h-2.5 rounded-full"
-																	style={{
-																		backgroundColor:
-																			DEMO_COLORS[item.name] || "#6B7280",
-																	}}
-																/>
-																<span className="text-[var(--text-secondary)]">
-																	{item.name} ({item.value} - {percentage}%)
-																</span>
-															</div>
-														);
-													});
-												})()}
-											</div>
-										</>
-									) : (
-										<div className="text-center text-[var(--text-secondary)] text-sm my-auto">
-											No demographic metadata.
-										</div>
-									)}
-								</div>
-							</div>
+							<MetadataDistributionCard
+								title="Demographic Distribution"
+								subtitle="Phân bố đối tượng độc giả"
+								data={metadataDists.demographic}
+								colorMap={DEMO_COLORS}
+								onItemClick={(name) => {
+									setDemographics([name]);
+								}}
+							/>
 
-							{/* Publishing Status Pie */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-								<h3 className="text-lg font-bold">Publishing Status</h3>
-								<div className="h-72 flex flex-col justify-center">
-									{metadataDists.publishing_status.filter((d) => d.value > 0)
-										.length > 0 ? (
-										<>
-											<div className="h-52">
-												<ResponsiveContainer width="100%" height="100%">
-													<PieChart>
-														<Pie
-															data={metadataDists.publishing_status.filter(
-																(d) => d.value > 0,
-															)}
-															cx="50%"
-															cy="50%"
-															innerRadius={52}
-															outerRadius={72}
-															paddingAngle={5}
-															dataKey="value"
-															label={renderCustomPieLabel}
-															labelLine={false}
-														>
-															{metadataDists.publishing_status
-																.filter((d) => d.value > 0)
-																.map((entry, index) => (
-																	<Cell
-																		key={`cell-${index}`}
-																		fill={
-																			PUB_STATUS_COLORS[entry.name] || "#6B7280"
-																		}
-																	/>
-																))}
-														</Pie>
-														<Tooltip
-															contentStyle={{
-																backgroundColor: "var(--bg-card)",
-																borderColor: "var(--border-primary)",
-																color: "var(--text-primary)",
-																borderRadius: "12px",
-																fontSize: "12px",
-															}}
-															itemStyle={{ color: "var(--text-primary)" }}
-															labelStyle={{
-																color: "var(--text-secondary)",
-																fontWeight: "bold",
-															}}
-														/>
-													</PieChart>
-												</ResponsiveContainer>
-											</div>
-											<div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-												{(() => {
-													const activePubs =
-														metadataDists.publishing_status.filter(
-															(d) => d.value > 0,
-														);
-													const totalVal = activePubs.reduce(
-														(sum, item) => sum + item.value,
-														0,
-													);
-													return activePubs.map((item, idx) => {
-														const percentage =
-															totalVal > 0
-																? ((item.value / totalVal) * 100).toFixed(1)
-																: "0.0";
-														return (
-															<div
-																key={idx}
-																className="flex items-center space-x-1.5"
-															>
-																<span
-																	className="w-2.5 h-2.5 rounded-full"
-																	style={{
-																		backgroundColor:
-																			PUB_STATUS_COLORS[item.name] || "#6B7280",
-																	}}
-																/>
-																<span className="text-[var(--text-secondary)]">
-																	{item.name} ({item.value} - {percentage}%)
-																</span>
-															</div>
-														);
-													});
-												})()}
-											</div>
-										</>
-									) : (
-										<div className="text-center text-[var(--text-secondary)] text-sm my-auto">
-											No status metadata.
-										</div>
-									)}
-								</div>
-							</div>
+							<MetadataDistributionCard
+								title="Publishing Status"
+								subtitle="Tình trạng phát hành tác phẩm"
+								data={metadataDists.publishing_status}
+								colorMap={PUB_STATUS_COLORS}
+								onItemClick={(name) => {
+									setStatuses([name]);
+								}}
+							/>
 
-							{/* Content Rating Distribution Pie Chart */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-								<h3 className="text-lg font-bold">
-									Content Rating Distribution
-								</h3>
-								<div className="h-72 flex flex-col justify-center">
-									{metadataDists.content_rating &&
-									metadataDists.content_rating.filter((d) => d.value > 0)
-										.length > 0 ? (
-										<>
-											<div className="h-52">
-												<ResponsiveContainer width="100%" height="100%">
-													<PieChart>
-														<Pie
-															data={metadataDists.content_rating.filter(
-																(d) => d.value > 0,
-															)}
-															cx="50%"
-															cy="50%"
-															innerRadius={52}
-															outerRadius={72}
-															paddingAngle={5}
-															dataKey="value"
-															label={renderCustomPieLabel}
-															labelLine={false}
-														>
-															{metadataDists.content_rating
-																.filter((d) => d.value > 0)
-																.map((entry, index) => (
-																	<Cell
-																		key={`cell-${index}`}
-																		fill={
-																			CONTENT_RATING_COLORS[entry.name] ||
-																			"#6B7280"
-																		}
-																	/>
-																))}
-														</Pie>
-														<Tooltip
-															contentStyle={{
-																backgroundColor: "var(--bg-card)",
-																borderColor: "var(--border-primary)",
-																color: "var(--text-primary)",
-																borderRadius: "12px",
-																fontSize: "12px",
-															}}
-															itemStyle={{ color: "var(--text-primary)" }}
-															labelStyle={{
-																color: "var(--text-secondary)",
-																fontWeight: "bold",
-															}}
-														/>
-													</PieChart>
-												</ResponsiveContainer>
-											</div>
-											<div className="flex justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold max-h-[80px] overflow-y-auto">
-												{(() => {
-													const activeRatings =
-														metadataDists.content_rating.filter(
-															(d) => d.value > 0,
-														);
-													const totalVal = activeRatings.reduce(
-														(sum, item) => sum + item.value,
-														0,
-													);
-													return activeRatings.map((item, idx) => {
-														const percentage =
-															totalVal > 0
-																? ((item.value / totalVal) * 100).toFixed(1)
-																: "0.0";
-														return (
-															<div
-																key={idx}
-																className="flex items-center space-x-1.5"
-															>
-																<span
-																	className="w-2.5 h-2.5 rounded-full"
-																	style={{
-																		backgroundColor:
-																			CONTENT_RATING_COLORS[item.name] ||
-																			"#6B7280",
-																	}}
-																/>
-																<span className="text-[var(--text-secondary)]">
-																	{item.name} ({item.value} - {percentage}%)
-																</span>
-															</div>
-														);
-													});
-												})()}
-											</div>
-										</>
-									) : (
-										<div className="text-center text-[var(--text-secondary)] text-sm my-auto">
-											No content rating metadata.
-										</div>
-									)}
-								</div>
-							</div>
+							<MetadataDistributionCard
+								title="Content Rating"
+								subtitle="Phân loại độ tuổi & nội dung"
+								data={metadataDists.content_rating || []}
+								colorMap={CONTENT_RATING_COLORS}
+								onItemClick={(name) => {
+									setContentRatings([name]);
+								}}
+							/>
 						</div>
 					)}
 
@@ -3196,45 +2788,16 @@ export const AnalyticsPage: React.FC = () => {
 			{currentTab === "reviews" && (
 				<div className="space-y-8 animate-in fade-in duration-200">
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-						{/* Score Distribution Chart */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-							<h3 className="text-lg font-bold">Rating Distribution</h3>
-							<div className="h-72">
-								{scoreDist.length > 0 ? (
-									<ResponsiveContainer width="100%" height="100%">
-										<BarChart data={scoreDist}>
-											<CartesianGrid strokeDasharray="3 3" vertical={false} />
-											<XAxis dataKey="score" />
-											<YAxis allowDecimals={false} />
-											<Tooltip
-												contentStyle={{
-													backgroundColor: "var(--bg-card)",
-													borderColor: "var(--border-primary)",
-													color: "var(--text-primary)",
-													borderRadius: "12px",
-													fontSize: "12px",
-													boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-												}}
-												itemStyle={{ color: "var(--text-primary)" }}
-												labelStyle={{
-													color: "var(--text-secondary)",
-													fontWeight: "bold",
-												}}
-											/>
-											<Bar
-												dataKey="count"
-												fill="var(--brand-orange)"
-												radius={[4, 4, 0, 0]}
-											/>
-										</BarChart>
-									</ResponsiveContainer>
-								) : (
-									<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
-										No ratings found in the selected pool.
-									</div>
-								)}
-							</div>
-						</div>
+						{/* Score Distribution Chart with Multiple Views */}
+						<RatingDistributionCard
+							data={scoreDist}
+							averageRating={overview?.average_rating}
+							totalManga={overview?.total_manga}
+							onSelectScore={(score) => {
+								setRatingMin(score);
+								setRatingMax(score);
+							}}
+						/>
 
 						{/* Rating averages by demographics and statuses */}
 						{ratingInsights && (

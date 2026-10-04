@@ -57,6 +57,23 @@
 	}
 }
 
+/* Suppress unwanted white rectangle focus outline on Recharts SVGs & chart containers */
+.recharts-wrapper,
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-responsive-container,
+.recharts-responsive-container:focus,
+.recharts-responsive-container:focus-visible,
+.recharts-sector:focus,
+.recharts-pie-sector:focus,
+svg.recharts-surface:focus {
+	outline: none !important;
+	box-shadow: none !important;
+}
+
 /* Smooth Container Width Transition for Review Editor & Dynamic Layouts */
 .review-editor-container {
 	transition:

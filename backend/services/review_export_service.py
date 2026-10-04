@@ -86,8 +86,8 @@ class ReviewExportService:
             for child in content_nodes:
                 child_md = self.tiptap_to_markdown(child).strip()
                 if child_md:
-                    for l in child_md.split("\n"):
-                        lines.append(f"> {l}" if l else ">")
+                    for line in child_md.split("\n"):
+                        lines.append(f"> {line}" if line else ">")
             return "\n".join(lines)
 
         if node_type == "bulletList":
