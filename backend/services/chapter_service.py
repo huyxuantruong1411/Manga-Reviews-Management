@@ -175,10 +175,12 @@ class ChapterService:
         chapter["id"] = str(chapter["_id"])
         chapter.pop("_id", None)
 
-        if include_presigned_urls and "pages" in chapter:
+        if "pages" in chapter:
             for page in chapter["pages"]:
+                if not page.get("page_uid"):
+                    page["page_uid"] = str(uuid.uuid4())
                 object_key = page.get("object_key")
-                if object_key:
+                if include_presigned_urls and object_key:
                     page["url"] = minio_service.get_presigned_url(object_key)
 
         return chapter
@@ -239,9 +241,21 @@ class ChapterService:
             )
 
         if existing:
+            old_pages = existing.get("pages", [])
+            old_uid_map = {
+                p.get("page_number"): p.get("page_uid") for p in old_pages if isinstance(p, dict) and p.get("page_uid")
+            }
+            for p in pages:
+                if isinstance(p, dict) and not p.get("page_uid"):
+                    p["page_uid"] = old_uid_map.get(p.get("page_number")) or str(uuid.uuid4())
+            doc["pages_revision"] = existing.get("pages_revision", 1) + (1 if pages != old_pages else 0)
             await self._get_chapters_col().update_one({"_id": existing["_id"]}, {"$set": doc})
             return str(existing["_id"])
         else:
+            for p in pages:
+                if isinstance(p, dict) and not p.get("page_uid"):
+                    p["page_uid"] = str(uuid.uuid4())
+            doc["pages_revision"] = 1
             doc["created_at"] = now
             result = await self._get_chapters_col().insert_one(doc)
             return str(result.inserted_id)
@@ -420,12 +434,14 @@ class ChapterService:
             else:
                 pages_to_keep.append(p)
 
-        # Renumber remaining pages strictly 1..N and build mapping
+        # Renumber remaining pages strictly 1..N and build mapping while preserving page_uid
         old_to_new = {}
         for idx, p in enumerate(pages_to_keep):
             old_num = p["page_number"]
             new_num = idx + 1
             p["page_number"] = new_num
+            if not p.get("page_uid"):
+                p["page_uid"] = str(uuid.uuid4())
             old_to_new[old_num] = new_num
 
         # Cascading delete panels for deleted pages and renumber remaining
@@ -439,7 +455,14 @@ class ChapterService:
 
         await self._get_chapters_col().update_one(
             filter_query,
-            {"$set": {"pages": pages_to_keep, "page_count": len(pages_to_keep), "updated_at": datetime.utcnow()}},
+            {
+                "$set": {
+                    "pages": pages_to_keep,
+                    "page_count": len(pages_to_keep),
+                    "updated_at": datetime.utcnow(),
+                },
+                "$inc": {"pages_revision": 1},
+            },
         )
 
         progress = await self._get_reading_col().find_one(
@@ -652,6 +675,7 @@ class ChapterService:
                     "source": "local_import",
                     "pages": [p.dict() for p in page_items],
                     "page_count": len(page_items),
+                    "pages_revision": 1,
                     "created_at": now,
                     "updated_at": now,
                 }
@@ -843,6 +867,7 @@ class ChapterService:
                     "source": "local_import",
                     "pages": [p.dict() for p in page_items],
                     "page_count": len(page_items),
+                    "pages_revision": 1,
                     "created_at": now,
                     "updated_at": now,
                 }
@@ -997,9 +1022,11 @@ class ChapterService:
                     updated_pages.append(p)
 
             if modified:
-                # Renumber remaining pages
+                # Renumber remaining pages while preserving page_uid
                 for idx, p in enumerate(updated_pages):
                     p["page_number"] = idx + 1
+                    if not p.get("page_uid"):
+                        p["page_uid"] = str(uuid.uuid4())
 
                 await self._get_chapters_col().update_one(
                     {"_id": ch_id},
@@ -1008,7 +1035,8 @@ class ChapterService:
                             "pages": updated_pages,
                             "page_count": len(updated_pages),
                             "updated_at": datetime.utcnow(),
-                        }
+                        },
+                        "$inc": {"pages_revision": 1},
                     },
                 )
 

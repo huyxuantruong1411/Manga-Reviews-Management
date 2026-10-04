@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **130**
+Total Endpoints Discovered: **157**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -134,6 +134,33 @@ Total Endpoints Discovered: **130**
 | `PUT` | `/api/tags/{tag_id}` | `update_tag` | Tags | [`tags.py:95`](../../backend/routers/tags.py#L95) | Yes |
 | `POST` | `/api/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | No (Alias) |
 | `GET` | `/api/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | No (Alias) |
-| `GET` | `/health` | `health_check` | - | [`main.py:107`](../../backend/main.py#L107) | Yes |
+| `POST` | `/api/translation/assets/cleanup` | `preview_or_run_cleanup` | Translation Studio | [`translation.py:226`](../../backend/routers/translation.py#L226) | Yes |
+| `GET` | `/api/translation/assets/resolve-url` | `resolve_asset_url` | Translation Studio | [`translation.py:246`](../../backend/routers/translation.py#L246) | Yes |
+| `POST` | `/api/translation/assets/upload-demo` | `upload_demo_asset` | Translation Studio | [`translation.py:232`](../../backend/routers/translation.py#L232) | Yes |
+| `GET` | `/api/translation/assets/usage` | `get_storage_usage` | Translation Studio | [`translation.py:220`](../../backend/routers/translation.py#L220) | Yes |
+| `GET` | `/api/translation/bindings/{chapter_id}` | `get_chapter_bindings` | Translation Studio | [`translation.py:256`](../../backend/routers/translation.py#L256) | Yes |
+| `GET` | `/api/translation/capabilities` | `get_capabilities` | Translation Studio | [`translation.py:39`](../../backend/routers/translation.py#L39) | Yes |
+| `GET` | `/api/translation/export/{chapter_id}` | `export_chapter_translation` | Translation Studio | [`translation.py:381`](../../backend/routers/translation.py#L381) | Yes |
+| `GET` | `/api/translation/fonts` | `list_fonts` | Translation Studio | [`translation.py:192`](../../backend/routers/translation.py#L192) | Yes |
+| `POST` | `/api/translation/fonts` | `upload_font` | Translation Studio | [`translation.py:198`](../../backend/routers/translation.py#L198) | Yes |
+| `GET` | `/api/translation/jobs` | `list_jobs` | Translation Studio | [`translation.py:62`](../../backend/routers/translation.py#L62) | Yes |
+| `POST` | `/api/translation/jobs` | `create_translation_job` | Translation Studio | [`translation.py:56`](../../backend/routers/translation.py#L56) | Yes |
+| `GET` | `/api/translation/jobs/{job_id}` | `get_job_status` | Translation Studio | [`translation.py:75`](../../backend/routers/translation.py#L75) | Yes |
+| `POST` | `/api/translation/jobs/{job_id}/cancel` | `cancel_translation_job` | Translation Studio | [`translation.py:90`](../../backend/routers/translation.py#L90) | Yes |
+| `GET` | `/api/translation/jobs/{job_id}/pages` | `get_job_pages` | Translation Studio | [`translation.py:84`](../../backend/routers/translation.py#L84) | Yes |
+| `POST` | `/api/translation/jobs/{job_id}/retry` | `retry_translation_job` | Translation Studio | [`translation.py:96`](../../backend/routers/translation.py#L96) | Yes |
+| `GET` | `/api/translation/profiles` | `list_profiles` | Translation Studio | [`translation.py:105`](../../backend/routers/translation.py#L105) | Yes |
+| `POST` | `/api/translation/profiles` | `create_profile` | Translation Studio | [`translation.py:115`](../../backend/routers/translation.py#L115) | Yes |
+| `GET` | `/api/translation/profiles/{profile_id}` | `get_profile` | Translation Studio | [`translation.py:121`](../../backend/routers/translation.py#L121) | Yes |
+| `PUT` | `/api/translation/profiles/{profile_id}` | `update_profile` | Translation Studio | [`translation.py:130`](../../backend/routers/translation.py#L130) | Yes |
+| `GET` | `/api/translation/profiles/{profile_id}/diff` | `diff_profile_revisions` | Translation Studio | [`translation.py:155`](../../backend/routers/translation.py#L155) | Yes |
+| `GET` | `/api/translation/profiles/{profile_id}/export` | `export_profile` | Translation Studio | [`translation.py:168`](../../backend/routers/translation.py#L168) | Yes |
+| `GET` | `/api/translation/profiles/{profile_id}/revisions` | `get_profile_revisions` | Translation Studio | [`translation.py:149`](../../backend/routers/translation.py#L149) | Yes |
+| `GET` | `/api/translation/providers` | `list_providers` | Translation Studio | [`translation.py:183`](../../backend/routers/translation.py#L183) | Yes |
+| `GET` | `/api/translation/results/{result_id}` | `get_translation_result` | Translation Studio | [`translation.py:307`](../../backend/routers/translation.py#L307) | Yes |
+| `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
+| `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:327`](../../backend/routers/translation.py#L327) | Yes |
+| `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:346`](../../backend/routers/translation.py#L346) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:109`](../../backend/main.py#L109) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

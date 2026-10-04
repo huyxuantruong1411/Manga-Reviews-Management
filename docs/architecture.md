@@ -12,16 +12,21 @@ The system follows a modular architecture separating presentation (React 19 SPA)
 ```mermaid
 flowchart TD
     UI["Frontend (React 19 + TypeScript + Tailwind v4)"] -->|REST API & SSE| API["Backend API (FastAPI)"]
-    API --> DB[("MongoDB (6.0+ Standalone)\nMetadata, Panels & Reviews")]
-    API --> S3[("MinIO S3 (manga-library)\nPages, Covers & Media")]
+    API --> DB[("MongoDB (6.0+ Standalone)\nMetadata, Panels, Reviews & Translation")]
+    API --> S3[("MinIO S3 (manga-library)\nPages, Covers & Translation Artifacts")]
     UI -->|Direct Presigned URLs| S3
     
-    API -->|Cache Read/Write| Redis[("Redis (Alpine)\nCache & Job Queue")]
+    API -->|Cache Read/Write| Redis[("Redis (Alpine)\nCache & Job Queues")]
     API -->|Enqueue OCR Job| Redis
-    Redis -->|Consume Task| Worker["ARQ Worker (WorkerSettings)\nprocess_manga_panel_ocr"]
+    API -->|Enqueue Translation Job| Redis
+    Redis -->|arq:queue| Worker["ARQ Worker (WorkerSettings)\nprocess_manga_panel_ocr"]
+    Redis -->|arq:translation| TransWorker["Translation ARQ Worker\nexecute_translation_job_page"]
     Worker -->|OCR Results| DB
     Worker -->|Read Page Media| S3
-    Worker -->|Write Status & Result| Redis
+    TransWorker -->|JSONL Envelope| Subproc["Isolated Translator Runtime\n(services/translator-runtime)"]
+    Subproc -->|Output Manifest| TransWorker
+    TransWorker -->|Save Results & Bindings| DB
+    TransWorker -->|Upload Translated/Clean Pages| S3
 
     API -->|In-Process Scan (asyncio)| Scanner["PanelScannerService\n(OpenCV + RapidOCR + spaCy)"]
     Scanner -->|Read Page Images| S3
@@ -34,14 +39,16 @@ flowchart TD
 ### Architectural Responsibilities:
 - **FastAPI Layer** ([`backend/main.py`](../backend/main.py)): Exposes REST endpoints, validates input payloads via Pydantic v2, and manages connection pools in its lifespan context.
 - **In-Process Scanner** ([`backend/services/panel_scanner_service.py`](../backend/services/panel_scanner_service.py)): Manages interactive page slicing and dialogue extraction using `asyncio.create_task`, streaming realtime progress to the frontend via Server-Sent Events (SSE).
-- **Background Worker** ([`backend/tasks/worker.py`](../backend/tasks/worker.py)): Separate worker process running ARQ to execute heavy computer vision tasks asynchronously off the HTTP loop.
+- **Background Worker (OCR)** ([`backend/tasks/worker.py`](../backend/tasks/worker.py)): Separate worker process running ARQ to execute heavy computer vision tasks asynchronously off the HTTP loop.
+- **Translation Worker** ([`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py)): ARQ worker for `arq:translation` queue, claims page slots with fencing tokens, and manages isolated subprocess lifecycle.
+- **Subprocess Translator Runtime** ([`services/translator-runtime/`](../services/translator-runtime/)): Isolated execution plane exchanging JSONL envelopes to avoid loading heavy ML dependencies inside FastAPI.
 - **Cache Layer** ([`backend/core/redis.py`](../backend/core/redis.py)): Thread-safe Redis connection pool with automatic fallback to database reads if Redis is offline.
 
 ---
 
 ## 2. Asynchronous Processing Mechanisms
 
-The codebase contains **two distinct** asynchronous mechanisms designed for different operational modes:
+The codebase contains **three distinct** asynchronous mechanisms designed for different operational modes:
 
 ### Mechanism A: In-Process Manga Scanner (Interactive UI Flow)
 Used by the frontend [`frontend/src/pages/PanelWordsDetectorPage.tsx`](../frontend/src/pages/PanelWordsDetectorPage.tsx) to scan manga chapters with real-time feedback:
@@ -102,6 +109,41 @@ sequenceDiagram
     API-->>Client: 200 OK (status: completed, result: {...})
 ```
 
+### Mechanism C: Isolated Translation Subprocess Envelope (Translation ARQ Worker Flow)
+Used for deep-learning translation, OCR, inpainting, and rendering without polluting the FastAPI runtime dependencies:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Reader / Studio UI
+    participant API as FastAPI Translation Router
+    participant Redis as Redis Queue
+    participant Worker as Translation ARQ Worker
+    participant Runtime as Isolated Subprocess Runner
+    participant Storage as MinIO S3 (manga-library)
+    participant DB as MongoDB
+
+    UI->>API: POST /api/translation/jobs (manga_id, chapter_id, pages, profile)
+    API->>DB: Create translation_job (status: pending)
+    API->>Redis: enqueue_job('process_translation_job', job_id)
+    API-->>UI: 202 Accepted (job_id, status: pending)
+
+    Worker->>Redis: Claim translation job
+    Worker->>DB: Set job status to running
+    loop For each page in chapter
+        Worker->>Storage: Fetch source page image
+        Worker->>Runtime: Exec subprocess CLI stdin (JSON envelope)
+        Runtime->>Runtime: Isolated provider translation / OCR / inpainting
+        Runtime-->>Worker: Stdout JSON response envelope
+        Worker->>Storage: Upload rendered page, mask, and translation JSON
+        Worker->>DB: Upsert translation_page_bindings & record audit log
+    end
+    Worker->>DB: Set job status to completed
+    Worker->>Redis: Cache job progress / status
+    UI->>API: GET /api/translation/jobs/{job_id}
+    API-->>UI: 200 OK (status: completed, pages: [...])
+```
+
 ---
 
 ## 3. Data Relationships (Logical Reference Model)
@@ -114,6 +156,9 @@ erDiagram
     mangas ||--o{ reviews : "reviewed_by (manga_id)"
     mangas ||--o{ reading_progress : "tracked_for (manga_id)"
     chapters ||--o{ manga_panels : "yields (chapter_id)"
+    chapters ||--o{ translation_jobs : "translates (chapter_id)"
+    chapters ||--o{ translation_page_bindings : "binds (chapter_id)"
+    translation_jobs ||--o{ translation_page_bindings : "produces (job_id)"
     
     mangas {
         string _id PK
@@ -156,6 +201,35 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+
+    translation_jobs {
+        string _id PK
+        string manga_id FK
+        string chapter_id FK
+        string status
+        string target_lang
+        json profile_override
+        int total_pages
+        int processed_pages
+        datetime created_at
+        datetime updated_at
+    }
+
+    translation_page_bindings {
+        string _id PK
+        string manga_id FK
+        string chapter_id FK
+        int page_number
+        string page_uid
+        string status
+        string target_lang
+        string rendered_storage_key
+        string mask_storage_key
+        string translation_storage_key
+        string active_job_id FK
+        datetime created_at
+        datetime updated_at
+    }
 ```
 
 ---
@@ -167,6 +241,7 @@ erDiagram
 | `manga:detail:{manga_id}` | Redis | 300s (5 min) | Manga update, chapter add/delete, rating edit | Direct read from MongoDB `mangas` |
 | `reviews:manga:{manga_id}` | Redis | 180s (3 min) | Review create, update, or delete | Direct read from MongoDB `reviews` |
 | `task:ocr:{task_id}` | Redis | 3,600s (queued/running)<br>86,400s (finished) | Natural TTL expiration | Returns ARQ job status or 404 |
+| `trans:job:{job_id}` | Redis | 86,400s (24h) | Job completion or cancellation | Direct read from MongoDB `translation_jobs` |
 
 ---
 

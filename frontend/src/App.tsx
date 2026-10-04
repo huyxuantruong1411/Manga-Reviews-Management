@@ -16,6 +16,9 @@ const MangaReaderPage = lazy(() => import("./pages/MangaReaderPage"));
 const PanelWordsDetectorPage = lazy(
 	() => import("./pages/PanelWordsDetectorPage"),
 );
+const TranslationStudioPage = lazy(
+	() => import("./pages/TranslationStudioPage"),
+);
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AlertProvider } from "./hooks/useAlert";
@@ -57,6 +60,11 @@ export const App: React.FC = () => {
 									<Route path="sync" element={<SyncManagerPage />} />
 									<Route path="audit-logs" element={<AuditLogsPage />} />
 									<Route path="audit" element={<AuditLogsPage />} />
+									<Route
+										path="translation"
+										element={<TranslationStudioPage />}
+									/>
+									<Route path="studio" element={<TranslationStudioPage />} />
 									<Route
 										path="*"
 										element={

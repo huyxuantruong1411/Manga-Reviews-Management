@@ -14,6 +14,7 @@
 - A rich WYSIWYG review editor (TipTap) with interactive manga cards and Gemini AI writing assistance.
 - A **Panel Words Detector**: comic panel dialogue extraction and lexical search via OpenCV contour segmentation, RapidOCR (PP-OCRv4), dictionary lemmatization (spaCy), and MangaOCR cleanups.
 - An asynchronous task worker (ARQ + Redis) for background OCR and a Redis caching layer.
+- A **Translation Studio & Reader Translation Subsystem**: In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
 
 ---
 
@@ -36,18 +37,21 @@ Always refer to project manifests and lockfiles rather than assumptions:
 - **Backend API**: [`backend/main.py`](../backend/main.py)
   - Run command: `uv run --project backend uvicorn backend.main:app --reload --port 8000`
   - Lifespan initializes: MongoDB client, MinIO bucket, Redis cache pool, ARQ task pool, and database indexes.
-- **ARQ Task Worker**: [`backend/tasks/worker.py`](../backend/tasks/worker.py)
+- **ARQ Task Worker (Vision OCR)**: [`backend/tasks/worker.py`](../backend/tasks/worker.py)
   - Run command: `uv run --project backend arq backend.tasks.worker.WorkerSettings`
   - Consumes queue jobs: `process_manga_panel_ocr` (defined in [`backend/tasks/ocr.py`](../backend/tasks/ocr.py)).
+- **ARQ Translation Worker**: [`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py)
+  - Run command: `uv run --project backend arq backend.tasks.translation_worker.WorkerSettings`
+  - Consumes queue `arq:translation`: page slot lease claiming, invokes isolated subprocess runner.
 - **Frontend SPA**: [`frontend/src/main.tsx`](../frontend/src/main.tsx) & [`frontend/src/App.tsx`](../frontend/src/App.tsx)
   - Run command: `pnpm --dir frontend dev` (proxies `/api` to `http://localhost:8000`).
   - Global providers: `AlertProvider`, `DownloadProvider`, `TooltipProvider` (shadcn).
 
 ---
 
-## 4. Two Distinct Asynchronous OCR Mechanisms
+## 4. Asynchronous Processing Mechanisms
 
-Do not confuse these two mechanisms when reading or editing code:
+The system employs three asynchronous execution paths:
 
 1. **In-Process Scanner (`PanelScannerService`)**:
    - Location: [`backend/services/panel_scanner_service.py`](../backend/services/panel_scanner_service.py)
@@ -55,12 +59,16 @@ Do not confuse these two mechanisms when reading or editing code:
    - Execution: Launched inside the FastAPI process via `asyncio.create_task`.
    - Client Tracking: Server-Sent Events (SSE) via `GET /api/vision/scan-progress`.
    - Workflow: Reads page image from MinIO/disk $\rightarrow$ RapidOCR whole-page detection $\rightarrow$ selects bbox mode (`panel`, `bubble`, `fullpage`) $\rightarrow$ cleans text with `MangaOCRService` $\rightarrow$ linguistic extraction (spaCy) $\rightarrow$ writes to `manga_panels` collection.
-2. **Background Task Queue (`ARQ Worker`)**:
+2. **Background Task Queue (`ARQ Worker - OCR`)**:
    - Location: [`backend/tasks/ocr.py`](../backend/tasks/ocr.py) & [`backend/tasks/worker.py`](../backend/tasks/worker.py)
    - Triggered by: `POST /tasks/ocr` or `POST /api/panels/{id}/ocr-async`
    - Execution: Enqueued into Redis; consumed by an external ARQ worker process.
    - Client Tracking: Polling `GET /tasks/{task_id}`.
-   - Note: The frontend UI currently uses Mechanism 1 for interactive scans. Mechanism 2 is designed for standalone asynchronous worker offloading.
+3. **Isolated Translation Worker (`ARQ + Subprocess Envelope`)**:
+   - Location: [`backend/tasks/translation.py`](../backend/tasks/translation.py) & [`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py)
+   - Triggered by: `POST /api/translation/jobs`
+   - Execution: Dedicated queue `arq:translation`. Claims page slot with fencing token $\rightarrow$ sends JSONL envelope to subprocess runner ([`services/translator-runtime/adapter/runner.py`](../services/translator-runtime/adapter/runner.py)) $\rightarrow$ isolates heavy ML dependencies from FastAPI host $\rightarrow$ commits results to MinIO and MongoDB.
+   - Client Tracking: Polling `GET /api/translation/jobs/{job_id}`.
 
 ---
 
@@ -73,10 +81,12 @@ Do not confuse these two mechanisms when reading or editing code:
   - `reviews`: Rich reviews stored in TipTap JSON format (`content_json`).
   - `reading_progress`: User last-read chapter and page positions.
   - `tags`, `creators`, `audit_logs`: Auxiliary categorization and operational logs.
+  - `translation_profiles`, `translation_providers`, `translation_font_packs`, `translation_assets`, `translation_jobs`, `translation_job_pages`, `translation_results`, `translation_page_bindings`: Translation Studio entities.
   - *Note*: Relationships are application-level logical references, not SQL foreign keys.
 - **MinIO S3 (`manga-library` bucket)**:
-  - Page keys: `pages/{manga_id}/{chapter_id}/{filename}`
+  - Page keys: `pages/{manga_id}/{chapter_id}/{filename}` (Immutable raw images)
   - Cover keys: `covers/{manga_id}/{filename}`
+  - Translation keys: `translation/outputs/` (composites), `translation/clean/` (inpainted), `translation/demo_inputs/`, `translation/fonts/`
   - The API streams cropped panel bytes in-memory or generates presigned URLs for client viewing.
 - **Redis Caching**:
   - Pool abstraction: [`backend/core/redis.py`](../backend/core/redis.py) (gracefully falls back to direct DB if Redis is offline).

@@ -34,55 +34,58 @@
 
 ## 🌟 Overview
 
-**Manga Reviews Management** is a personal manga management ecosystem designed for manga readers, collectors, reviewers, and language learners. It combines **local object storage (MinIO S3)**, **automated MangaDex synchronization**, a **distraction-free reader**, a **rich TipTap review editor with Gemini AI assistance**, a **Redis caching & ARQ async queue**, and an innovative **Panel Words Detector** that indexes comic dialogues directly from page artwork using Computer Vision and NLP.
+**Manga Reviews Management** is a personal manga management ecosystem designed for manga readers, collectors, reviewers, and language learners. It combines **local object storage (MinIO S3)**, **automated MangaDex synchronization**, a **distraction-free reader with side-by-side AI translation comparison**, a **dedicated Translation Studio**, a **rich TipTap review editor with Gemini AI assistance**, a **Redis caching & ARQ async queue**, and an innovative **Panel Words Detector** that indexes comic dialogues directly from page artwork using Computer Vision and NLP.
 
 ---
 
 ## ✨ Key Features
 
-### 1. 🔍 System-Wide Panel Words Detector (Manga Lexis & Vision)
+### 1. 🌐 Manga AI Translation Studio & In-Reader Translation
+- **Reader Split-View Comparison**: Compare original manga artwork and AI-translated pages using an interactive split comparison slider (`clip-path`) or toggle mode.
+- **Dedicated Translation Studio (`/translation`)**: 7-tab console for chapter job orchestration, typography diagnostics, synthetic mock workspace, and live storage audit.
+- **Isolated Subprocess Runtime Envelope**: Heavy ML dependencies (OCR, translation models, inpainting) run in an isolated CLI runner envelope (`services/translator-runtime`), protecting FastAPI from memory leaks and C++ library collisions.
+- **Pure-Canvas Re-rendering (Zero LLM Tokens)**: Pillow-based canvas renderer enables instant font, alignment, and translation text tweaks without paying extra LLM token costs.
+- **Vietnamese Typography Engine**: Pure-Python TrueType/OpenType glyph validator verifies Vietnamese diacritics coverage (`ơ`, `ư`, `ắ`, `ề`, `ộ`) before rasterization.
+- **Sequential ZIP Chapter Export**: Export translated chapters with zero-padded filenames and structured `manifest.json`.
+
+### 2. 🔍 System-Wide Panel Words Detector (Manga Lexis & Vision)
 - **Automatic Panel Segmentation**: Uses OpenCV contour hierarchy analysis to isolate individual comic panels from raw pages.
 - **PP-OCRv4 Text Detection**: RapidOCR ONNX pipeline extracts stylized manga dialogue across complex comic bubble geometries.
 - **NLP Dialogue Normalization & Lemmatization**: Uses `spaCy` (`en_core_web_sm`) and `wordninja` to de-hyphenate broken dialogue words, convert uppercase comic lettering to natural case, and extract vocabulary lemmas and POS tags.
 - **Library-Wide Search Engine**: Instantly search words, dialogue quotes, or grammatical roots across **all manga and chapters** in your system.
-- **Rich Origin Metadata**: Every search result displays:
-  - Manga poster thumbnail + series title (direct link to series).
-  - Volume number (`Vol. X`), Chapter number & title (`Ch. Y`), Page number (`Trang Z`), Panel index (`Panel #N`).
-  - Dialogue snippet with query highlighted in golden amber.
-  - Interactive clickable vocabulary tokens.
+- **Rich Origin Metadata**: Displays manga poster thumbnail, chapter/volume/page/panel coords, golden-amber highlight, and clickable vocabulary tokens.
 - **Dynamic In-RAM JPEG Cropping**: Streams cropped panel artwork directly from MinIO page bytes without storing duplicate cropped images on disk.
-- **Full-Page Visual Focus**: Inspect raw original pages with an animated **golden focus bounding box** framing the matched panel.
 - **Interactive Dictionary Popover**: Click any dialogue token to view phonetic IPA pronunciation, audio playback, and definitions.
 - **One-Click Jump to Reader**: Direct shortcut into the full reader at the exact page.
 
-### 2. 📖 Immersive Manga Reader (`/manga/:id/read/:chapterId`)
+### 3. 📖 Immersive Manga Reader (`/manga/:id/read/:chapterId`)
 - **Reading Modes**: Long Strip (webtoon vertical), Single Page, Double Page Left-to-Right, Double Page Right-to-Left (traditional manga).
 - **Fit Controls**: Fit to Width, Fit to Height, Original Scale.
 - **Smooth Zoom System**: 30% to 300% zoom scaling with keyboard shortcuts (`+`, `-`, `0`).
 - **Reading Progress & Hotkeys**: Auto-saves last read chapter/page to MongoDB; full keyboard navigation (`Arrow keys`, `Space`, `F` for fullscreen).
 
-### 3. ⚡ High-Performance Caching & Async Task Worker
+### 4. ⚡ High-Performance Caching & Async Task Worker
 - **Redis Caching Pool**: Sub-millisecond response times for manga details and reviews list with auto-fallback to MongoDB when Redis is unavailable.
-- **ARQ Task Worker**: Standalone background worker decoupled from the HTTP server process for heavy batch OCR offloading.
+- **ARQ Task Worker**: Standalone background workers decoupled from the HTTP server process for OCR and Translation pipelines.
 - **Task Management API**: Query task status and cancel long-running jobs via standard REST endpoints.
 
-### 4. 📥 High-Throughput Download & Storage Manager
+### 5. 📥 High-Throughput Download & Storage Manager
 - **Anti-Freeze Concurrency Engine**: Asynchronous chapter downloader decoupled from main HTTP server threads, preventing API lockups during bulk downloads.
 - **MinIO Object Storage**: High-speed S3-compatible local bucket (`manga-library`) with deduplication checks (MD5 hash).
 - **Smart Folder Parsing**: Intelligently parses folder naming conventions (`Vol. 1 Ch. 2`, `Chapter 1 - Title [Group]`, `Oneshot`).
 - **Storage Management UI**: Pagination controls, natural numeric sorting, duplicate detection, and cascading panel metadata cleanup.
 
-### 5. ✍️ Rich Media Review Editor & Gemini AI
+### 6. ✍️ Rich Media Review Editor & Gemini AI
 - **TipTap WYSIWYG Editor**: Slash commands (`/`), resizable images, audio recordings, video player, file attachments.
 - **Interactive Manga Reference Mentions**: Type `@manga` to embed live manga cards with hover tooltips.
 - **Gemini AI Integration**: AI-assisted grammar refinement, tone adjustment, automatic summary generation, and chapter scene analysis.
 
-### 6. 🔄 MangaDex Sync & Automation
+### 7. 🔄 MangaDex Sync & Automation
 - **APIv5 Integration**: Direct metadata synchronization (titles, alternative titles, authors, artists, publication status, original language).
 - **Cover Art Gallery**: Batch downloader for high-res official MangaDex cover art with presigned URLs.
 - **MangaDex Official Tags**: 70+ categorized genre and theme tags.
 
-### 7. 📊 Analytics, Telemetry & Audit Logs
+### 8. 📊 Analytics, Telemetry & Audit Logs
 - Comprehensive charts: Reading statuses, personal ratings distribution, genres breakdown, download volume, and time-stamped audit logs for all library operations.
 
 ---
@@ -94,23 +97,26 @@ flowchart TD
     Client["Frontend (React 19 + TypeScript + Tailwind v4 + shadcn/ui)"]
     API["Backend (FastAPI + Python 3.12)"]
     Mongo[("MongoDB 6.0+\nMetadata & Panels")]
-    MinIO[("MinIO S3\nCovers & Pages")]
-    Redis[("Redis 7.0+\nCache & Task Queue")]
-    Worker["ARQ Worker Process\n(Async OCR Tasks)"]
+    MinIO[("MinIO S3\nCovers, Pages & Translations")]
+    Redis[("Redis 7.0+\nCache & Task Queues")]
+    WorkerOCR["ARQ OCR Worker\n(Panel Scanning)"]
+    WorkerTrans["ARQ Translation Worker\n(Chapter Pipelines)"]
+    Runtime["Isolated Runtime Subprocess\n(services/translator-runtime)"]
     DexAPI["MangaDex APIv5"]
-    Vision["In-Process Vision Pipeline\n(OpenCV + RapidOCR + spaCy)"]
 
-    Client -->|REST & SSE| API
+    Client -->|REST, SSE & S3 Streams| API
     API -->|Read / Write| Mongo
     API -->|Presigned URLs & Streams| MinIO
-    API -->|Cache Read/Write| Redis
-    API -->|Enqueue Task| Redis
-    Redis -->|Claim Job| Worker
-    Worker -->|OCR Results| Mongo
-    Worker -->|Read Media| MinIO
-    API -->|Fetch Chapters & Metadata| DexAPI
-    API -->|In-Process Scan| Vision
-    Vision -->|Store Panels & Lemmas| Mongo
+    API -->|Cache Read / Write| Redis
+    API -->|Enqueue Jobs| Redis
+    Redis -->|Claim OCR Jobs| WorkerOCR
+    Redis -->|Claim Translation Jobs| WorkerTrans
+    WorkerOCR -->|Store Panels| Mongo
+    WorkerTrans -->|Spawn Runner| Runtime
+    Runtime -->|Rendered Artifacts| WorkerTrans
+    WorkerTrans -->|Upload Artifacts| MinIO
+    WorkerTrans -->|Update Bindings| Mongo
+    API -->|Fetch Metadata| DexAPI
 ```
 
 ---
@@ -120,12 +126,13 @@ flowchart TD
 | Layer | Technologies |
 |---|---|
 | **Backend** | Python 3.12, FastAPI, Motor (Async MongoDB), Pydantic v2, Uvicorn |
+| **Translation Engine** | Isolated Subprocess CLI Runner (`services/translator-runtime`), Pillow (Pure Canvas), Custom TTF Glyph Validator |
 | **Vision & NLP** | OpenCV (`opencv-python-headless`), RapidOCR (PP-OCRv4 ONNX), spaCy (`en_core_web_sm`), Wordninja, MangaOCR |
-| **Caching & Tasks** | Redis (Alpine), ARQ (Async Redis Queue) |
+| **Caching & Queues** | Redis (Alpine), ARQ (Async Redis Queue workers for OCR and Translation) |
 | **Frontend** | React 19, TypeScript, Tailwind CSS v4, shadcn/ui (`radix-nova`), Vite, TipTap Editor, Lucide Icons, Axios |
-| **Database & S3** | MongoDB 6.0+ (standalone), MinIO Object Storage (S3-compatible) |
+| **Database & S3** | MongoDB 6.0+ (standalone), MinIO Object Storage (S3-compatible `manga-library`) |
 | **AI / LLM** | Google Generative AI (Gemini 1.5 Flash / Pro) |
-| **Testing & QA** | Unittest (Python), Biome (TS/TSX Linter), `@axe-core/cli` (A11y), Playwright (Visual Responsive Runner) |
+| **Testing & QA** | Pytest, Biome (TS/TSX Linter), `@axe-core/cli` (A11y), Playwright (Visual Responsive Runner) |
 
 ---
 
@@ -184,10 +191,14 @@ uv run --project backend uvicorn backend.main:app --reload --host 127.0.0.1 --po
 ```
 Swagger UI will be at `http://localhost:8000/docs`.
 
-5. *(Optional)* Start ARQ background worker in a separate terminal:
+5. *(Optional)* Start ARQ background workers in separate terminals:
 
 ```bash
+# Vision OCR Worker (Panel segmentation and NLP lexis extraction)
 uv run --project backend arq backend.tasks.worker.WorkerSettings
+
+# Translation Worker (Manga AI chapter translation pipeline)
+uv run --project backend arq backend.tasks.translation_worker.WorkerSettings
 ```
 
 ---

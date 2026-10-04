@@ -1,0 +1,24 @@
+{
+  "protocol_version": 1,
+  "upstream_repository": "https://github.com/meangrinch/MangaTranslator",
+  "pinned_commit": "924854a218dda3bc4a22c1a4e65dfe8dc9fa8ac0",
+  "license": "Apache-2.0",
+  "verified_date": "2026-10-05",
+  "patches": [
+    {
+      "name": "hook_region_transcripts",
+      "target": "core/pipeline.py",
+      "purpose": "Extract normalized bounding boxes, OCR strings, and translation transcripts per region without relying solely on final rendered image."
+    },
+    {
+      "name": "hook_clean_image_export",
+      "target": "core/pipeline.py",
+      "purpose": "Persist intermediate inpainting clean canvas to allow instant re-rendering upon manual text corrections without repeating OCR/LLM calls."
+    },
+    {
+      "name": "disable_auto_network_checks",
+      "target": "app.py",
+      "purpose": "Suppress upstream automatic updates and unmanaged model downloads."
+    }
+  ]
+}

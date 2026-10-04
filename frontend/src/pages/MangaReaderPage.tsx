@@ -21,6 +21,9 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client, { apiErrorMessage } from "../api/client";
+import { ReaderTranslationPanel } from "../components/manga/ReaderTranslationPanel";
+import { TranslatedPageImage } from "../components/manga/TranslatedPageImage";
+import { useTranslation } from "../hooks/useTranslation";
 import type { Chapter, PageItem } from "../types/chapter";
 
 export const MangaReaderPage: React.FC = () => {
@@ -43,6 +46,14 @@ export const MangaReaderPage: React.FC = () => {
 	const restorePageRef = useRef<number | null>(null);
 	const [loadingChapter, setLoadingChapter] = useState<boolean>(true);
 	const [currentPage, setCurrentPage] = useState<number>(initialPageParam);
+
+	// Translation state & job orchestration
+	const translation = useTranslation({
+		chapterId: currentChapter?.id,
+		mangaId,
+		pages,
+		initialLanguage: "vi",
+	});
 
 	// Reader Settings
 	const [readingMode, setReadingMode] = useState<
@@ -852,6 +863,31 @@ export const MangaReaderPage: React.FC = () => {
 						{isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
 					</button>
 
+					{/* Translation Quick Toggle */}
+					<button
+						onClick={() => setShowSidebar(true)}
+						className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+							translation.displayMode === "translated"
+								? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+								: "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300 hover:text-white"
+						}`}
+						title="Bản dịch Manga AI (Translation Studio)"
+					>
+						<Sparkles
+							size={14}
+							className={
+								translation.isTranslating
+									? "animate-spin text-amber-300"
+									: "text-[var(--brand-orange)]"
+							}
+						/>
+						<span className="hidden sm:inline">
+							{translation.displayMode === "translated"
+								? "Bản dịch"
+								: "Dịch AI"}
+						</span>
+					</button>
+
 					{/* Sidebar Settings Drawer Toggle (MangaDex style) */}
 					<button
 						onClick={() => setShowSidebar((prev) => !prev)}
@@ -924,27 +960,28 @@ export const MangaReaderPage: React.FC = () => {
 							<div className="flex flex-col items-center space-y-2 py-4 w-full">
 								{pages.map((page, idx) => (
 									<div
-										key={page.page_number}
+										key={page.page_uid || page.page_number}
 										ref={(el) => {
 											pageRefs.current[idx] = el;
 										}}
 										className="relative w-full flex justify-center"
 									>
-										<img
-											src={page.url || ""}
-											alt={`Page ${page.page_number}`}
-											width={page.width || undefined}
-											height={page.height || undefined}
-											loading={idx < 3 ? "eager" : "lazy"}
-											className={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
-											style={{
-												width: `${(896 * zoomLevel) / 100}px`,
-												maxWidth: zoomLevel <= 100 ? `${zoomLevel}%` : "none",
-											}}
+										<TranslatedPageImage
+											page={page}
+											binding={
+												page.page_uid
+													? translation.bindings[page.page_uid]
+													: undefined
+											}
+											displayMode={translation.displayMode}
+											compareSplit={translation.compareSplit}
+											zoomLevel={zoomLevel}
+											imageFitClass={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
+											priority={idx < 3}
+											onTranslateRequest={(uid) =>
+												translation.translatePage(uid)
+											}
 										/>
-										<span className="absolute bottom-2 right-4 px-2 py-0.5 rounded-md bg-black/60 text-zinc-300 text-[10px] font-mono pointer-events-none">
-											{page.page_number}
-										</span>
 									</div>
 								))}
 
@@ -1067,14 +1104,23 @@ export const MangaReaderPage: React.FC = () => {
 								{/* Page View */}
 								{pages[currentPage - 1] && (
 									<div className="relative z-10 flex flex-col items-center">
-										<img
-											src={pages[currentPage - 1]?.url || ""}
-											alt={`Page ${currentPage}`}
-											className={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
-											style={{
-												maxHeight: `calc(88vh * ${zoomLevel / 100})`,
-												maxWidth: `calc(90vw * ${zoomLevel / 100})`,
-											}}
+										<TranslatedPageImage
+											page={pages[currentPage - 1]}
+											binding={
+												pages[currentPage - 1].page_uid
+													? translation.bindings[
+															pages[currentPage - 1].page_uid!
+														]
+													: undefined
+											}
+											displayMode={translation.displayMode}
+											compareSplit={translation.compareSplit}
+											zoomLevel={zoomLevel}
+											imageFitClass={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
+											priority={true}
+											onTranslateRequest={(uid) =>
+												translation.translatePage(uid)
+											}
 										/>
 									</div>
 								)}
@@ -1157,14 +1203,21 @@ export const MangaReaderPage: React.FC = () => {
 											}
 
 											return (
-												<img
-													src={pageItem.url || ""}
-													alt={`Page ${pageItem.page_number}`}
-													className="h-[85vh] w-auto max-w-[45vw] object-contain shadow-2xl rounded-sm select-none"
-													style={{
-														maxHeight: `calc(85vh * ${zoomLevel / 100})`,
-														maxWidth: `calc(45vw * ${zoomLevel / 100})`,
-													}}
+												<TranslatedPageImage
+													page={pageItem}
+													binding={
+														pageItem.page_uid
+															? translation.bindings[pageItem.page_uid]
+															: undefined
+													}
+													displayMode={translation.displayMode}
+													compareSplit={translation.compareSplit}
+													zoomLevel={zoomLevel}
+													imageFitClass="h-[85vh] w-auto max-w-[45vw] object-contain shadow-2xl rounded-sm select-none"
+													priority={true}
+													onTranslateRequest={(uid) =>
+														translation.translatePage(uid)
+													}
 												/>
 											);
 										};
@@ -1173,14 +1226,21 @@ export const MangaReaderPage: React.FC = () => {
 											return (
 												<div className="flex flex-col items-center">
 													{firstPage && (
-														<img
-															src={firstPage.url || ""}
-															alt={`Page ${firstPage.page_number}`}
-															className={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
-															style={{
-																maxHeight: `calc(88vh * ${zoomLevel / 100})`,
-																maxWidth: `calc(90vw * ${zoomLevel / 100})`,
-															}}
+														<TranslatedPageImage
+															page={firstPage}
+															binding={
+																firstPage.page_uid
+																	? translation.bindings[firstPage.page_uid]
+																	: undefined
+															}
+															displayMode={translation.displayMode}
+															compareSplit={translation.compareSplit}
+															zoomLevel={zoomLevel}
+															imageFitClass={`${getImageFitClass()} shadow-2xl rounded-sm select-none`}
+															priority={true}
+															onTranslateRequest={(uid) =>
+																translation.translatePage(uid)
+															}
 														/>
 													)}
 												</div>
@@ -1234,6 +1294,39 @@ export const MangaReaderPage: React.FC = () => {
 								Ch. {currentChapter?.chapter_number}{" "}
 								{currentChapter?.title ? `- ${currentChapter.title}` : ""}
 							</div>
+						</div>
+
+						{/* Manga AI Translation Studio Integration Panel */}
+						<div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
+							<ReaderTranslationPanel
+								mangaId={mangaId}
+								chapterId={currentChapter?.id}
+								currentPage={currentPage}
+								totalPages={pages.length}
+								currentPageUid={pages[currentPage - 1]?.page_uid}
+								targetLanguage={translation.targetLanguage}
+								onTargetLanguageChange={translation.setTargetLanguage}
+								displayMode={translation.displayMode}
+								onDisplayModeChange={translation.setDisplayMode}
+								compareSplit={translation.compareSplit}
+								onCompareSplitChange={translation.setCompareSplit}
+								profiles={translation.profiles}
+								selectedProfileId={translation.selectedProfileId}
+								onProfileChange={translation.setSelectedProfileId}
+								hasCurrentPageTranslation={Boolean(
+									pages[currentPage - 1]?.page_uid &&
+										translation.bindings[pages[currentPage - 1].page_uid!]?.url,
+								)}
+								totalTranslatedPages={Object.keys(translation.bindings).length}
+								isTranslating={translation.isTranslating}
+								jobProgress={translation.jobProgress}
+								errorMessage={translation.errorMessage}
+								onTranslateCurrentPage={() => {
+									const uid = pages[currentPage - 1]?.page_uid;
+									if (uid) translation.translatePage(uid);
+								}}
+								onTranslateChapter={translation.translateChapter}
+							/>
 						</div>
 
 						{/* Language Switcher in Sidebar */}

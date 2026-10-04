@@ -23,6 +23,7 @@ from backend.routers import (
     sync_manager,
     tags,
     tasks,
+    translation,
     vision,
 )
 
@@ -101,6 +102,7 @@ app.include_router(audit_logs.router)
 app.include_router(chapters.router)
 app.include_router(vision.router)
 app.include_router(tasks.router)
+app.include_router(translation.router)
 
 
 @app.get("/health")

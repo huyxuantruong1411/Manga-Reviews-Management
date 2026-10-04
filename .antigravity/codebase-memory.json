@@ -36,6 +36,13 @@
       "summary": "Git post-commit hook triggers incremental CodeGraph sync and updates codebase-memory.json to eliminate context amnesia and stale AST graphs.",
       "status": "active",
       "updated_at": "2026-10-02T17:35:00Z"
+    },
+    {
+      "id": "ADR-006",
+      "title": "Manga Reader Translation Studio & Isolated Engine Architecture",
+      "summary": "Subprocess-isolated MangaTranslator execution plane, dedicated arq:translation queue, persistent page_uid identity, immutable profile revisions, and native React Studio workspace.",
+      "status": "active",
+      "updated_at": "2026-10-05T02:00:00Z"
     }
   ],
   "recent_modifications": [

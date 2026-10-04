@@ -64,7 +64,11 @@ Swagger UI will be available at `http://localhost:8000/docs`.
 ### 2. Asynchronous Task Worker (ARQ)
 Run from the workspace root:
 ```bash
+# Vision OCR worker
 uv run --project backend arq backend.tasks.worker.WorkerSettings
+
+# Translation Studio worker
+uv run --project backend arq backend.tasks.translation_worker.WorkerSettings
 ```
 
 ### 3. Frontend Development Server
@@ -72,35 +76,39 @@ Run from the workspace root:
 ```bash
 pnpm --dir frontend dev
 ```
-The application will be accessible at `http://localhost:5173`.
+The application will be accessible at `http://localhost:5173` (Studio at `/translation`).
 
 ---
 
 ## 4. Test Suites & Verification
 
 ### A. Backend Unit & Regression Tests
-Execute targeted unit tests using Python's standard unittest runner:
+Execute targeted tests using pytest:
 ```bash
 # Redis cache pool, invalidation & ARQ worker tests
-uv run --project backend python -m unittest backend/tests/test_redis_cache_and_worker.py
+uv run --project backend python -m pytest backend/tests/test_redis_cache_and_worker.py
 
 # Manga panel segmentation & OCR pipeline regressions
-uv run --project backend python -m unittest backend/tests/test_panel_regressions.py
+uv run --project backend python -m pytest backend/tests/test_panel_regressions.py
 
 # System-level regressions (SSRF, cascades, storage)
-uv run --project backend python -m unittest backend/tests/test_system_regressions.py
+uv run --project backend python -m pytest backend/tests/test_system_regressions.py
 
 # MangaOCR text cleaner unit tests
-uv run --project backend python -m unittest backend/tests/test_manga_ocr_service.py
+uv run --project backend python -m pytest backend/tests/test_manga_ocr_service.py
+
+# Translation Studio: jobs, profiles, fonts, revisions & envelope tests
+uv run --project backend python -m pytest backend/tests/test_translation_jobs.py backend/tests/test_translation_profiles.py backend/tests/test_translation_assets.py backend/tests/test_translation_revisions.py
+uv run --project backend python -m pytest services/translator-runtime/tests/
 ```
 
 ### B. Frontend TypeScript & Production Build
 ```bash
 # Typecheck
-pnpm --dir frontend tsc -b
+pnpm --dir frontend run typecheck
 
 # Production bundle build
-pnpm --dir frontend build
+pnpm --dir frontend run build
 ```
 
 ### C. Visual Responsive Inspection (Playwright)

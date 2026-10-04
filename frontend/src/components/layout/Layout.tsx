@@ -5,6 +5,7 @@ import {
 	DownloadCloud,
 	History,
 	Info,
+	Languages,
 	Menu,
 	RefreshCw,
 	Save,
@@ -171,6 +172,20 @@ export const Layout: React.FC = () => {
 					>
 						<ScanSearch size={20} />
 						<span>Panel Words Detector</span>
+					</NavLink>
+
+					<NavLink
+						to="/translation"
+						className={({ isActive }) =>
+							`flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+								isActive
+									? "bg-[var(--brand-orange)] text-white"
+									: "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+							}`
+						}
+					>
+						<Languages size={20} />
+						<span>Translation Studio</span>
 					</NavLink>
 
 					<NavLink

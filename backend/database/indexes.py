@@ -169,6 +169,48 @@ async def init_db_indexes():
         await db.vision_regions.create_index([("balloon_region_id", 1)])
         await db.vision_regions.create_index([("tokens.lemma", 1)])
 
+        # translation_profiles
+        await db.translation_profiles.create_index([("scope", 1), ("profile_id", 1)], unique=True)
+        await db.translation_profiles.create_index([("scope", 1), ("created_at", -1)])
+
+        # translation_profile_revisions
+        await db.translation_profile_revisions.create_index(
+            [("scope", 1), ("profile_id", 1), ("revision", 1)], unique=True
+        )
+        await db.translation_profile_revisions.create_index([("scope", 1), ("config_hash", 1)])
+
+        # translation_providers
+        await db.translation_providers.create_index("provider_id", unique=True)
+
+        # translation_assets
+        await db.translation_assets.create_index("asset_id", unique=True)
+        await db.translation_assets.create_index([("scope", 1), ("kind", 1), ("state", 1), ("created_at", -1)])
+        await db.translation_assets.create_index([("scope", 1), ("sha256", 1)])
+
+        # translation_font_packs
+        await db.translation_font_packs.create_index([("scope", 1), ("font_pack_id", 1), ("revision", 1)], unique=True)
+
+        # translation_jobs
+        await db.translation_jobs.create_index("job_id", unique=True)
+        await db.translation_jobs.create_index([("scope", 1), ("created_at", -1)])
+        await db.translation_jobs.create_index([("state", 1), ("created_at", 1)])
+
+        # translation_job_pages
+        await db.translation_job_pages.create_index([("job_id", 1), ("page_identity", 1)], unique=True)
+        await db.translation_job_pages.create_index([("job_id", 1), ("ordinal", 1)])
+        await db.translation_job_pages.create_index([("state", 1), ("lease_until", 1)])
+
+        # translation_results
+        await db.translation_results.create_index([("scope", 1), ("fingerprint", 1)], unique=True)
+        await db.translation_results.create_index(
+            [("scope", 1), ("chapter_id", 1), ("page_uid", 1), ("target_language", 1)]
+        )
+
+        # translation_page_bindings
+        await db.translation_page_bindings.create_index(
+            [("scope", 1), ("chapter_id", 1), ("page_uid", 1), ("target_language", 1)], unique=True
+        )
+
         # Run backfill
         await backfill_manga_status_timestamps()
 

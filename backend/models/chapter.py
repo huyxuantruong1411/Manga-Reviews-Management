@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ from backend.models.pyobjectid import PyObjectId
 
 
 class PageItem(BaseModel):
+    page_uid: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Stable page occurrence UUID")
     page_number: int = Field(..., description="1-indexed page number")
     filename: str = Field(..., description="File name e.g. 001.jpg")
     object_key: str = Field(..., description="MinIO storage key")
@@ -29,6 +31,7 @@ class ChapterBase(BaseModel):
     source_id: Optional[str] = Field(None, description="External ID e.g. MangaDex chapter UUID")
     pages: List[PageItem] = Field(default_factory=list)
     page_count: int = Field(0, description="Total pages in chapter")
+    pages_revision: int = Field(default=1, description="Page sequence and content revision counter")
     uploader: Optional[str] = Field(None, description="Uploader username")
     publish_at: Optional[datetime] = Field(None, description="Publish date on source")
     readable_at: Optional[datetime] = Field(None, description="Readable date on source")

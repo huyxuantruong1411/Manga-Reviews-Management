@@ -9,5 +9,7 @@
 - [Code Map & File Directory](docs/code-map.md): Task-to-files lookup table across all 16 backend routers, 20 services, and frontend pages.
 - [Development & Operations](docs/development.md): Step-by-step local setup, Docker dependencies, test execution commands, and troubleshooting.
 - [Coding Guidelines for Agents](AGENTS.md): Governance rules for AI agents, including TDD workflow, layer boundaries, and linting standards.
-- [Security & Scope Policy](SECURITY.md): Local/trusted environment scope and data classification boundaries.
+- [Translation Studio ADR](docs/translation/adr-001-translation-studio-architecture.md): Architectural decisions, envelope isolation, and storage lifecycles for manga translation.
+- [Translation Operational Runbook](docs/translation/operational-runbook.md): Operations guide, runtime setup, reference-aware GC, and rollback procedures.
 - [Project Readme](README.md): Human-oriented project presentation and feature overview.
+
