@@ -69,13 +69,39 @@ class TranslationJobService:
                 raise HTTPException(status_code=404, detail="Chapter not found.")
 
             stored_pages = chap.get("pages", [])
-            stored_uid_map = {p.get("page_uid"): p for p in stored_pages if p.get("page_uid")}
+            modified_pages = False
+            for p in stored_pages:
+                if not p.get("page_uid"):
+                    p["page_uid"] = str(uuid.uuid4())
+                    modified_pages = True
 
-            if req.source.page_uids:
+            if modified_pages:
+                up_fields = {"pages": stored_pages}
+                if "pages_revision" not in chap:
+                    up_fields["pages_revision"] = 1
+                await self._get_chapters_col().update_one(filter_q, {"$set": up_fields})
+
+            stored_uid_map = {p.get("page_uid"): p for p in stored_pages if p.get("page_uid")}
+            page_num_map = {
+                p.get("page_number", idx + 1): p.get("page_uid")
+                for idx, p in enumerate(stored_pages)
+                if p.get("page_uid")
+            }
+
+            if req.source.page_numbers:
+                for num in req.source.page_numbers:
+                    found_uid = page_num_map.get(num)
+                    if found_uid and found_uid not in page_uids:
+                        page_uids.append(found_uid)
+            elif req.source.page_uids:
                 # Specific page subset requested
                 for uid in req.source.page_uids:
                     if uid in stored_uid_map:
                         page_uids.append(uid)
+                    elif uid.isdigit() and int(uid) in page_num_map:
+                        page_uids.append(page_num_map[int(uid)])
+                    elif len(req.source.page_uids) == 1 and len(stored_pages) == 1:
+                        page_uids.append(stored_pages[0]["page_uid"])
                     else:
                         raise HTTPException(status_code=422, detail=f"Page UID '{uid}' does not belong to chapter.")
             else:

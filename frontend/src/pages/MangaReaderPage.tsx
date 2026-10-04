@@ -1323,7 +1323,7 @@ export const MangaReaderPage: React.FC = () => {
 								errorMessage={translation.errorMessage}
 								onTranslateCurrentPage={() => {
 									const uid = pages[currentPage - 1]?.page_uid;
-									if (uid) translation.translatePage(uid);
+									translation.translatePage(uid, currentPage);
 								}}
 								onTranslateChapter={translation.translateChapter}
 							/>

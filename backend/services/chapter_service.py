@@ -176,12 +176,25 @@ class ChapterService:
         chapter.pop("_id", None)
 
         if "pages" in chapter:
+            has_missing_uid = False
             for page in chapter["pages"]:
                 if not page.get("page_uid"):
                     page["page_uid"] = str(uuid.uuid4())
-                object_key = page.get("object_key")
-                if include_presigned_urls and object_key:
-                    page["url"] = minio_service.get_presigned_url(object_key)
+                    has_missing_uid = True
+
+            if has_missing_uid:
+                db_id = ObjectId(chapter["id"]) if ObjectId.is_valid(chapter["id"]) else chapter["id"]
+                cleaned_pages = [{k: v for k, v in p.items() if k != "url"} for p in chapter["pages"]]
+                update_fields: Dict[str, Any] = {"pages": cleaned_pages}
+                if "pages_revision" not in chapter:
+                    update_fields["pages_revision"] = 1
+                await self._get_chapters_col().update_one({"_id": db_id}, {"$set": update_fields})
+
+            if include_presigned_urls:
+                for page in chapter["pages"]:
+                    object_key = page.get("object_key")
+                    if object_key:
+                        page["url"] = minio_service.get_presigned_url(object_key)
 
         return chapter
 

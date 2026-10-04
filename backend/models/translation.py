@@ -129,6 +129,7 @@ class TranslationJobSource(BaseModel):
     manga_id: Optional[str] = None
     chapter_id: Optional[str] = None
     page_uids: List[str] = Field(default_factory=list)
+    page_numbers: Optional[List[int]] = Field(None, description="Optional 1-based page numbers for lookup fallback")
     expected_pages_revision: Optional[int] = None
     demo_asset_ids: Optional[List[str]] = None
 

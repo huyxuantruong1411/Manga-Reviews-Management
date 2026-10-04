@@ -119,7 +119,7 @@ export function useTranslation({
 
 	// Trigger translation for a single page
 	const translatePage = useCallback(
-		async (pageUid: string) => {
+		async (pageUid?: string, pageNumber?: number) => {
 			if (!chapterId || !mangaId) return;
 			setErrorMessage("");
 			try {
@@ -128,7 +128,8 @@ export function useTranslation({
 						kind: "chapter_pages",
 						manga_id: mangaId,
 						chapter_id: chapterId,
-						page_uids: [pageUid],
+						page_uids: pageUid ? [pageUid] : [],
+						page_numbers: pageNumber !== undefined ? [pageNumber] : undefined,
 					},
 					profile_id: selectedProfileId || undefined,
 					target_language: targetLanguage,
