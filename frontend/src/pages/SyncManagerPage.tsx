@@ -1126,7 +1126,7 @@ export const SyncManagerPage: React.FC = () => {
 	};
 
 	return (
-		<div className="max-w-6xl mx-auto space-y-8 pb-12">
+		<div className="w-full space-y-8 pb-12">
 			{/* Title Header */}
 			<div className="flex items-center space-x-3">
 				<div className="p-3 bg-gradient-to-tr from-[var(--brand-orange)] to-[var(--brand-coral)] text-white rounded-xl">

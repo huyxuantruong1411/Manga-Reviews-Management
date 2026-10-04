@@ -431,7 +431,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
 	const isScanning = Boolean(scanStatus?.is_scanning);
 
 	return (
-		<div className="flex-1 p-0 sm:p-4 md:p-6 max-w-7xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
+		<div className="w-full space-y-8 animate-in fade-in duration-300 pb-12">
 			{loadError && (
 				<div
 					role="alert"

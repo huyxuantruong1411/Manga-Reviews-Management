@@ -115,7 +115,7 @@ export const DownloadsPage: React.FC = () => {
 	});
 
 	return (
-		<div className="max-w-6xl mx-auto space-y-6 pb-24 font-poppins">
+		<div className="w-full space-y-6 pb-24 font-poppins">
 			{/* Header section */}
 			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 				<div>

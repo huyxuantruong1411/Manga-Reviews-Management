@@ -409,7 +409,7 @@ export const AuditLogsPage: React.FC = () => {
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
 	return (
-		<div className="max-w-7xl mx-auto space-y-6 pb-24">
+		<div className="w-full space-y-6 pb-24">
 			{/* Header Section */}
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[var(--bg-card)] border border-[var(--border-primary)] p-6 rounded-3xl shadow-sm relative overflow-hidden">
 				{/* Subtle decorative glow */}
