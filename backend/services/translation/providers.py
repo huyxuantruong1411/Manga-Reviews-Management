@@ -118,5 +118,52 @@ class TranslationProviderService:
             "message": "Unknown provider kind",
         }
 
+    def probe_runtime_environment(self) -> Dict[str, Any]:
+        """Probes runtime hardware, CUDA, and dependencies via translator-runtime probe script or fallback."""
+        import importlib.util
+        from pathlib import Path
+
+        probe_path = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "services"
+            / "translator-runtime"
+            / "probe_compatibility.py"
+        )
+        if probe_path.is_file():
+            try:
+                spec = importlib.util.spec_from_file_location("probe_compatibility", probe_path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    if hasattr(module, "probe_environment"):
+                        return module.probe_environment()
+            except Exception as e:
+                logger.warning(f"Error running probe_compatibility module: {e}")
+
+        # Fallback diagnostics if file missing or error
+        import platform
+        import sys
+
+        return {
+            "platform": {
+                "system": platform.system(),
+                "release": platform.release(),
+                "machine": platform.machine(),
+                "python_version": sys.version,
+                "executable": sys.executable,
+            },
+            "cuda": {"available": False, "device_count": 0, "device_name": None, "vram_total_mb": None},
+            "libraries": {
+                "torch": None,
+                "torchvision": None,
+                "opencv": None,
+                "pillow": None,
+                "rapidocr": None,
+                "skia": None,
+            },
+            "hardware_recommendation": "cpu_lightweight",
+            "ready_for_inference": False,
+        }
+
 
 translation_provider_service = TranslationProviderService()

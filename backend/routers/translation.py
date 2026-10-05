@@ -49,18 +49,7 @@ class RerenderResultPayload(BaseModel):
 @router.get("/capabilities")
 async def get_capabilities() -> Dict[str, Any]:
     """Returns local runtime environment, CUDA status, and hardware capability report."""
-    try:
-        from services.translator_runtime.probe_compatibility import probe_environment
-    except ImportError:
-        import os
-        import sys
-
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../services/translator-runtime"))
-        )
-        from probe_compatibility import probe_environment
-
-    return probe_environment()
+    return translation_provider_service.probe_runtime_environment()
 
 
 @router.post("/jobs", status_code=status.HTTP_202_ACCEPTED)
