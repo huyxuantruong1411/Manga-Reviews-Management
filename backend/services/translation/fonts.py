@@ -118,11 +118,11 @@ def check_vietnamese_glyph_coverage(supported_codepoints: Set[int]) -> Tuple[boo
 
 
 class TranslationFontService:
-    async def list_fonts(self) -> List[Dict[str, Any]]:
+    async def list_fonts(self, limit: int = 500) -> List[Dict[str, Any]]:
         """Lists registered font packs, ensuring a default font exists."""
         db = db_conn.get_db()
-        cursor = db["translation_font_packs"].find({})
-        fonts = await cursor.to_list(length=50)
+        cursor = db["translation_font_packs"].find({}).sort("name", 1)
+        fonts = await cursor.to_list(length=limit)
 
         if not fonts:
             default_pack = TranslationFontPack(
@@ -136,8 +136,8 @@ class TranslationFontService:
                 state="available",
             )
             await db["translation_font_packs"].insert_one(default_pack.model_dump(by_alias=True, exclude={"id"}))
-            cursor = db["translation_font_packs"].find({})
-            fonts = await cursor.to_list(length=50)
+            cursor = db["translation_font_packs"].find({}).sort("name", 1)
+            fonts = await cursor.to_list(length=limit)
 
         for f in fonts:
             f.pop("_id", None)
@@ -209,6 +209,177 @@ class TranslationFontService:
 
         pack_dict.pop("_id", None)
         return pack_dict
+
+    async def get_font_bytes(self, font_pack_id: str) -> Optional[bytes]:
+        """Resolves raw font file bytes from disk cache, local path, or MinIO storage."""
+        from backend.services.translation.storage_service import translation_storage_service
+
+        db = db_conn.get_db()
+        pack = await db["translation_font_packs"].find_one({"font_pack_id": font_pack_id})
+        if not pack:
+            return None
+
+        variants = pack.get("variants", [])
+        if not variants:
+            return None
+
+        variant = variants[0]
+        local_path = variant.get("local_path")
+        if local_path and os.path.isfile(local_path):
+            try:
+                with open(local_path, "rb") as fp:
+                    return fp.read()
+            except Exception as e:
+                logger.warning(f"Failed to read local font file '{local_path}': {e}")
+
+        object_key = variant.get("object_key")
+        if object_key:
+            return await translation_storage_service.get_object_bytes(object_key)
+
+        return None
+
+    async def import_local_fonts(
+        self,
+        directory: str = "ref/scrap/fonts",
+        only_full_vietnamese: bool = True,
+        category_filter: Optional[str] = None,
+        max_fonts: int = 150,
+    ) -> Dict[str, Any]:
+        """Scans a local directory for TTF/OTF fonts, analyzes Vietnamese glyph coverage, and registers them."""
+        from backend.services.translation.storage_service import translation_storage_service
+
+        if not os.path.isdir(directory):
+            return {
+                "total_scanned": 0,
+                "imported": 0,
+                "skipped": 0,
+                "font_packs": [],
+                "message": f"Directory '{directory}' does not exist",
+            }
+
+        db = db_conn.get_db()
+        existing_cursor = db["translation_font_packs"].find({})
+        existing_packs = await existing_cursor.to_list(length=1000)
+        existing_names = {p.get("name") for p in existing_packs if p.get("name")}
+        existing_hashes = set()
+        for p in existing_packs:
+            for v in p.get("variants", []):
+                if "sha256" in v:
+                    existing_hashes.add(v["sha256"])
+
+        font_files = []
+        for root, _dirs, files in os.walk(directory):
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                if ext in (".ttf", ".otf"):
+                    font_files.append(os.path.join(root, file))
+
+        font_files.sort()
+        imported = []
+        skipped = 0
+
+        for f_path in font_files:
+            if len(imported) >= max_fonts:
+                break
+
+            category = os.path.basename(os.path.dirname(f_path))
+            if category_filter and category.lower() != category_filter.lower():
+                skipped += 1
+                continue
+
+            try:
+                with open(f_path, "rb") as fp:
+                    file_bytes = fp.read()
+            except Exception as e:
+                logger.warning(f"Cannot read font file {f_path}: {e}")
+                skipped += 1
+                continue
+
+            if len(file_bytes) < 12:
+                skipped += 1
+                continue
+
+            scaler = file_bytes[:4]
+            if scaler not in (b"\x00\x01\x00\x00", b"true", b"typ1", b"OTTO"):
+                skipped += 1
+                continue
+
+            sha256 = hashlib.sha256(file_bytes).hexdigest()
+            filename = os.path.basename(f_path)
+            raw_name = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ").strip()
+            display_name = (
+                f"{raw_name} ({category})" if category and category != os.path.basename(directory) else raw_name
+            )
+
+            if display_name in existing_names or sha256 in existing_hashes:
+                skipped += 1
+                continue
+
+            codepoints = extract_ttf_codepoints(file_bytes)
+            is_covered, missing, _ratio = check_vietnamese_glyph_coverage(codepoints)
+
+            if only_full_vietnamese and not is_covered:
+                skipped += 1
+                continue
+
+            ext = os.path.splitext(filename)[1].lower() or ".ttf"
+            object_key = f"translation/fonts/{sha256}{ext}"
+            content_type = "font/otf" if ext == ".otf" else "font/ttf"
+
+            # Upload to MinIO
+            await translation_storage_service.upload_file(object_key, file_bytes, content_type)
+
+            now = datetime.now(timezone.utc)
+            asset_id = str(uuid.uuid4())
+            asset = TranslationAssetInDB(
+                asset_id=asset_id,
+                scope="local",
+                kind="font",
+                object_key=object_key,
+                sha256=sha256,
+                file_size=len(file_bytes),
+                mime_type=content_type,
+                state="available",
+                created_at=now,
+            )
+            await db["translation_assets"].insert_one(asset.model_dump(by_alias=True, exclude={"id"}))
+
+            font_pack_id = str(uuid.uuid4())
+            font_pack = TranslationFontPack(
+                font_pack_id=font_pack_id,
+                name=display_name,
+                scope="local",
+                variants=[
+                    {
+                        "style": "regular",
+                        "filename": filename,
+                        "object_key": object_key,
+                        "asset_id": asset_id,
+                        "sha256": sha256,
+                        "local_path": os.path.abspath(f_path),
+                        "category": category,
+                    }
+                ],
+                vietnamese_coverage=is_covered,
+                missing_glyphs=missing,
+                license_note=f"Imported from {category}",
+                state="available",
+                created_at=now,
+            )
+            pack_dict = font_pack.model_dump(by_alias=True, exclude={"id"})
+            await db["translation_font_packs"].insert_one(pack_dict)
+
+            pack_dict.pop("_id", None)
+            imported.append(pack_dict)
+            existing_names.add(display_name)
+            existing_hashes.add(sha256)
+
+        return {
+            "total_scanned": len(font_files),
+            "imported": len(imported),
+            "skipped": skipped,
+            "font_packs": imported,
+        }
 
 
 translation_font_service = TranslationFontService()

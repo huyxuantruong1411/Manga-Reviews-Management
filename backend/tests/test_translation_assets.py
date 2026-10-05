@@ -131,3 +131,69 @@ async def test_storage_usage_and_dry_run_cleanup(monkeypatch):
     assert cleanup_preview["dry_run"] is True
     assert cleanup_preview["reclaimable_count"] == 1
     assert cleanup_preview["reclaimable_bytes"] == 1500
+
+
+@pytest.mark.anyio
+async def test_import_local_fonts_and_get_font_bytes(monkeypatch, tmp_path):
+    """Local font import scans directory, verifies coverage, registers packs, and allows retrieving font bytes."""
+    fake_assets = {}
+    fake_font_packs = {}
+
+    class MockAssetsCol:
+        async def insert_one(self, doc):
+            fake_assets[doc["asset_id"]] = doc
+            return True
+
+    class MockFontsCol:
+        def find(self, query=None):
+            class Cursor:
+                async def to_list(self, length=None):
+                    return list(fake_font_packs.values())
+
+            return Cursor()
+
+        async def find_one(self, query=None):
+            if query and "font_pack_id" in query:
+                return fake_font_packs.get(query["font_pack_id"])
+            return None
+
+        async def insert_one(self, doc):
+            fake_font_packs[doc["font_pack_id"]] = doc
+            return True
+
+    class MockDB:
+        def __getitem__(self, item):
+            if item == "translation_assets":
+                return MockAssetsCol()
+            if item == "translation_font_packs":
+                return MockFontsCol()
+            raise KeyError(item)
+
+    monkeypatch.setattr("backend.database.connection.get_db", lambda: MockDB())
+
+    async def mock_upload(object_key, file_bytes, content_type):
+        return True
+
+    monkeypatch.setattr(translation_storage_service, "upload_file", mock_upload)
+
+    # Create dummy font file in tmp_path
+    font_dir = tmp_path / "MTO-Comic-Clean"
+    font_dir.mkdir()
+    valid_ttf = font_dir / "MTO Comic Clean.ttf"
+    # Valid header bytes
+    valid_bytes = b"\x00\x01\x00\x00\x00\x01\x00\x10\x00\x00\x00\x00" + b"\x00" * 100
+    valid_ttf.write_bytes(valid_bytes)
+
+    # Run import (with only_full_vietnamese=False since mock header has 0 glyphs)
+    res = await translation_font_service.import_local_fonts(
+        directory=str(tmp_path),
+        only_full_vietnamese=False,
+    )
+
+    assert res["total_scanned"] == 1
+    assert res["imported"] == 1
+    assert len(fake_font_packs) == 1
+
+    imported_id = list(fake_font_packs.keys())[0]
+    font_bytes = await translation_font_service.get_font_bytes(imported_id)
+    assert font_bytes == valid_bytes

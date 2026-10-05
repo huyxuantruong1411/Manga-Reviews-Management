@@ -35,6 +35,17 @@ class PublishResultPayload(BaseModel):
     revision: Optional[int] = Field(None, description="Optional chosen revision number")
 
 
+class ImportLocalFontsPayload(BaseModel):
+    directory: str = Field("ref/scrap/fonts", description="Local directory path to scan for fonts")
+    only_full_vietnamese: bool = Field(True, description="Only import fonts with 100% Vietnamese coverage")
+    category_filter: Optional[str] = Field(None, description="Optional folder category filter")
+    max_fonts: int = Field(150, description="Max font files to import")
+
+
+class RerenderResultPayload(BaseModel):
+    font_pack_id: Optional[str] = Field(None, description="Optional font pack ID for typesetting")
+
+
 @router.get("/capabilities")
 async def get_capabilities() -> Dict[str, Any]:
     """Returns local runtime environment, CUDA status, and hardware capability report."""
@@ -189,9 +200,9 @@ async def list_providers() -> List[Dict[str, Any]]:
 
 
 @router.get("/fonts")
-async def list_fonts() -> List[Dict[str, Any]]:
+async def list_fonts(limit: int = Query(500, ge=1, le=1000)) -> List[Dict[str, Any]]:
     """Lists registered font packs and their Vietnamese glyph coverage."""
-    return await translation_font_service.list_fonts()
+    return await translation_font_service.list_fonts(limit=limit)
 
 
 @router.post("/fonts", status_code=status.HTTP_201_CREATED)
@@ -211,6 +222,19 @@ async def upload_font(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/fonts/import-local")
+async def import_local_fonts(
+    payload: ImportLocalFontsPayload = ImportLocalFontsPayload(),
+) -> Dict[str, Any]:
+    """Scans and batch-registers fonts from the legacy or scrap font directory."""
+    return await translation_font_service.import_local_fonts(
+        directory=payload.directory,
+        only_full_vietnamese=payload.only_full_vietnamese,
+        category_filter=payload.category_filter,
+        max_fonts=payload.max_fonts,
+    )
 
 
 # ─── ASSETS & STORAGE ───────────────────────────────────────────────────────
@@ -345,10 +369,15 @@ async def update_result_regions(
 @router.post("/results/{result_id}/rerender")
 async def rerender_result(
     result_id: str = Path(..., description="Target Result ID"),
+    payload: Optional[RerenderResultPayload] = None,
 ) -> Dict[str, Any]:
     """Re-renders text regions onto clean canvas with ZERO external LLM provider calls."""
     try:
-        updated = await translation_editor_service.rerender_result(result_id)
+        font_bytes = None
+        if payload and payload.font_pack_id:
+            font_bytes = await translation_font_service.get_font_bytes(payload.font_pack_id)
+
+        updated = await translation_editor_service.rerender_result(result_id, font_bytes=font_bytes)
         if updated.get("output_object_key"):
             updated["url"] = translation_storage_service.resolve_asset_url(updated["output_object_key"])
         return updated

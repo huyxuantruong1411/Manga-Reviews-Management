@@ -229,6 +229,23 @@ export const translationApi = {
 		);
 		return res.data;
 	},
+	importLocalFonts: async (payload?: {
+		directory?: string;
+		only_full_vietnamese?: boolean;
+		category_filter?: string;
+		max_fonts?: number;
+	}): Promise<{
+		total_scanned: number;
+		imported: number;
+		skipped: number;
+		font_packs: TranslationFontPack[];
+	}> => {
+		const res = await client.post(
+			"/api/translation/fonts/import-local",
+			payload || {},
+		);
+		return res.data;
+	},
 
 	// Storage & Assets
 	getStorageUsage: async (): Promise<StorageUsage> => {
@@ -326,9 +343,10 @@ export const translationApi = {
 		);
 		return res.data;
 	},
-	rerenderResult: async (resultId: string) => {
+	rerenderResult: async (resultId: string, fontPackId?: string) => {
 		const res = await client.post(
 			`/api/translation/results/${resultId}/rerender`,
+			fontPackId ? { font_pack_id: fontPackId } : {},
 		);
 		return res.data;
 	},

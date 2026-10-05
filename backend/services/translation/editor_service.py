@@ -69,6 +69,7 @@ class TranslationEditorService:
         self,
         result_id: str,
         font_path: Optional[str] = None,
+        font_bytes: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         """Re-renders text regions onto the clean image canvas with ZERO external LLM provider calls."""
         db = db_conn.get_db()
@@ -98,7 +99,12 @@ class TranslationEditorService:
 
         # Load font if available, fallback to default
         font = None
-        if font_path:
+        if font_bytes:
+            try:
+                font = ImageFont.truetype(io.BytesIO(font_bytes), size=24)
+            except Exception as e:
+                logger.warning(f"Could not load font from bytes: {e}")
+        elif font_path:
             try:
                 font = ImageFont.truetype(font_path, size=24)
             except Exception as e:

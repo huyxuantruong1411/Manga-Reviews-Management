@@ -42,8 +42,17 @@ type StudioTab =
 
 export const TranslationStudioPage: React.FC = () => {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const initialTab = (searchParams.get("tab") as StudioTab) || "overview";
-	const [activeTab, setActiveTab] = useState<StudioTab>(initialTab);
+	const validTabs: StudioTab[] = [
+		"overview",
+		"demo",
+		"profiles",
+		"providers",
+		"fonts",
+		"jobs",
+		"storage",
+	];
+	const rawTab = searchParams.get("tab") as StudioTab;
+	const activeTab: StudioTab = validTabs.includes(rawTab) ? rawTab : "overview";
 
 	// Core State
 	const [capabilities, setCapabilities] = useState<any>(null);
@@ -62,8 +71,14 @@ export const TranslationStudioPage: React.FC = () => {
 
 	// Sync tab to URL params
 	const handleTabChange = (tab: StudioTab) => {
-		setActiveTab(tab);
-		setSearchParams({ tab });
+		setSearchParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				next.set("tab", tab);
+				return next;
+			},
+			{ replace: true },
+		);
 	};
 
 	// 1. Fetch Capabilities
@@ -334,6 +349,8 @@ export const TranslationStudioPage: React.FC = () => {
 	const [editedRegions, setEditedRegions] = useState<any[]>([]);
 	const [isSavingRegions, setIsSavingRegions] = useState<boolean>(false);
 	const [isRerendering, setIsRerendering] = useState<boolean>(false);
+	const [selectedRerenderFontId, setSelectedRerenderFontId] =
+		useState<string>("");
 
 	const handleDemoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
@@ -383,7 +400,10 @@ export const TranslationStudioPage: React.FC = () => {
 		setIsRerendering(true);
 		setPageError("");
 		try {
-			const updated = await translationApi.rerenderResult(demoResult.result_id);
+			const updated = await translationApi.rerenderResult(
+				demoResult.result_id,
+				selectedRerenderFontId || undefined,
+			);
 			setDemoResult(updated);
 			setActionSuccess(
 				"Đã re-render trực tiếp trên Canvas (Pillow, No-LLM) thành công!",
@@ -642,10 +662,28 @@ export const TranslationStudioPage: React.FC = () => {
 												canvas (Pillow No-LLM) mà không tốn token provider.
 											</p>
 										</div>
-										<div className="flex items-center space-x-2">
+										<div className="flex flex-wrap items-center gap-2">
 											<span className="px-2.5 py-1 rounded-full bg-orange-500/10 text-[var(--brand-orange)] text-xs font-bold border border-orange-500/20">
 												Revision {demoResult.active_revision || 1}
 											</span>
+											<div className="flex items-center space-x-1.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl px-2 py-1">
+												<Type size={12} className="text-zinc-400" />
+												<select
+													value={selectedRerenderFontId}
+													onChange={(e) =>
+														setSelectedRerenderFontId(e.target.value)
+													}
+													className="bg-transparent text-xs text-zinc-700 dark:text-zinc-300 font-semibold focus:outline-none cursor-pointer max-w-[150px] truncate"
+													title="Chọn Font để vẽ thoại"
+												>
+													<option value="">Font mặc định (Fallback)</option>
+													{fonts.map((f) => (
+														<option key={f.font_pack_id} value={f.font_pack_id}>
+															{f.name} {f.vietnamese_coverage ? "✓" : "(!)"}
+														</option>
+													))}
+												</select>
+											</div>
 											<button
 												type="button"
 												onClick={handleSaveRegions}
@@ -743,6 +781,29 @@ export const TranslationStudioPage: React.FC = () => {
 		}
 	};
 
+	const handleUpdateProfileFont = async (
+		profile: TranslationProfile,
+		fontNameOrId: string,
+	) => {
+		try {
+			const newConfig = {
+				...(profile.effective_config || {}),
+				render_font: fontNameOrId,
+			};
+			await translationApi.updateProfile(
+				profile.profile_id,
+				{ effective_config: newConfig },
+				profile.active_revision,
+			);
+			setActionSuccess(`Đã cập nhật font cho profile "${profile.name}"`);
+			void fetchProfiles();
+		} catch (err: any) {
+			setPageError(
+				err?.response?.data?.detail || "Lỗi khi cập nhật font profile.",
+			);
+		}
+	};
+
 	const renderProfiles = () => {
 		return (
 			<div className="space-y-6">
@@ -806,6 +867,28 @@ export const TranslationStudioPage: React.FC = () => {
 									>
 										<Download size={14} />
 									</button>
+								</div>
+							</div>
+
+							{/* Typesetting Font Selector */}
+							<div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80 space-y-2">
+								<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+									<span className="font-semibold text-zinc-600 dark:text-zinc-400 flex items-center space-x-1.5">
+										<Type size={13} className="text-[var(--brand-orange)]" />
+										<span>Font chữ Typesetting (Render Font):</span>
+									</span>
+									<select
+										value={p.effective_config?.render_font || "default"}
+										onChange={(e) => handleUpdateProfileFont(p, e.target.value)}
+										className="py-1 px-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer"
+									>
+										<option value="default">Mặc định (Default Sans)</option>
+										{fonts.map((f) => (
+											<option key={f.font_pack_id} value={f.name}>
+												{f.name} {f.vietnamese_coverage ? "(Tiếng Việt ✓)" : ""}
+											</option>
+										))}
+									</select>
 								</div>
 							</div>
 
@@ -882,6 +965,10 @@ export const TranslationStudioPage: React.FC = () => {
 	const [fontFile, setFontFile] = useState<File | null>(null);
 	const [fontName, setFontName] = useState<string>("");
 	const [uploadingFont, setUploadingFont] = useState<boolean>(false);
+	const [importingLocalFonts, setImportingLocalFonts] =
+		useState<boolean>(false);
+	const [selectedFontCategory, setSelectedFontCategory] =
+		useState<string>("all");
 
 	const handleUploadFont = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -904,16 +991,127 @@ export const TranslationStudioPage: React.FC = () => {
 		}
 	};
 
+	const handleImportLocalFonts = async (filterCategory?: string) => {
+		setImportingLocalFonts(true);
+		setPageError("");
+		try {
+			const res = await translationApi.importLocalFonts({
+				directory: "ref/scrap/fonts",
+				only_full_vietnamese: true,
+				category_filter:
+					filterCategory && filterCategory !== "all"
+						? filterCategory
+						: undefined,
+				max_fonts: 150,
+			});
+			setActionSuccess(
+				`Đã nhập thành công ${res.imported} font tiếng Việt mới (Bỏ qua ${res.skipped} font trùng hoặc thiếu glyph)!`,
+			);
+			void fetchFonts();
+		} catch (err: any) {
+			setPageError(
+				err?.response?.data?.detail ||
+					"Lỗi khi nhập font từ thư mục ref/scrap/fonts.",
+			);
+		} finally {
+			setImportingLocalFonts(false);
+		}
+	};
+
 	const renderFonts = () => {
 		return (
 			<div className="space-y-6">
+				{/* Batch Import From Legacy Fonts Directory */}
+				<div className="p-6 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-transparent border border-orange-500/30 rounded-3xl space-y-4">
+					<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+						<div className="space-y-1.5">
+							<div className="flex items-center space-x-2">
+								<span className="p-2 rounded-xl bg-[var(--brand-orange)] text-white shadow-sm">
+									<Type size={16} />
+								</span>
+								<h3 className="text-sm font-bold text-gray-900 dark:text-white">
+									Kho Font Manga & Scanlation (Từ thư mục ref/scrap/fonts)
+								</h3>
+							</div>
+							<p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-2xl">
+								Đã tìm thấy{" "}
+								<strong className="text-gray-900 dark:text-white">
+									255 font tiếng Việt 100%
+								</strong>{" "}
+								từ project cũ trong thư mục{" "}
+								<code className="px-1.5 py-0.5 rounded bg-orange-500/10 text-[var(--brand-orange)] font-mono text-[11px]">
+									ref/scrap/fonts
+								</code>{" "}
+								(bao gồm Wild Words, MTO Comic, Anime Ace UEE, Yuki Fonts,
+								MangaT, v.v.). Bạn có thể nhập nhanh vào Studio chỉ với 1 click.
+							</p>
+						</div>
+
+						<div className="flex flex-wrap items-center gap-2">
+							<select
+								value={selectedFontCategory}
+								onChange={(e) => setSelectedFontCategory(e.target.value)}
+								className="py-2 px-3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-none focus:border-[var(--brand-orange)] cursor-pointer"
+							>
+								<option value="all">
+									Tất cả thư mục (255 font tiếng Việt)
+								</option>
+								<option value="Wild-Words-Font">
+									Wild Words Font (Kinh điển manga)
+								</option>
+								<option value="MTO-Comic-Clean">
+									MTO Comic Clean (MTO Scanlation)
+								</option>
+								<option value="Font UEE">
+									Font UEE (Anime Ace, Manga Temple)
+								</option>
+								<option value="Font LNTH">
+									Font LNTH (LN Translation Hub)
+								</option>
+								<option value="MyFont">MyFont (MangaT, MangaTB, Comic)</option>
+								<option value="Yuki Fonts (Aug 2023)">
+									Yuki Fonts (Aug 2023)
+								</option>
+								<option value="MTO Font Final">MTO Font Final</option>
+							</select>
+
+							<button
+								type="button"
+								onClick={() => handleImportLocalFonts(selectedFontCategory)}
+								disabled={importingLocalFonts}
+								className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow transition flex items-center space-x-1.5 cursor-pointer"
+							>
+								{importingLocalFonts ? (
+									<Loader2 size={14} className="animate-spin" />
+								) : (
+									<Download size={14} />
+								)}
+								<span>
+									{importingLocalFonts
+										? "Đang quét & nạp font..."
+										: "Nhập font đã chọn"}
+								</span>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => handleImportLocalFonts("all")}
+								disabled={importingLocalFonts}
+								className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow transition flex items-center space-x-1.5 cursor-pointer"
+							>
+								<span>Nhập toàn bộ font 100% tiếng Việt</span>
+							</button>
+						</div>
+					</div>
+				</div>
+
 				{/* Upload Font Form */}
 				<form
 					onSubmit={handleUploadFont}
 					className="p-5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-3xl shadow-sm space-y-4"
 				>
 					<h3 className="text-sm font-bold text-gray-900 dark:text-white">
-						Tải lên Font Pack mới (.ttf, .otf)
+						Hoặc Tải lên File Font tùy chỉnh (.ttf, .otf)
 					</h3>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<div>
@@ -965,32 +1163,59 @@ export const TranslationStudioPage: React.FC = () => {
 				</form>
 
 				{/* Font List */}
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-					{fonts.map((f) => (
-						<div
-							key={f.font_pack_id}
-							className="p-5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-3xl shadow-sm space-y-3"
+				<div className="space-y-3">
+					<div className="flex items-center justify-between">
+						<h3 className="text-sm font-bold text-gray-900 dark:text-white">
+							Danh sách Font Packs khả dụng ({fonts.length})
+						</h3>
+						<button
+							type="button"
+							onClick={fetchFonts}
+							className="text-xs text-[var(--brand-orange)] hover:underline flex items-center space-x-1"
 						>
-							<div className="flex items-center justify-between">
-								<h4 className="font-bold text-sm text-gray-900 dark:text-white">
-									{f.name}
-								</h4>
-								<span
-									className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-										f.vietnamese_coverage
-											? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-											: "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-									}`}
-								>
-									{f.vietnamese_coverage ? "100% Tiếng Việt" : "Thiếu dấu"}
-								</span>
-							</div>
+							<RefreshCw size={12} />
+							<span>Làm mới</span>
+						</button>
+					</div>
 
-							<p className="text-xs text-zinc-500">
-								{f.license_note || "Manga Open Source Font"}
-							</p>
-						</div>
-					))}
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						{fonts.map((f) => (
+							<div
+								key={f.font_pack_id}
+								className="p-5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-3xl shadow-sm space-y-3"
+							>
+								<div className="flex items-center justify-between">
+									<h4
+										className="font-bold text-sm text-gray-900 dark:text-white truncate max-w-[200px]"
+										title={f.name}
+									>
+										{f.name}
+									</h4>
+									<span
+										className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+											f.vietnamese_coverage
+												? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+												: "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+										}`}
+									>
+										{f.vietnamese_coverage ? "100% Tiếng Việt" : "Thiếu dấu"}
+									</span>
+								</div>
+
+								{/* Sample Text Preview */}
+								<div className="p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-950 border border-gray-100 dark:border-zinc-800/80 text-[11px] text-zinc-700 dark:text-zinc-300 italic font-medium">
+									"Đường phố vẫn sáng, nhưng lòng tôi đã đổi khác."
+								</div>
+
+								<div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-gray-100 dark:border-zinc-800/60">
+									<span>{f.license_note || "Manga Open Source Font"}</span>
+									<span className="font-mono text-[10px]">
+										{f.variants?.length || 1} file
+									</span>
+								</div>
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 		);
@@ -1275,7 +1500,7 @@ export const TranslationStudioPage: React.FC = () => {
 			)}
 
 			{/* Studio Tabs Navigation */}
-			<div className="flex items-center space-x-1 overflow-x-auto pb-2 border-b border-gray-200 dark:border-zinc-800/80 scrollbar-none">
+			<div className="flex flex-wrap items-center gap-1.5 pb-3 border-b border-gray-200 dark:border-zinc-800/80">
 				{[
 					{ id: "overview", label: "Tổng quan", icon: Cpu },
 					{ id: "demo", label: "Demo Workspace", icon: Sparkles },
@@ -1291,8 +1516,11 @@ export const TranslationStudioPage: React.FC = () => {
 						<button
 							key={t.id}
 							type="button"
-							onClick={() => handleTabChange(t.id as StudioTab)}
-							className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 shrink-0 cursor-pointer ${
+							onClick={(e) => {
+								e.preventDefault();
+								handleTabChange(t.id as StudioTab);
+							}}
+							className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center space-x-2 shrink-0 cursor-pointer ${
 								isActive
 									? "bg-[var(--brand-orange)] text-white shadow-sm"
 									: "text-zinc-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
