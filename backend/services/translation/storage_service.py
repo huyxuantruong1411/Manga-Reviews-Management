@@ -38,7 +38,7 @@ class TranslationStorageService:
                     endpoint=endpoint,
                     access_key=settings.minio_access_key,
                     secret_key=settings.minio_secret_key,
-                    secure=settings.minio_secure,
+                    secure=getattr(settings, "minio_secure", False),
                 )
             except Exception as e:
                 logger.warning(f"Could not initialize MinIO client for translation: {e}")
@@ -53,7 +53,7 @@ class TranslationStorageService:
             return object_key
 
         def _do_put():
-            bucket = settings.minio_bucket_name
+            bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
             if not client.bucket_exists(bucket):
                 client.make_bucket(bucket)
             client.put_object(
@@ -75,7 +75,7 @@ class TranslationStorageService:
             return b""
 
         def _do_get():
-            bucket = settings.minio_bucket_name
+            bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
             response = client.get_object(bucket, object_key)
             try:
                 return response.read()
@@ -94,7 +94,7 @@ class TranslationStorageService:
         try:
             from datetime import timedelta
 
-            bucket = settings.minio_bucket_name
+            bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
             url = client.presigned_get_object(
                 bucket_name=bucket,
                 object_name=object_key,
@@ -172,7 +172,7 @@ class TranslationStorageService:
 
         if not dry_run and deleting_assets:
             client = self._get_minio_client()
-            bucket = settings.minio_bucket_name
+            bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
 
             def _delete_objects():
                 for key in reclaimable_keys:

@@ -4,6 +4,7 @@ Handles durable job creation, MongoDB persistence, ARQ queue dispatching,
 cancellation, retry, and status reconciliation.
 """
 
+import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
@@ -21,9 +22,23 @@ from backend.models.translation import (
 
 logger = logging.getLogger(__name__)
 
+# Concurrency throttle for in-process background worker execution
+_in_process_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _in_process_semaphore
+    if _in_process_semaphore is None:
+        _in_process_semaphore = asyncio.Semaphore(1)
+    return _in_process_semaphore
+
 
 async def enqueue_page_task(job_id: str, page_identity: str, attempt: int = 1) -> bool:
-    """Enqueues a translation page execution task into the dedicated arq:translation queue."""
+    """Enqueues a translation page execution task into the dedicated arq:translation queue.
+    Also dispatches in-process background execution via asyncio.create_task to ensure
+    translation jobs run immediately without requiring a standalone external ARQ worker process.
+    """
+    enqueued_arq = False
     try:
         from backend.core.redis import get_arq_pool
 
@@ -36,10 +51,29 @@ async def enqueue_page_task(job_id: str, page_identity: str, attempt: int = 1) -
                 attempt=attempt,
                 _queue_name="arq:translation",
             )
-            return True
+            enqueued_arq = True
     except Exception as e:
         logger.warning(f"Could not enqueue translation task to Redis immediately: {e}")
-    return False
+
+    # In-process asynchronous task dispatch fallback:
+    # Always spawn in-process task so development & standalone instances immediately process translations.
+    # Idempotency is guaranteed by the CAS fencing token in execute_translation_job_page.
+    async def _in_process_runner():
+        sem = _get_semaphore()
+        async with sem:
+            try:
+                from backend.tasks.translation import execute_translation_job_page
+
+                await execute_translation_job_page({}, job_id, page_identity, attempt)
+            except Exception as exc:
+                logger.error(f"In-process translation task failed for {job_id}/{page_identity}: {exc}", exc_info=True)
+
+    try:
+        asyncio.create_task(_in_process_runner())
+    except Exception as e:
+        logger.warning(f"Could not schedule in-process translation task: {e}")
+
+    return enqueued_arq or True
 
 
 class TranslationJobService:
@@ -149,7 +183,9 @@ class TranslationJobService:
             created_at=now,
             updated_at=now,
         )
-        await self._get_jobs_col().insert_one(job_doc.model_dump(by_alias=True))
+        job_data = job_doc.model_dump(by_alias=True, exclude={"id"})
+        job_data.pop("_id", None)
+        await self._get_jobs_col().insert_one(job_data)
 
         # 2. Insert Page Documents
         page_docs = []
@@ -162,7 +198,9 @@ class TranslationJobService:
                 attempt=1,
                 fencing_token=0,
             )
-            page_docs.append(page_doc.model_dump(by_alias=True))
+            p_data = page_doc.model_dump(by_alias=True, exclude={"id"})
+            p_data.pop("_id", None)
+            page_docs.append(p_data)
 
         if page_docs:
             await self._get_pages_col().insert_many(page_docs)

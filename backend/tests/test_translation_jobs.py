@@ -279,3 +279,62 @@ async def test_retry_job_only_requeues_failed_or_cancelled_pages(monkeypatch):
     assert ("uid_2", 2) in enqueued_slots
     assert ("uid_3", 2) in enqueued_slots
     assert not any(p[0] == "uid_1" for p in enqueued_slots)
+
+
+@pytest.mark.anyio
+async def test_update_parent_job_progress_tracks_completion():
+    """Verify _update_parent_job_progress atomically increments page counts and transitions parent job state."""
+    from backend.tasks.translation import _update_parent_job_progress
+
+    fake_jobs = {
+        "job_multi": {
+            "job_id": "job_multi",
+            "state": "queued",
+            "total_pages": 2,
+            "completed_pages": 0,
+            "failed_pages": 0,
+        },
+        "job_fail": {
+            "job_id": "job_fail",
+            "state": "queued",
+            "total_pages": 1,
+            "completed_pages": 0,
+            "failed_pages": 0,
+        },
+    }
+
+    class MockJobsCollection:
+        @staticmethod
+        async def update_one(query, update):
+            jid = query.get("job_id")
+            if jid in fake_jobs:
+                if "$inc" in update:
+                    for k, v in update["$inc"].items():
+                        fake_jobs[jid][k] = fake_jobs[jid].get(k, 0) + v
+                if "$set" in update:
+                    fake_jobs[jid].update(update["$set"])
+            return True
+
+        @staticmethod
+        async def find_one(query):
+            return fake_jobs.get(query.get("job_id"))
+
+    col = MockJobsCollection()
+
+    # First page succeeds
+    await _update_parent_job_progress(col, "job_multi", success=True)
+    assert fake_jobs["job_multi"]["completed_pages"] == 1
+    assert fake_jobs["job_multi"]["state"] == "running"
+    assert "finished_at" not in fake_jobs["job_multi"]
+
+    # Second page succeeds -> job completes
+    await _update_parent_job_progress(col, "job_multi", success=True)
+    assert fake_jobs["job_multi"]["completed_pages"] == 2
+    assert fake_jobs["job_multi"]["state"] == "completed"
+    assert "finished_at" in fake_jobs["job_multi"]
+
+    # Fail job test
+    await _update_parent_job_progress(col, "job_fail", success=False)
+    assert fake_jobs["job_fail"]["failed_pages"] == 1
+    assert fake_jobs["job_fail"]["state"] == "failed"
+    assert "finished_at" in fake_jobs["job_fail"]

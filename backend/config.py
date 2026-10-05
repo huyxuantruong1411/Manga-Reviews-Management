@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     minio_access_key: str = Field(default="admin")
     minio_secret_key: str = Field(default="password")
     minio_bucket: str = Field(default="manga-library")
+    minio_bucket_name: str = Field(default="manga-library")
+    minio_secure: bool = Field(default=False)
     redis_url: str = Field(default="redis://127.0.0.1:6379/0")
 
     gemini_api_key: str = Field(default="")

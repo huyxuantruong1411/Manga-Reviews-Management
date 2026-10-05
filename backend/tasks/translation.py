@@ -26,6 +26,35 @@ from backend.services.translation.storage_service import translation_storage_ser
 logger = logging.getLogger("translation_worker")
 
 
+async def _update_parent_job_progress(jobs_col, job_id: str, success: bool) -> None:
+    """Atomically increments completed or failed page count on the parent job and updates terminal state."""
+    inc_field = "completed_pages" if success else "failed_pages"
+    await jobs_col.update_one(
+        {"job_id": job_id},
+        {
+            "$inc": {inc_field: 1},
+            "$set": {"state": "running", "updated_at": utc_now()},
+        },
+    )
+    job = await jobs_col.find_one({"job_id": job_id})
+    if job:
+        total = job.get("total_pages", 1)
+        completed = job.get("completed_pages", 0)
+        failed = job.get("failed_pages", 0)
+        if completed + failed >= total:
+            final_state = "completed" if completed > 0 else "failed"
+            await jobs_col.update_one(
+                {"job_id": job_id},
+                {
+                    "$set": {
+                        "state": final_state,
+                        "finished_at": utc_now(),
+                        "updated_at": utc_now(),
+                    }
+                },
+            )
+
+
 async def execute_translation_job_page(
     ctx: Dict[str, Any],
     job_id: str,
@@ -64,6 +93,12 @@ async def execute_translation_job_page(
         logger.info(f"Page slot {job_id}/{page_identity} already claimed or in terminal state.")
         return {"status": "skipped_already_claimed"}
 
+    # Update parent job state to running if currently queued
+    await jobs_col.update_one(
+        {"job_id": job_id, "state": "queued"},
+        {"$set": {"state": "running", "updated_at": utc_now()}},
+    )
+
     # Fetch updated page slot to get fence token
     page_doc = await pages_col.find_one({"job_id": job_id, "page_identity": page_identity})
     fence_token = page_doc.get("fencing_token", 1) if page_doc else 1
@@ -97,6 +132,7 @@ async def execute_translation_job_page(
                     {"job_id": job_id, "page_identity": page_identity},
                     {"$set": {"state": "failed", "error_code": "CHAPTER_NOT_FOUND"}},
                 )
+                await _update_parent_job_progress(jobs_col, job_id, success=False)
                 return {"status": "failed", "error": "Chapter not found"}
 
             target_page = next((p for p in chap.get("pages", []) if p.get("page_uid") == page_identity), None)
@@ -105,6 +141,7 @@ async def execute_translation_job_page(
                     {"job_id": job_id, "page_identity": page_identity},
                     {"$set": {"state": "failed", "error_code": "PAGE_NOT_FOUND"}},
                 )
+                await _update_parent_job_progress(jobs_col, job_id, success=False)
                 return {"status": "failed", "error": "Page UID not found in chapter"}
 
             obj_key = target_page.get("object_key")
@@ -118,6 +155,7 @@ async def execute_translation_job_page(
                     {"job_id": job_id, "page_identity": page_identity},
                     {"$set": {"state": "failed", "error_code": "STORAGE_DOWNLOAD_FAILED", "error_message": str(e)}},
                 )
+                await _update_parent_job_progress(jobs_col, job_id, success=False)
                 return {"status": "failed", "error": str(e)}
         else:
             # Fallback for synthetic/demo
@@ -168,6 +206,7 @@ async def execute_translation_job_page(
                     {"job_id": job_id, "page_identity": page_identity},
                     {"$set": {"state": "failed", "error_code": "RUNNER_CRASH", "error_message": err_msg[:500]}},
                 )
+                await _update_parent_job_progress(jobs_col, job_id, success=False)
                 return {"status": "failed", "error": err_msg}
 
             # Parse stdout
@@ -192,6 +231,7 @@ async def execute_translation_job_page(
                     {"job_id": job_id, "page_identity": page_identity},
                     {"$set": {"state": "failed", "error_code": err_code}},
                 )
+                await _update_parent_job_progress(jobs_col, job_id, success=False)
                 return {"status": "failed", "error": err_code}
 
             # 5. Commit artifacts to MinIO
@@ -238,7 +278,9 @@ async def execute_translation_job_page(
                 ],
                 created_at=utc_now(),
             )
-            await results_col.insert_one(result_doc.model_dump(by_alias=True))
+            res_dict = result_doc.model_dump(by_alias=True, exclude={"id"})
+            res_dict.pop("_id", None)
+            await results_col.insert_one(res_dict)
 
             # 7. Update Page Binding
             binding_doc = TranslationPageBindingInDB(
@@ -251,6 +293,8 @@ async def execute_translation_job_page(
                 validated_source_hash=manifest.get("output_sha256", ""),
                 updated_at=utc_now(),
             )
+            bind_dict = binding_doc.model_dump(by_alias=True, exclude={"id"})
+            bind_dict.pop("_id", None)
             await bindings_col.update_one(
                 {
                     "scope": "local",
@@ -258,7 +302,7 @@ async def execute_translation_job_page(
                     "page_uid": page_identity,
                     "target_language": target_language,
                 },
-                {"$set": binding_doc.model_dump(by_alias=True)},
+                {"$set": bind_dict},
                 upsert=True,
             )
 
@@ -272,6 +316,9 @@ async def execute_translation_job_page(
                 {"$set": {"state": "completed", "result_id": result_id, "stage": "completed"}},
             )
 
+            # 9. Update parent job aggregate progress
+            await _update_parent_job_progress(jobs_col, job_id, success=True)
+
             return {"status": "completed", "result_id": result_id}
 
         except Exception as ex:
@@ -280,4 +327,5 @@ async def execute_translation_job_page(
                 {"job_id": job_id, "page_identity": page_identity},
                 {"$set": {"state": "failed", "error_code": "WORKER_EXCEPTION", "error_message": str(ex)}},
             )
+            await _update_parent_job_progress(jobs_col, job_id, success=False)
             return {"status": "failed", "error": str(ex)}
