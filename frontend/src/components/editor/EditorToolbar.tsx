@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { executeClearFormatting } from "./clearFormatting.ts";
 
 interface EditorToolbarProps {
 	editor: any;
@@ -167,16 +168,8 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 					<Highlighter size={15} />
 				</ToolbarBtn>
 				<ToolbarBtn
-					onClick={() =>
-						editor
-							.chain()
-							.focus()
-							.unsetAllMarks()
-							.clearNodes()
-							.unsetTextAlign()
-							.run()
-					}
-					title="Xóa toàn bộ định dạng văn bản đã chọn (Clear formatting - Ctrl+\)"
+					onClick={() => executeClearFormatting(editor)}
+					title="Xóa toàn bộ định dạng và bullet văn bản đã chọn (Clear formatting - Ctrl+\)"
 				>
 					<RemoveFormatting size={15} />
 				</ToolbarBtn>

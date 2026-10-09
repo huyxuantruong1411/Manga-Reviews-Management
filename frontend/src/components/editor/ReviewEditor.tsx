@@ -42,6 +42,7 @@ import { BlurredCover } from "../ui/BlurredCover";
 import { AIConfirmModal } from "./AIConfirmModal.tsx";
 import { AIResultPanel } from "./AIResultPanel.tsx";
 import { AudioExtension } from "./AudioExtension.tsx";
+import { executeClearFormatting } from "./clearFormatting.ts";
 import { EditorToolbar } from "./EditorToolbar.tsx";
 import { FileAttachmentExtension } from "./FileAttachmentExtension.tsx";
 import { MangaReferenceExtension } from "./MangaReferenceExtension.ts";
@@ -103,14 +104,10 @@ const ClearFormattingExtension = Extension.create({
 	name: "clearFormatting",
 	addKeyboardShortcuts() {
 		return {
-			"Mod-\\": () =>
-				this.editor
-					.chain()
-					.focus()
-					.unsetAllMarks()
-					.clearNodes()
-					.unsetTextAlign()
-					.run(),
+			"Mod-\\": () => {
+				executeClearFormatting(this.editor);
+				return true;
+			},
 		};
 	},
 });
@@ -295,23 +292,27 @@ const LiveWordCounter = memo(({ editor }: LiveWordCounterProps) => {
 
 	return (
 		<div
-			className="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-[var(--bg-card)]/80 border border-[var(--border-primary)] text-xs text-[var(--text-secondary)] font-mono shadow-xs select-none"
+			className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[var(--bg-card)]/90 border border-[var(--border-primary)] text-xs text-[var(--text-secondary)] font-mono shadow-xs select-none whitespace-nowrap shrink-0"
 			title={`Ước tính thời gian đọc: ~${readingTimeMinutes} phút (${counts.words.toLocaleString()} từ, ${counts.chars.toLocaleString()} ký tự)`}
 		>
-			<FileText size={12} className="text-[var(--brand-orange)]" />
-			<span className="font-bold text-[var(--text-primary)]">
-				{counts.words.toLocaleString()}
+			<FileText size={13} className="text-[var(--brand-orange)] shrink-0" />
+			<span className="whitespace-nowrap">
+				<strong className="font-bold text-[var(--text-primary)]">
+					{counts.words.toLocaleString()}
+				</strong>{" "}
+				<span className="text-[11px] text-[var(--text-secondary)]">từ</span>
 			</span>
-			<span className="text-[11px] text-[var(--text-secondary)]">từ</span>
 			<span className="text-zinc-300 dark:text-zinc-600">•</span>
-			<span className="font-bold text-[var(--text-primary)]">
-				{counts.chars.toLocaleString()}
+			<span className="whitespace-nowrap">
+				<strong className="font-bold text-[var(--text-primary)]">
+					{counts.chars.toLocaleString()}
+				</strong>{" "}
+				<span className="text-[11px] text-[var(--text-secondary)]">ký tự</span>
 			</span>
-			<span className="text-[11px] text-[var(--text-secondary)]">ký tự</span>
-			<span className="text-zinc-300 dark:text-zinc-600 hidden lg:inline">
+			<span className="text-zinc-300 dark:text-zinc-600 hidden md:inline">
 				•
 			</span>
-			<span className="text-[11px] text-[var(--brand-orange)] font-semibold hidden lg:inline">
+			<span className="text-[11px] text-[var(--brand-orange)] font-semibold hidden md:inline whitespace-nowrap">
 				~{readingTimeMinutes} phút đọc
 			</span>
 		</div>
@@ -1461,9 +1462,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 	}, [handleSave, isSaving, uploadingMedia]);
 
 	return (
-		<div
-			className={`review-editor-container mx-auto space-y-6 py-4 pb-24 transition-[max-width,width] duration-350 ease-in-out ${WIDTH_MAP[editorWidth]}`}
-		>
+		<div className="review-editor-container w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 py-4 pb-24">
 			{/* Hidden file inputs for various media types */}
 			<input
 				ref={fileInputRef}
@@ -1509,12 +1508,13 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 			{/* Editor Header / Action Bar */}
 			<div
 				ref={headerRef}
-				className="sticky top-[64px] z-30 flex items-center justify-between border-b border-[var(--border-primary)] pb-4 pt-2 bg-[var(--bg-primary)]"
+				className="sticky top-[64px] z-30 flex items-center justify-between gap-4 border-b border-[var(--border-primary)] pb-4 pt-2 bg-[var(--bg-primary)]/95 backdrop-blur-md"
 			>
-				<div className="flex items-center space-x-3">
+				{/* Left Action Group: Back to Manga Info + Word Counter */}
+				<div className="flex items-center space-x-3 shrink-0">
 					<button
 						onClick={onBack}
-						className="flex items-center space-x-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition animate-pulse-subtle"
+						className="flex items-center space-x-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition py-1.5 px-3 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 shrink-0"
 					>
 						<svg
 							width="16"
@@ -1531,23 +1531,24 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 						<span>Back to Manga Info</span>
 					</button>
 
-					<div className="hidden sm:flex items-center">
+					<div className="hidden sm:flex items-center shrink-0">
 						<LiveWordCounter editor={editor} />
 					</div>
 				</div>
 
-				<div className="flex items-center space-x-2">
+				{/* Right Action Group: Width Presets + Clean + Guide + Save Review */}
+				<div className="flex items-center space-x-2.5 shrink-0">
 					{/* Width presets */}
-					<div className="flex items-center border border-[var(--border-primary)] rounded-lg overflow-hidden text-xs font-semibold">
+					<div className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden text-xs font-semibold shrink-0 bg-[var(--bg-card)] shadow-xs">
 						{(["compact", "standard", "wide", "full"] as EditorWidth[]).map(
 							(w) => (
 								<button
 									key={w}
 									onClick={() => setEditorWidth(w)}
-									title={`${w.charAt(0).toUpperCase() + w.slice(1)} width`}
-									className={`px-2 py-1.5 transition ${
+									title={`${w.charAt(0).toUpperCase() + w.slice(1)} width (${w === "compact" ? "640px" : w === "standard" ? "768px" : w === "wide" ? "1024px" : "100%"})`}
+									className={`px-2.5 py-1.5 transition whitespace-nowrap ${
 										editorWidth === w
-											? "bg-[var(--brand-orange)] text-white"
+											? "bg-[var(--brand-orange)] text-white shadow-xs font-bold"
 											: "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
 									}`}
 								>
@@ -1565,7 +1566,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
 					<button
 						onClick={handleClientCleanup}
-						className="px-3 py-1.5 border border-[var(--border-primary)] text-[var(--brand-orange)] hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
+						className="px-3 py-1.5 border border-[var(--border-primary)] text-[var(--brand-orange)] hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shrink-0 whitespace-nowrap bg-[var(--bg-card)] shadow-xs"
 						title="Clean tabs and extra spaces"
 					>
 						<svg
@@ -1586,7 +1587,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
 					<button
 						onClick={() => setShowHelpModal(true)}
-						className="px-3 py-1.5 border border-[var(--border-primary)] text-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
+						className="px-3 py-1.5 border border-[var(--border-primary)] text-zinc-500 hover:text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shrink-0 whitespace-nowrap bg-[var(--bg-card)] shadow-xs"
 						title="Editor Guide"
 					>
 						<HelpCircle size={14} />
@@ -1596,7 +1597,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 					<button
 						onClick={handleSave}
 						disabled={isSaving || uploadingMedia}
-						className="px-4 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm transition disabled:opacity-60"
+						className="px-4 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm transition disabled:opacity-60 shrink-0 whitespace-nowrap"
 					>
 						<svg
 							width="14"
@@ -1766,7 +1767,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 			<div
 				onMouseOver={handleMouseOver}
 				onMouseOut={handleMouseOut}
-				className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-8 md:p-12 shadow-sm space-y-6 min-h-[600px] relative"
+				className={`mx-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-8 md:p-12 shadow-sm space-y-6 min-h-[600px] relative transition-[max-width,width] duration-350 ease-in-out ${WIDTH_MAP[editorWidth]}`}
 			>
 				{/* Title */}
 				<input

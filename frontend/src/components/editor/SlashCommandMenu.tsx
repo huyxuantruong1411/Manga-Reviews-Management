@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { executeClearFormatting } from "./clearFormatting.ts";
 
 interface SlashCommand {
 	id: string;
@@ -138,10 +139,9 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 		{
 			id: "clear-format",
 			title: "Clear Formatting",
-			description: "Xóa toàn bộ định dạng đoạn văn",
+			description: "Xóa toàn bộ định dạng và bullet đoạn văn",
 			icon: <RemoveFormatting size={16} className="text-amber-500" />,
-			action: (e) =>
-				e.chain().focus().unsetAllMarks().clearNodes().unsetTextAlign().run(),
+			action: (e) => executeClearFormatting(e),
 		},
 		{
 			id: "divider",
