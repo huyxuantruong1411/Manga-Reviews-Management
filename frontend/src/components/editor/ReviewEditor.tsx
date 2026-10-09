@@ -1462,7 +1462,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 	}, [handleSave, isSaving, uploadingMedia]);
 
 	return (
-		<div className="review-editor-container w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 py-4 pb-24">
+		<div className="review-editor-container w-full mx-auto space-y-6 py-4 pb-24">
 			{/* Hidden file inputs for various media types */}
 			<input
 				ref={fileInputRef}
@@ -1767,7 +1767,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 			<div
 				onMouseOver={handleMouseOver}
 				onMouseOut={handleMouseOut}
-				className={`mx-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-8 md:p-12 shadow-sm space-y-6 min-h-[600px] relative transition-[max-width,width] duration-350 ease-in-out ${WIDTH_MAP[editorWidth]}`}
+				className={`review-editor-canvas w-full mx-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-8 md:p-12 shadow-sm space-y-6 min-h-[600px] relative ${WIDTH_MAP[editorWidth]}`}
 			>
 				{/* Title */}
 				<input

@@ -74,8 +74,11 @@ svg.recharts-surface:focus {
 	box-shadow: none !important;
 }
 
-/* Smooth Container Width Transition for Review Editor & Dynamic Layouts */
-.review-editor-container {
+/* Smooth Container Width Transition for Review Editor & Dynamic Layouts.
+ * Must stay unlayered: the global `*` scrollbar transition below would otherwise
+ * override Tailwind's layered `transition-*` utilities. */
+.review-editor-container,
+.review-editor-canvas {
 	transition:
 		max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
 		width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
