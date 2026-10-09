@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **158**
+Total Endpoints Discovered: **161**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -26,9 +26,9 @@ Total Endpoints Discovered: **158**
 | `GET` | `/api/audit-logs/actions` | `get_audit_actions` | audit-logs | [`audit_logs.py:63`](../../backend/routers/audit_logs.py#L63) | Yes |
 | `GET` | `/api/audit-logs/stats` | `get_audit_stats` | audit-logs | [`audit_logs.py:69`](../../backend/routers/audit_logs.py#L69) | Yes |
 | `GET` | `/api/audit-logs/{log_id}` | `get_audit_log_by_id` | audit-logs | [`audit_logs.py:75`](../../backend/routers/audit_logs.py#L75) | Yes |
-| `DELETE` | `/api/chapters/{chapter_id}` | `delete_chapter` | Chapters & Reader | [`chapters.py:63`](../../backend/routers/chapters.py#L63) | Yes |
-| `GET` | `/api/chapters/{chapter_id}` | `get_chapter` | Chapters & Reader | [`chapters.py:48`](../../backend/routers/chapters.py#L48) | Yes |
-| `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:89`](../../backend/routers/chapters.py#L89) | Yes |
+| `DELETE` | `/api/chapters/{chapter_id}` | `delete_chapter` | Chapters & Reader | [`chapters.py:66`](../../backend/routers/chapters.py#L66) | Yes |
+| `GET` | `/api/chapters/{chapter_id}` | `get_chapter` | Chapters & Reader | [`chapters.py:51`](../../backend/routers/chapters.py#L51) | Yes |
+| `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:92`](../../backend/routers/chapters.py#L92) | Yes |
 | `GET` | `/api/creators/suggestions` | `get_suggestions` | Creators | [`creators.py:12`](../../backend/routers/creators.py#L12) | Yes |
 | `GET` | `/api/creators/{name}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
 | `GET` | `/api/dictionary/define/{word}` | `define_word` | vision | [`vision.py:512`](../../backend/routers/vision.py#L512) | Yes |
@@ -56,23 +56,26 @@ Total Endpoints Discovered: **158**
 | `DELETE` | `/api/manga/{manga_id}` | `delete_manga` | Manga | [`manga.py:204`](../../backend/routers/manga.py#L204) | Yes |
 | `GET` | `/api/manga/{manga_id}` | `get_manga` | Manga | [`manga.py:101`](../../backend/routers/manga.py#L101) | Yes |
 | `PUT` | `/api/manga/{manga_id}` | `update_manga` | Manga | [`manga.py:177`](../../backend/routers/manga.py#L177) | Yes |
-| `GET` | `/api/manga/{manga_id}/chapters` | `get_manga_chapters` | Chapters & Reader | [`chapters.py:35`](../../backend/routers/chapters.py#L35) | Yes |
-| `POST` | `/api/manga/{manga_id}/chapters/sync-metadata` | `sync_manga_chapters_metadata` | Chapters & Reader | [`chapters.py:78`](../../backend/routers/chapters.py#L78) | Yes |
-| `POST` | `/api/manga/{manga_id}/cleanup-latest-chapter` | `cleanup_latest_chapter` | Chapters & Reader | [`chapters.py:204`](../../backend/routers/chapters.py#L204) | Yes |
+| `GET` | `/api/manga/{manga_id}/chapters` | `get_manga_chapters` | Chapters & Reader | [`chapters.py:38`](../../backend/routers/chapters.py#L38) | Yes |
+| `POST` | `/api/manga/{manga_id}/chapters/sync-metadata` | `sync_manga_chapters_metadata` | Chapters & Reader | [`chapters.py:81`](../../backend/routers/chapters.py#L81) | Yes |
+| `POST` | `/api/manga/{manga_id}/cleanup-latest-chapter` | `cleanup_latest_chapter` | Chapters & Reader | [`chapters.py:207`](../../backend/routers/chapters.py#L207) | Yes |
 | `DELETE` | `/api/manga/{manga_id}/covers` | `delete_manga_covers` | Cover Arts | [`cover_arts.py:33`](../../backend/routers/cover_arts.py#L33) | Yes |
 | `GET` | `/api/manga/{manga_id}/covers` | `get_manga_covers` | Cover Arts | [`cover_arts.py:9`](../../backend/routers/cover_arts.py#L9) | Yes |
 | `POST` | `/api/manga/{manga_id}/covers/sync` | `sync_manga_covers` | Cover Arts | [`cover_arts.py:21`](../../backend/routers/cover_arts.py#L21) | Yes |
 | `POST` | `/api/manga/{manga_id}/download` | `download_manga_chapters` | Downloads | [`downloads.py:149`](../../backend/routers/downloads.py#L149) | Yes |
 | `POST` | `/api/manga/{manga_id}/enrich-trackers` | `enrich_manga_tracker_metadata` | Manga | [`manga.py:222`](../../backend/routers/manga.py#L222) | Yes |
+| `GET` | `/api/manga/{manga_id}/export/download/{export_id}` | `download_manga_export` | Chapters & Reader | [`chapters.py:238`](../../backend/routers/chapters.py#L238) | Yes |
+| `POST` | `/api/manga/{manga_id}/export/open-folder` | `open_export_folder_in_explorer` | Chapters & Reader | [`chapters.py:252`](../../backend/routers/chapters.py#L252) | Yes |
+| `POST` | `/api/manga/{manga_id}/export/stream` | `export_manga_chapters_stream` | Chapters & Reader | [`chapters.py:224`](../../backend/routers/chapters.py#L224) | Yes |
 | `GET` | `/api/manga/{manga_id}/history` | `get_manga_history` | Manga | [`manga.py:234`](../../backend/routers/manga.py#L234) | Yes |
-| `POST` | `/api/manga/{manga_id}/import-folder` | `import_local_folder` | Chapters & Reader | [`chapters.py:113`](../../backend/routers/chapters.py#L113) | Yes |
-| `POST` | `/api/manga/{manga_id}/import-folder-stream` | `import_local_folder_stream` | Chapters & Reader | [`chapters.py:133`](../../backend/routers/chapters.py#L133) | Yes |
+| `POST` | `/api/manga/{manga_id}/import-folder` | `import_local_folder` | Chapters & Reader | [`chapters.py:116`](../../backend/routers/chapters.py#L116) | Yes |
+| `POST` | `/api/manga/{manga_id}/import-folder-stream` | `import_local_folder_stream` | Chapters & Reader | [`chapters.py:136`](../../backend/routers/chapters.py#L136) | Yes |
 | `DELETE` | `/api/manga/{manga_id}/panels` | `delete_manga_panels` | vision | [`vision.py:237`](../../backend/routers/vision.py#L237) | Yes |
 | `GET` | `/api/manga/{manga_id}/panels/report` | `generate_manga_panels_report` | vision | [`vision.py:330`](../../backend/routers/vision.py#L330) | Yes |
 | `GET` | `/api/manga/{manga_id}/panels/search` | `search_manga_panels` | vision | [`vision.py:289`](../../backend/routers/vision.py#L289) | Yes |
 | `GET` | `/api/manga/{manga_id}/panels/stats` | `get_manga_panels_stats` | vision | [`vision.py:319`](../../backend/routers/vision.py#L319) | Yes |
-| `GET` | `/api/manga/{manga_id}/reading-progress` | `get_reading_progress` | Chapters & Reader | [`chapters.py:173`](../../backend/routers/chapters.py#L173) | Yes |
-| `POST` | `/api/manga/{manga_id}/reading-progress` | `save_reading_progress` | Chapters & Reader | [`chapters.py:183`](../../backend/routers/chapters.py#L183) | Yes |
+| `GET` | `/api/manga/{manga_id}/reading-progress` | `get_reading_progress` | Chapters & Reader | [`chapters.py:176`](../../backend/routers/chapters.py#L176) | Yes |
+| `POST` | `/api/manga/{manga_id}/reading-progress` | `save_reading_progress` | Chapters & Reader | [`chapters.py:186`](../../backend/routers/chapters.py#L186) | Yes |
 | `GET` | `/api/manga/{manga_id}/recommendations` | `get_recommendations` | Recommendations | [`recommendations.py:15`](../../backend/routers/recommendations.py#L15) | Yes |
 | `POST` | `/api/manga/{manga_id}/recommendations/sync` | `force_sync_recommendations` | Recommendations | [`recommendations.py:27`](../../backend/routers/recommendations.py#L27) | Yes |
 | `GET` | `/api/manga/{manga_id}/reviews` | `list_reviews` | Reviews | [`reviews.py:52`](../../backend/routers/reviews.py#L52) | Yes |
@@ -85,14 +88,14 @@ Total Endpoints Discovered: **158**
 | `PUT` | `/api/manga/{manga_id}/reviews/{review_id}` | `update_review` | Reviews | [`reviews.py:128`](../../backend/routers/reviews.py#L128) | Yes |
 | `POST` | `/api/manga/{manga_id}/reviews/{review_id}/cleanup` | `cleanup_review_tabs` | Reviews | [`reviews.py:208`](../../backend/routers/reviews.py#L208) | Yes |
 | `POST` | `/api/manga/{manga_id}/reviews/{review_id}/finalize` | `finalize_review` | Reviews | [`reviews.py:550`](../../backend/routers/reviews.py#L550) | Yes |
-| `POST` | `/api/manga/{manga_id}/scan-folder` | `scan_local_folder` | Chapters & Reader | [`chapters.py:102`](../../backend/routers/chapters.py#L102) | Yes |
+| `POST` | `/api/manga/{manga_id}/scan-folder` | `scan_local_folder` | Chapters & Reader | [`chapters.py:105`](../../backend/routers/chapters.py#L105) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan-panels` | `trigger_manga_scan` | vision | [`vision.py:195`](../../backend/routers/vision.py#L195) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan-panels/cancel` | `cancel_manga_panels_scan` | vision | [`vision.py:227`](../../backend/routers/vision.py#L227) | Yes |
 | `GET` | `/api/manga/{manga_id}/scan-progress` | `stream_scan_progress` | vision | [`vision.py:257`](../../backend/routers/vision.py#L257) | Yes |
 | `GET` | `/api/manga/{manga_id}/scan-status` | `get_scan_status` | vision | [`vision.py:251`](../../backend/routers/vision.py#L251) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan/cancel` | `cancel_manga_panels_scan` | vision | [`vision.py:227`](../../backend/routers/vision.py#L227) | Yes |
-| `GET` | `/api/manga/{manga_id}/storage-duplicates` | `get_storage_duplicates` | Chapters & Reader | [`chapters.py:151`](../../backend/routers/chapters.py#L151) | Yes |
-| `POST` | `/api/manga/{manga_id}/storage-duplicates/cleanup` | `cleanup_storage_duplicates` | Chapters & Reader | [`chapters.py:162`](../../backend/routers/chapters.py#L162) | Yes |
+| `GET` | `/api/manga/{manga_id}/storage-duplicates` | `get_storage_duplicates` | Chapters & Reader | [`chapters.py:154`](../../backend/routers/chapters.py#L154) | Yes |
+| `POST` | `/api/manga/{manga_id}/storage-duplicates/cleanup` | `cleanup_storage_duplicates` | Chapters & Reader | [`chapters.py:165`](../../backend/routers/chapters.py#L165) | Yes |
 | `POST` | `/api/manga/{manga_id}/sync` | `sync_manga_metadata` | Manga | [`manga.py:213`](../../backend/routers/manga.py#L213) | Yes |
 | `GET` | `/api/mangadex/manga/{mangadex_id}/basic-info` | `get_external_manga_basic_info` | Recommendations | [`recommendations.py:39`](../../backend/routers/recommendations.py#L39) | Yes |
 | `GET` | `/api/mangadex/manga/{mangadex_id}/chapters` | `get_manga_chapters` | MangaDex Proxy | [`mangadex.py:29`](../../backend/routers/mangadex.py#L29) | Yes |

@@ -3523,7 +3523,7 @@ export const MangaDetailPage: React.FC = () => {
 							</div>
 
 							{/* Alternative Titles (Col Span 1) */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm">
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm overflow-hidden">
 								<div className="flex justify-between items-center">
 									<h3 className="text-base font-bold flex items-center space-x-2 text-[var(--text-primary)]">
 										<Globe size={18} className="text-blue-500" />
@@ -3585,26 +3585,28 @@ export const MangaDetailPage: React.FC = () => {
 																key={idx}
 																className="border-b border-[var(--border-primary)]/40 last:border-0"
 															>
-																<td className="py-2.5 pr-3 flex items-center space-x-1.5 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
-																	<img
-																		src={flag.flagUrl}
-																		alt={flag.label}
-																		className="w-5 h-3.5 object-cover rounded shadow-sm"
-																		onError={(e) => {
-																			(e.target as HTMLImageElement).src =
-																				"https://flagcdn.com/w20/us.png";
-																		}}
-																	/>
-																	<span className="min-w-[20px]">
-																		{flag.label}
-																	</span>
-																	{flag.isRomanized && (
-																		<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
-																			RO
+																<td className="py-2.5 pr-3 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap w-[75px] align-middle">
+																	<div className="flex items-center space-x-1.5">
+																		<img
+																			src={flag.flagUrl}
+																			alt={flag.label}
+																			className="w-5 h-3.5 object-cover rounded shadow-sm shrink-0"
+																			onError={(e) => {
+																				(e.target as HTMLImageElement).src =
+																					"https://flagcdn.com/w20/us.png";
+																			}}
+																		/>
+																		<span className="min-w-[20px]">
+																			{flag.label}
 																		</span>
-																	)}
+																		{flag.isRomanized && (
+																			<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+																				RO
+																			</span>
+																		)}
+																	</div>
 																</td>
-																<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium">
+																<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium break-words align-middle">
 																	{title}
 																</td>
 															</tr>
@@ -3638,29 +3640,31 @@ export const MangaDetailPage: React.FC = () => {
 																	key={idx}
 																	className="border-b border-[var(--border-primary)]/40 last:border-0"
 																>
-																	<td className="py-2.5 pr-3 flex items-center space-x-1.5 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">
-																		<img
-																			src={flag.flagUrl}
-																			alt={flag.label}
-																			className="w-5 h-3.5 object-cover rounded shadow-sm"
-																			onError={(e) => {
-																				(e.target as HTMLImageElement).src =
-																					"https://flagcdn.com/w20/us.png";
-																			}}
-																		/>
-																		<span className="min-w-[20px]">
-																			{flag.label}
-																		</span>
-																		{flag.isRomanized && (
-																			<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
-																				RO
+																	<td className="py-2.5 pr-3 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap w-[75px] align-middle">
+																		<div className="flex items-center space-x-1.5">
+																			<img
+																				src={flag.flagUrl}
+																				alt={flag.label}
+																				className="w-5 h-3.5 object-cover rounded shadow-sm shrink-0"
+																				onError={(e) => {
+																					(e.target as HTMLImageElement).src =
+																						"https://flagcdn.com/w20/us.png";
+																				}}
+																			/>
+																			<span className="min-w-[20px]">
+																				{flag.label}
 																			</span>
-																		)}
+																			{flag.isRomanized && (
+																				<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+																					RO
+																				</span>
+																			)}
+																		</div>
 																	</td>
-																	<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium">
+																	<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium break-words align-middle">
 																		{title}
 																	</td>
-																	<td className="py-2.5 text-right">
+																	<td className="py-2.5 text-right w-8 align-middle">
 																		<button
 																			type="button"
 																			onClick={() => handleDeleteAltTitle(idx)}
@@ -3683,39 +3687,50 @@ export const MangaDetailPage: React.FC = () => {
 										)}
 
 										{/* Add new Alt Title Form */}
-										<div className="pt-3 border-t border-[var(--border-primary)]/40 flex items-center gap-2">
-											<select
-												value={newAltLang}
-												onChange={(e) => setNewAltLang(e.target.value)}
-												className="px-2 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none cursor-pointer"
-											>
-												{ALT_TITLE_LANGUAGES.map((lang) => (
-													<option key={lang.code} value={lang.code}>
-														{lang.label}
-													</option>
-												))}
-											</select>
-											<input
-												type="text"
-												value={newAltTitle}
-												onChange={(e) => setNewAltTitle(e.target.value)}
-												onKeyDown={(e) => {
-													if (e.key === "Enter") {
-														e.preventDefault();
-														handleAddAltTitle();
-													}
-												}}
-												placeholder="Enter alt title..."
-												className="flex-1 px-2.5 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
-											/>
-											<button
-												type="button"
-												onClick={handleAddAltTitle}
-												className="px-2.5 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm shrink-0"
-											>
-												<Plus size={12} />
-												<span>Add</span>
-											</button>
+										<div className="pt-3 border-t border-[var(--border-primary)]/40 space-y-2.5">
+											<div className="flex items-center gap-2">
+												<label
+													htmlFor="new-alt-lang-select"
+													className="text-xs font-semibold text-[var(--text-secondary)] shrink-0"
+												>
+													Language:
+												</label>
+												<select
+													id="new-alt-lang-select"
+													value={newAltLang}
+													onChange={(e) => setNewAltLang(e.target.value)}
+													className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+												>
+													{ALT_TITLE_LANGUAGES.map((lang) => (
+														<option key={lang.code} value={lang.code}>
+															{lang.label}
+														</option>
+													))}
+												</select>
+											</div>
+											<div className="flex items-center gap-2">
+												<input
+													type="text"
+													value={newAltTitle}
+													onChange={(e) => setNewAltTitle(e.target.value)}
+													onKeyDown={(e) => {
+														if (e.key === "Enter") {
+															e.preventDefault();
+															handleAddAltTitle();
+														}
+													}}
+													placeholder="Enter alternative title..."
+													className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+												/>
+												<button
+													type="button"
+													onClick={handleAddAltTitle}
+													className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm shrink-0 active:scale-95"
+												>
+													<Plus size={13} />
+													<span>Add</span>
+												</button>
+											</div>
 										</div>
 									</div>
 								)}

@@ -1,11 +1,14 @@
 import logging
+import os
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Path, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.models.chapter import DeletePagesRequest, FolderImportRequest, FolderScanResponse, StorageDuplicateGroup
+from backend.models.chapter_export import ChapterExportOpenFolderRequest, ChapterExportRequest
+from backend.services.chapter_export_service import chapter_export_service
 from backend.services.chapter_service import chapter_service
 
 logger = logging.getLogger(__name__)
@@ -215,3 +218,43 @@ async def cleanup_latest_chapter(manga_id: str = Path(...), lang: Optional[str] 
     except Exception as e:
         logger.error(f"Error cleaning up latest chapter for {manga_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/manga/{manga_id}/export/stream")
+async def export_manga_chapters_stream(
+    manga_id: str = Path(...),
+    payload: ChapterExportRequest = Body(...),
+):
+    """Export manga chapters to PDF, ZIP, CBZ, or folder with granular SSE progress streaming."""
+    try:
+        generator = chapter_export_service.stream_export_manga(manga_id, payload)
+        return StreamingResponse(generator, media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Error starting export stream for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manga/{manga_id}/export/download/{export_id}")
+async def download_manga_export(
+    manga_id: str = Path(...),
+    export_id: str = Path(...),
+):
+    """Download exported manga artifact file generated via browser export."""
+    file_path = chapter_export_service.get_export_file_path(export_id)
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Tệp xuất dữ liệu không tồn tại hoặc đã hết hạn")
+
+    filename = os.path.basename(file_path)
+    return FileResponse(file_path, filename=filename)
+
+
+@router.post("/manga/{manga_id}/export/open-folder")
+async def open_export_folder_in_explorer(
+    manga_id: str = Path(...),
+    payload: ChapterExportOpenFolderRequest = Body(...),
+):
+    """Open Windows Explorer and reveal the target export file or folder."""
+    res = chapter_export_service.reveal_in_windows_explorer(payload.path)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("message", "Không thể mở Windows Explorer"))
+    return res

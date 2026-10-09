@@ -80,3 +80,54 @@ export interface StorageDuplicateGroup {
 	file_size: number;
 	items: StorageDuplicateItem[];
 }
+
+export type ExportFormat = "pdf" | "zip" | "cbz" | "folder";
+export type ExportGrouping = "single_file" | "by_volume" | "by_chapter";
+export type ExportDestination = "browser" | "local_folder";
+export type ImageOptimization = "original" | "compressed";
+
+export interface ChapterExportRequest {
+	chapter_ids?: string[];
+	language?: string;
+	format: ExportFormat;
+	grouping: ExportGrouping;
+	destination: ExportDestination;
+	local_path?: string;
+	auto_open_explorer?: boolean;
+	image_optimization?: ImageOptimization;
+	include_metadata?: boolean;
+	include_cover?: boolean;
+	naming_template?: string;
+}
+
+export interface ExportLogItem {
+	id: string;
+	time: string;
+	text: string;
+	type: "info" | "success" | "warn" | "error";
+}
+
+export interface ChapterExportProgress {
+	status: "idle" | "running" | "completed" | "error";
+	percent: number;
+	totalChapters: number;
+	currentChapterNumber: string;
+	currentChapterTitle: string;
+	currentChapterIndex: number;
+	currentPageNumber: number;
+	currentChapterPageCount: number;
+	totalPagesDone: number;
+	totalPagesOverall: number;
+	speedPagesPerSec: number;
+	elapsedSeconds: number;
+	etaSeconds: number;
+	previewBase64: string | null;
+	phaseMessage: string;
+	downloadUrl?: string | null;
+	destinationPath?: string | null;
+	fileName?: string | null;
+	totalSizeBytes?: number;
+	isLocal?: boolean;
+	logs: ExportLogItem[];
+	error?: string;
+}

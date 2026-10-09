@@ -12,6 +12,7 @@ import {
 	ChevronUp,
 	Clock,
 	Copy,
+	Download,
 	Eye,
 	Folder,
 	FolderOpen,
@@ -43,6 +44,7 @@ import type {
 	PageItem,
 	StorageDuplicateGroup,
 } from "../../types/chapter";
+import { MangaExportModal } from "./MangaExportModal";
 
 interface ImportLogItem {
 	id: string;
@@ -208,6 +210,9 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 	// Delete Confirm Modal
 	const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
+
+	// Manga Export Modal
+	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
 	// Duplicate Scanner Modal
 	const [isDupModalOpen, setIsDupModalOpen] = useState(false);
@@ -1117,6 +1122,16 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 						<Upload size={15} />
 						<span>Import từ Folder</span>
 					</button>
+
+					<button
+						type="button"
+						onClick={() => setIsExportModalOpen(true)}
+						title="Xuất dữ liệu truyện xuống máy (PDF, ZIP, CBZ, Thư mục ảnh)"
+						className="px-3.5 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center space-x-2 transition shadow-sm cursor-pointer"
+					>
+						<Download size={15} />
+						<span>Xuất dữ liệu (Export)</span>
+					</button>
 				</div>
 			</div>
 
@@ -1285,6 +1300,16 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									>
 										<Trash2 size={14} />
 										<span>Xóa đã chọn ({selectedChapterIds.length})</span>
+									</button>
+
+									<button
+										type="button"
+										onClick={() => setIsExportModalOpen(true)}
+										className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center space-x-1.5 transition shadow-sm animate-in fade-in cursor-pointer"
+										title="Xuất các chapters đã được chọn"
+									>
+										<Download size={14} />
+										<span>Xuất đã chọn ({selectedChapterIds.length})</span>
 									</button>
 								</>
 							)}
@@ -3074,6 +3099,20 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 					</div>
 				</div>
 			)}
+
+			{/* Manga Chapter Export Modal */}
+			<MangaExportModal
+				isOpen={isExportModalOpen}
+				onClose={() => setIsExportModalOpen(false)}
+				mangaId={mangaId}
+				mangaTitle={mangaTitle}
+				chapters={chapters}
+				selectedChapterIds={selectedChapterIds}
+				defaultLanguage={
+					selectedLanguage !== "all" ? selectedLanguage : undefined
+				}
+			/>
+
 			{/* Lightbox Preview Modal for Chapter Pages (Issue 4) */}
 			{previewPageIndex !== null && activeChapterPages[previewPageIndex] && (
 				<div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col animate-in fade-in duration-150 select-none">
