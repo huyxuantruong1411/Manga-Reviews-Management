@@ -29,6 +29,7 @@ import {
 	Paperclip,
 	Quote,
 	Redo,
+	RemoveFormatting,
 	Sparkles,
 	Strikethrough,
 	Table,
@@ -164,6 +165,20 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 					title="Highlight"
 				>
 					<Highlighter size={15} />
+				</ToolbarBtn>
+				<ToolbarBtn
+					onClick={() =>
+						editor
+							.chain()
+							.focus()
+							.unsetAllMarks()
+							.clearNodes()
+							.unsetTextAlign()
+							.run()
+					}
+					title="Xóa toàn bộ định dạng văn bản đã chọn (Clear formatting - Ctrl+\)"
+				>
+					<RemoveFormatting size={15} />
 				</ToolbarBtn>
 
 				<Divider />

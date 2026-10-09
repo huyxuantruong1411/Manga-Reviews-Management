@@ -5,6 +5,7 @@
  * manga cross-references, adjustable width.
  */
 
+import { Extension } from "@tiptap/core";
 import BubbleMenuExtension from "@tiptap/extension-bubble-menu";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
@@ -24,6 +25,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import {
 	BookOpen,
+	FileText,
 	HelpCircle,
 	Loader2,
 	Search,
@@ -93,6 +95,22 @@ const CustomTableHeader = TableHeader.extend({
 					};
 				},
 			},
+		};
+	},
+});
+
+const ClearFormattingExtension = Extension.create({
+	name: "clearFormatting",
+	addKeyboardShortcuts() {
+		return {
+			"Mod-\\": () =>
+				this.editor
+					.chain()
+					.focus()
+					.unsetAllMarks()
+					.clearNodes()
+					.unsetTextAlign()
+					.run(),
 		};
 	},
 });
@@ -237,60 +255,135 @@ const getYoutubeId = (url: string): string | null => {
 
 interface LiveWordCounterProps {
 	editor: Editor | null;
+	variant?: "default" | "compact" | "pill";
+	showHint?: boolean;
 }
 
-const LiveWordCounter = memo(({ editor }: LiveWordCounterProps) => {
-	const [counts, setCounts] = useState<{ words: number; chars: number }>({
-		words: 0,
-		chars: 0,
-	});
+const LiveWordCounter = memo(
+	({ editor, variant = "default", showHint = false }: LiveWordCounterProps) => {
+		const [counts, setCounts] = useState<{ words: number; chars: number }>({
+			words: 0,
+			chars: 0,
+		});
 
-	useEffect(() => {
-		if (!editor) return;
+		useEffect(() => {
+			if (!editor) return;
 
-		const computeCounts = () => {
-			const text = editor.getText() || "";
-			const trimmed = text.trim();
-			const words = trimmed ? trimmed.split(/\s+/).length : 0;
-			const chars = text.length;
-			setCounts({ words, chars });
-		};
+			const computeCounts = () => {
+				const text = editor.getText() || "";
+				const trimmed = text.trim();
+				const words = trimmed ? trimmed.split(/\s+/).length : 0;
+				const chars = text.length;
+				setCounts({ words, chars });
+			};
 
-		// Initial calculation
-		computeCounts();
+			// Initial calculation
+			computeCounts();
 
-		// Debounce by 50ms so typing never drops frames or lags
-		let timer: ReturnType<typeof setTimeout> | null = null;
-		const handleUpdate = () => {
-			if (timer) clearTimeout(timer);
-			timer = setTimeout(computeCounts, 50);
-		};
+			// Debounce by 50ms so typing never drops frames or lags
+			let timer: ReturnType<typeof setTimeout> | null = null;
+			const handleUpdate = () => {
+				if (timer) clearTimeout(timer);
+				timer = setTimeout(computeCounts, 50);
+			};
 
-		editor.on("update", handleUpdate);
-		return () => {
-			editor.off("update", handleUpdate);
-			if (timer) clearTimeout(timer);
-		};
-	}, [editor]);
+			editor.on("update", handleUpdate);
+			return () => {
+				editor.off("update", handleUpdate);
+				if (timer) clearTimeout(timer);
+			};
+		}, [editor]);
 
-	return (
-		<div className="flex items-center space-x-3">
-			<span>
-				<strong className="text-[var(--text-primary)] font-bold">
-					{counts.words.toLocaleString()}
-				</strong>{" "}
-				từ (words)
-			</span>
-			<span>•</span>
-			<span>
-				<strong className="text-[var(--text-primary)] font-bold">
-					{counts.chars.toLocaleString()}
-				</strong>{" "}
-				ký tự (chars)
-			</span>
-		</div>
-	);
-});
+		const readingTimeMinutes = Math.max(1, Math.ceil(counts.words / 200));
+
+		if (variant === "compact") {
+			return (
+				<div
+					className="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-[var(--bg-card)]/80 border border-[var(--border-primary)] text-xs text-[var(--text-secondary)] font-mono shadow-xs select-none"
+					title={`Ước tính thời gian đọc: ~${readingTimeMinutes} phút (${counts.words.toLocaleString()} từ, ${counts.chars.toLocaleString()} ký tự)`}
+				>
+					<FileText size={12} className="text-[var(--brand-orange)]" />
+					<span className="font-bold text-[var(--text-primary)]">
+						{counts.words.toLocaleString()}
+					</span>
+					<span className="text-[11px] text-[var(--text-secondary)]">từ</span>
+					<span className="text-zinc-300 dark:text-zinc-600">•</span>
+					<span className="font-bold text-[var(--text-primary)]">
+						{counts.chars.toLocaleString()}
+					</span>
+					<span className="text-[11px] text-[var(--text-secondary)]">
+						ký tự
+					</span>
+				</div>
+			);
+		}
+
+		if (variant === "pill") {
+			return (
+				<div
+					className="flex items-center space-x-2 text-xs text-[var(--text-secondary)] font-mono select-none"
+					title={`Ước tính thời gian đọc: ~${readingTimeMinutes} phút (${counts.words.toLocaleString()} từ, ${counts.chars.toLocaleString()} ký tự)`}
+				>
+					<span className="flex items-center space-x-1.5">
+						<FileText
+							size={13}
+							className="text-[var(--brand-orange)] shrink-0"
+						/>
+						<strong className="text-[var(--text-primary)] font-bold">
+							{counts.words.toLocaleString()}
+						</strong>
+						<span>từ</span>
+					</span>
+					<span className="text-zinc-300 dark:text-zinc-600">•</span>
+					<span>
+						<strong className="text-[var(--text-primary)] font-bold">
+							{counts.chars.toLocaleString()}
+						</strong>{" "}
+						ký tự
+					</span>
+					<span className="text-zinc-300 dark:text-zinc-600 hidden sm:inline">
+						•
+					</span>
+					<span className="text-[11px] text-[var(--brand-orange)] font-semibold hidden sm:inline">
+						~{readingTimeMinutes} phút đọc
+					</span>
+					{showHint && (
+						<>
+							<span className="text-zinc-300 dark:text-zinc-600 hidden md:inline">
+								•
+							</span>
+							<span className="text-[10px] text-zinc-400 dark:text-zinc-500 hidden md:inline">
+								Gõ{" "}
+								<kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[9px] font-mono font-bold text-[var(--text-primary)]">
+									/
+								</kbd>{" "}
+								lệnh nhanh
+							</span>
+						</>
+					)}
+				</div>
+			);
+		}
+
+		return (
+			<div className="flex items-center space-x-3 text-xs text-[var(--text-secondary)] font-mono select-none">
+				<span>
+					<strong className="text-[var(--text-primary)] font-bold">
+						{counts.words.toLocaleString()}
+					</strong>{" "}
+					từ (words)
+				</span>
+				<span>•</span>
+				<span>
+					<strong className="text-[var(--text-primary)] font-bold">
+						{counts.chars.toLocaleString()}
+					</strong>{" "}
+					ký tự (chars)
+				</span>
+			</div>
+		);
+	},
+);
 
 interface ReviewEditorProps {
 	mangaId: string;
@@ -454,6 +547,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 			VideoExtension,
 			AudioExtension,
 			FileAttachmentExtension,
+			ClearFormattingExtension,
 		],
 		content: initialContent || {},
 		editorProps: {
@@ -1484,24 +1578,30 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 				ref={headerRef}
 				className="sticky top-[64px] z-30 flex items-center justify-between border-b border-[var(--border-primary)] pb-4 pt-2 bg-[var(--bg-primary)]"
 			>
-				<button
-					onClick={onBack}
-					className="flex items-center space-x-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition animate-pulse-subtle"
-				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2.5"
-						strokeLinecap="round"
-						strokeLinejoin="round"
+				<div className="flex items-center space-x-3">
+					<button
+						onClick={onBack}
+						className="flex items-center space-x-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition animate-pulse-subtle"
 					>
-						<polyline points="15 18 9 12 15 6" />
-					</svg>
-					<span>Back to Manga Info</span>
-				</button>
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<polyline points="15 18 9 12 15 6" />
+						</svg>
+						<span>Back to Manga Info</span>
+					</button>
+
+					<div className="hidden xl:flex items-center">
+						<LiveWordCounter editor={editor} variant="compact" />
+					</div>
+				</div>
 
 				<div className="flex items-center space-x-2">
 					{/* Width presets */}
@@ -1776,7 +1876,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 				</div>
 
 				{/* Editor Area with slash command support */}
-				<div className="relative prose prose-zinc dark:prose-invert max-w-none text-base leading-relaxed editor-content-wrapper">
+				<div className="relative prose prose-zinc dark:prose-invert max-w-none text-base leading-relaxed editor-content-wrapper pb-24 md:pb-28">
 					<SlashCommandMenu
 						editor={editor}
 						onImageUpload={() => fileInputRef.current?.click()}
@@ -1958,15 +2058,10 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 						</BubbleMenu>
 					)}
 
-					{/* Word Count & Status Bar */}
-					<div className="flex items-center justify-between px-4 py-2 border-t border-[var(--border-primary)] bg-[var(--bg-primary)]/40 text-[11px] text-[var(--text-secondary)] font-mono select-none">
-						<LiveWordCounter editor={editor} />
-						<div className="text-[10px] text-zinc-400 dark:text-zinc-500 hidden sm:block">
-							Gõ{" "}
-							<kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[9px] font-mono font-bold">
-								/
-							</kbd>{" "}
-							để mở menu lệnh nhanh
+					{/* Sticky Non-Overlapping Word Count & Status Pill Dock */}
+					<div className="sticky bottom-4 z-20 flex justify-center pointer-events-none mt-6 not-prose">
+						<div className="pointer-events-auto bg-[var(--bg-card)]/95 dark:bg-zinc-900/95 backdrop-blur-md border border-[var(--border-primary)] shadow-lg hover:shadow-xl rounded-full px-4 py-1.5 transition-all duration-200 hover:border-[var(--brand-orange)]/50 max-w-[calc(100%-8rem)] sm:max-w-none">
+							<LiveWordCounter editor={editor} variant="pill" showHint />
 						</div>
 					</div>
 				</div>

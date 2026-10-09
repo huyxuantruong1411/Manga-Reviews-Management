@@ -22,6 +22,7 @@ import {
 	Music as MusicIcon,
 	Paperclip as PaperclipIcon,
 	Quote,
+	RemoveFormatting,
 	Table,
 	Video as VideoIcon,
 	PlayCircle as YoutubeIcon,
@@ -133,6 +134,14 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 			description: "Monospaced code block",
 			icon: <Code2 size={16} />,
 			action: (e) => e.chain().focus().toggleCodeBlock().run(),
+		},
+		{
+			id: "clear-format",
+			title: "Clear Formatting",
+			description: "Xóa toàn bộ định dạng đoạn văn",
+			icon: <RemoveFormatting size={16} className="text-amber-500" />,
+			action: (e) =>
+				e.chain().focus().unsetAllMarks().clearNodes().unsetTextAlign().run(),
 		},
 		{
 			id: "divider",
