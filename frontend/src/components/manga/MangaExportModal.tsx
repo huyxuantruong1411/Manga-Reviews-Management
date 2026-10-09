@@ -130,6 +130,17 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 			.catch(() => {});
 	}, [isOpen, mangaTitle, localPath]);
 
+	// Synchronize export scope when modal opens or selectedChapterIds changes
+	useEffect(() => {
+		if (isOpen) {
+			if (selectedChapterIds.length > 0) {
+				setExportScope("selected");
+			} else {
+				setExportScope("all");
+			}
+		}
+	}, [isOpen, selectedChapterIds]);
+
 	// Auto-scroll logs
 	useEffect(() => {
 		if (progress.status === "running" && logsEndRef.current) {
@@ -575,9 +586,9 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 						<div className="space-y-6">
 							{/* Scope Selection */}
 							<div className="space-y-2">
-								<label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+								<span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
 									1. Phạm vi chương cần xuất
-								</label>
+								</span>
 								<div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 									<button
 										type="button"
@@ -698,9 +709,9 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 
 							{/* Format Selection */}
 							<div className="space-y-2">
-								<label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+								<span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
 									2. Định dạng xuất (Format)
-								</label>
+								</span>
 								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 									{formatOptions.map((opt) => {
 										const isSelected = format === opt.id;
@@ -749,9 +760,9 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 
 							{/* Grouping Selection (Disabled if raw folder) */}
 							<div className="space-y-2">
-								<label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+								<span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
 									3. Cấu trúc ghép nối & Phân nhóm (Grouping)
-								</label>
+								</span>
 								<div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
 									{groupingOptions.map((opt) => {
 										const isSelected = grouping === opt.id;
@@ -783,9 +794,9 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 
 							{/* Destination Method */}
 							<div className="space-y-2">
-								<label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+								<span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
 									4. Phương thức nhận tệp (Destination)
-								</label>
+								</span>
 								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 									<button
 										type="button"
@@ -845,7 +856,7 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 								{destination === "local_folder" && (
 									<div className="p-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] space-y-3 mt-2 animate-in fade-in">
 										<div>
-											<label className="text-xs font-bold text-[var(--text-primary)] flex items-center justify-between">
+											<div className="text-xs font-bold text-[var(--text-primary)] flex items-center justify-between">
 												<span>Đường dẫn thư mục lưu trên máy:</span>
 												{defaultBasePath && (
 													<button
@@ -860,7 +871,7 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 														Dùng thư mục mặc định
 													</button>
 												)}
-											</label>
+											</div>
 											<div className="relative mt-1.5">
 												<Folder
 													size={15}
@@ -913,9 +924,9 @@ export const MangaExportModal: React.FC<MangaExportModalProps> = ({
 									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 animate-in fade-in">
 										{/* Optimization */}
 										<div className="p-3 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] space-y-1.5">
-											<label className="text-xs font-bold text-[var(--text-primary)]">
+											<div className="text-xs font-bold text-[var(--text-primary)]">
 												Chất lượng ảnh:
-											</label>
+											</div>
 											<div className="flex items-center gap-2">
 												<button
 													type="button"

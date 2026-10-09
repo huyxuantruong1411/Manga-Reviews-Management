@@ -161,6 +161,72 @@ class TestChapterExportService(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"type": "page_progress"', event_texts)
         self.assertIn('"type": "completed"', event_texts)
 
+    @patch("backend.services.chapter_export_service.get_db")
+    @patch("backend.services.chapter_export_service.chapter_service.get_manga_chapters")
+    @patch("backend.services.chapter_export_service.minio_service.client.get_object")
+    async def test_stream_export_manga_with_dict_chapters_and_id_filter(
+        self, mock_minio_get, mock_get_chapters, mock_get_db
+    ):
+        from bson import ObjectId
+
+        manga_oid = ObjectId()
+        mock_db = MagicMock()
+        mock_db.mangas.find_one = AsyncMock(
+            return_value={
+                "_id": manga_oid,
+                "title": "Dict Manga",
+                "authors": ["Author B"],
+            }
+        )
+        mock_get_db.return_value = mock_db
+
+        chap1_id = "6ac3fe8710f653ef6ae57778"
+        chap2_id = "6ac3fe8710f653ef6ae57779"
+
+        dict_chapters = [
+            {
+                "id": chap1_id,
+                "manga_id": str(manga_oid),
+                "chapter_number": "1",
+                "chapter_numeric": 1.0,
+                "volume": "1",
+                "title": "Dict Chap 1",
+                "pages": [{"filename": "001.jpg", "object_key": "k1", "page_number": 1}],
+            },
+            {
+                "id": chap2_id,
+                "manga_id": str(manga_oid),
+                "chapter_number": "2",
+                "chapter_numeric": 2.0,
+                "volume": "1",
+                "title": "Dict Chap 2",
+                "pages": [{"filename": "002.jpg", "object_key": "k2", "page_number": 1}],
+            },
+        ]
+        mock_get_chapters.return_value = dict_chapters
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = self._create_mock_image(50, 50, "green")
+        mock_minio_get.return_value = mock_resp
+
+        req = ChapterExportRequest(
+            chapter_ids=[chap1_id],  # only chapter 1
+            format="zip",
+            grouping="by_chapter",
+            destination="browser",
+        )
+
+        events = []
+        async for sse_chunk in self.service.stream_export_manga(str(manga_oid), req):
+            events.append(sse_chunk)
+
+        event_texts = "".join(events)
+        self.assertIn('"type": "init"', event_texts)
+        self.assertIn('"total_chapters": 1', event_texts)
+        self.assertIn('"chapter_id": "' + chap1_id + '"', event_texts)
+        self.assertNotIn(chap2_id, event_texts)
+        self.assertIn('"type": "completed"', event_texts)
+
 
 if __name__ == "__main__":
     unittest.main()

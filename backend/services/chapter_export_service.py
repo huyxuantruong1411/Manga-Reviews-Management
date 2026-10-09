@@ -26,6 +26,50 @@ from backend.utils.file_utils import clean_filename, normalize_windows_path
 logger = logging.getLogger(__name__)
 
 
+class ExportPage:
+    def __init__(self, raw: Any):
+        if isinstance(raw, dict):
+            self.filename = str(raw.get("filename") or f"{raw.get('page_number', 1):03d}.jpg")
+            self.object_key = str(raw.get("object_key") or "")
+            self.page_number = int(raw.get("page_number") or 1)
+            self.file_size = int(raw.get("file_size") or 0)
+        else:
+            self.filename = str(getattr(raw, "filename", None) or f"{getattr(raw, 'page_number', 1):03d}.jpg")
+            self.object_key = str(getattr(raw, "object_key", "") or "")
+            self.page_number = int(getattr(raw, "page_number", 1) or 1)
+            self.file_size = int(getattr(raw, "file_size", 0) or 0)
+
+
+class ExportChapter:
+    def __init__(self, raw: Any):
+        if isinstance(raw, dict):
+            self.id = str(raw.get("id") or raw.get("_id") or "")
+            self.chapter_number = str(raw.get("chapter_number", "1"))
+            try:
+                self.chapter_numeric = float(raw.get("chapter_numeric") or 0.0)
+            except (ValueError, TypeError):
+                self.chapter_numeric = 0.0
+            vol = raw.get("volume")
+            self.volume = str(vol).strip() if vol is not None and str(vol).strip() != "" else None
+            self.title = str(raw.get("title") or "")
+            self.language = str(raw.get("language") or "en")
+            raw_pages = raw.get("pages") or []
+        else:
+            self.id = str(getattr(raw, "id", None) or getattr(raw, "_id", "") or "")
+            self.chapter_number = str(getattr(raw, "chapter_number", "1"))
+            try:
+                self.chapter_numeric = float(getattr(raw, "chapter_numeric", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                self.chapter_numeric = 0.0
+            vol = getattr(raw, "volume", None)
+            self.volume = str(vol).strip() if vol is not None and str(vol).strip() != "" else None
+            self.title = str(getattr(raw, "title", "") or "")
+            self.language = str(getattr(raw, "language", "en") or "en")
+            raw_pages = getattr(raw, "pages", []) or []
+
+        self.pages = [ExportPage(p) for p in raw_pages]
+
+
 class ChapterExportService:
     """Domain service for exporting manga chapters to PDF, ZIP, CBZ, and structured folders
 
@@ -204,15 +248,27 @@ class ChapterExportService:
         summary = manga.get("description") or ""
 
         # 2. Fetch Chapters
-        all_chapters = await chapter_service.get_manga_chapters(manga_id, language=request.language)
-        if not all_chapters:
+        fetch_lang = None if (request.chapter_ids and len(request.chapter_ids) > 0) else request.language
+        if fetch_lang and fetch_lang.lower() == "all":
+            fetch_lang = None
+
+        raw_chapters = await chapter_service.get_manga_chapters(manga_id, language=fetch_lang)
+        if not raw_chapters and fetch_lang is not None:
+            raw_chapters = await chapter_service.get_manga_chapters(manga_id)
+
+        if not raw_chapters:
             yield f"data: {json.dumps({'type': 'error', 'error': 'Không tìm thấy chapter nào để xuất dữ liệu'})}\n\n"
             return
 
+        all_chapters = [ExportChapter(c) for c in raw_chapters]
+
         # Filter by selected chapter IDs if specified
         if request.chapter_ids and len(request.chapter_ids) > 0:
-            target_ids_set = set(request.chapter_ids)
-            target_chapters = [c for c in all_chapters if getattr(c, "id", None) in target_ids_set]
+            target_ids_set = {str(cid) for cid in request.chapter_ids}
+            target_chapters = [c for c in all_chapters if c.id in target_ids_set]
+        elif request.language and request.language.lower() != "all":
+            req_lang = request.language.strip().lower()
+            target_chapters = [c for c in all_chapters if (c.language or "en").lower() == req_lang]
         else:
             target_chapters = all_chapters
 
@@ -221,14 +277,14 @@ class ChapterExportService:
             return
 
         # Sort naturally by volume and chapter_numeric
-        def sort_key(c):
+        def sort_key(c: ExportChapter):
             vol_val = 0.0
-            if getattr(c, "volume", None):
+            if c.volume:
                 try:
                     vol_val = float(str(c.volume).replace("v", "").replace("Vol.", "").strip())
                 except ValueError:
                     vol_val = 999.0
-            num_val = getattr(c, "chapter_numeric", 0.0) or 0.0
+            num_val = c.chapter_numeric or 0.0
             return (vol_val, num_val)
 
         target_chapters.sort(key=sort_key)
@@ -294,7 +350,7 @@ class ChapterExportService:
                 json.dumps(
                     {
                         'type': 'chapter_start',
-                        'chapter_id': getattr(chapter, 'id', ''),
+                        'chapter_id': chapter.id,
                         'chapter_number': chap_num,
                         'volume': chap_vol,
                         'title': chap_title,
@@ -438,6 +494,9 @@ class ChapterExportService:
                     )
 
             if request.destination == "browser":
+                if not generated_pdfs:
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'Không tạo được file PDF nào từ các trang ảnh'})}\n\n"
+                    return
                 if len(generated_pdfs) == 1:
                     pdf_name, pdf_data = generated_pdfs[0]
                     final_path = os.path.join(work_dir, pdf_name)
@@ -525,6 +584,9 @@ class ChapterExportService:
                     )
 
             if request.destination == "browser":
+                if not generated_archives:
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'Không tạo được gói nén nào từ các chương đã chọn'})}\n\n"
+                    return
                 if len(generated_archives) == 1:
                     arch_name, arch_data = generated_archives[0]
                     final_path = os.path.join(work_dir, arch_name)
