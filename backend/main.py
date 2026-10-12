@@ -14,6 +14,7 @@ from backend.routers import (
     chapters,
     cover_arts,
     creators,
+    datasources,
     downloads,
     image_tools,
     manga,
@@ -103,6 +104,7 @@ app.include_router(chapters.router)
 app.include_router(vision.router)
 app.include_router(tasks.router)
 app.include_router(translation.router)
+app.include_router(datasources.router)
 
 
 @app.get("/health")

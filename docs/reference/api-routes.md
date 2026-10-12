@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **162**
+Total Endpoints Discovered: **165**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -31,6 +31,9 @@ Total Endpoints Discovered: **162**
 | `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:97`](../../backend/routers/chapters.py#L97) | Yes |
 | `GET` | `/api/creators/suggestions` | `get_suggestions` | Creators | [`creators.py:12`](../../backend/routers/creators.py#L12) | Yes |
 | `GET` | `/api/creators/{name}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
+| `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:28`](../../backend/routers/datasources.py#L28) | Yes |
+| `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:37`](../../backend/routers/datasources.py#L37) | Yes |
+| `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:71`](../../backend/routers/datasources.py#L71) | Yes |
 | `GET` | `/api/dictionary/define/{word}` | `define_word` | vision | [`vision.py:512`](../../backend/routers/vision.py#L512) | Yes |
 | `GET` | `/api/downloads/base-path` | `get_base_path` | Downloads | [`downloads.py:21`](../../backend/routers/downloads.py#L21) | Yes |
 | `PUT` | `/api/downloads/base-path` | `update_base_path` | Downloads | [`downloads.py:34`](../../backend/routers/downloads.py#L34) | Yes |
@@ -166,6 +169,6 @@ Total Endpoints Discovered: **162**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:109`](../../backend/main.py#L109) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:111`](../../backend/main.py#L111) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |
