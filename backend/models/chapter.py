@@ -16,6 +16,8 @@ class PageItem(BaseModel):
     width: Optional[int] = Field(None, description="Image width in pixels")
     height: Optional[int] = Field(None, description="Image height in pixels")
     md5_hash: Optional[str] = Field(None, description="MD5 hash for duplicate detection")
+    sha256: Optional[str] = Field(None, description="SHA-256 hash for media integrity verification")
+    content_type: Optional[str] = Field(None, description="MIME type e.g. image/jpeg, image/png, image/webp")
     url: Optional[str] = Field(None, description="Presigned URL for reading")
 
 

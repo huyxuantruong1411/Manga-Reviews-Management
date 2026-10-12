@@ -177,6 +177,9 @@ async def init_db_indexes():
 
         # sync_runs
         await db.sync_runs.create_index([("started_at", -1)])
+        # download_plans
+        await db.download_plans.create_index([("manga_id", 1), ("created_at", -1)])
+        await db.download_plans.create_index("expires_at")
 
         # manga_sources
         await db.manga_sources.create_index([("source", 1), ("source_work_id", 1)], unique=True)

@@ -9,6 +9,14 @@ from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.database.connection import get_db
+from backend.models.datasource import IdentityConflictError
+from backend.models.download_plan import (
+    CreateDownloadPlanRequest,
+    DownloadPlan,
+    ExecuteDownloadPlanRequest,
+    ExecuteDownloadPlanResponse,
+)
+from backend.services.download_plan_service import download_plan_service
 from backend.services.download_service import download_service
 from backend.utils.file_utils import clean_filename, normalize_windows_path
 
@@ -290,3 +298,64 @@ async def delete_download_task(task_id: str = Path(...)):
             status_code=400, detail="Nhiệm vụ tải xuống không thể xóa (có thể do đang chạy hoặc không tìm thấy)"
         )
     return {"message": "Nhiệm vụ tải xuống đã được xóa thành công"}
+
+
+# --- Download Plan Endpoints (PR03 Multi-Source) ---
+
+
+@router.post("/manga/{manga_id}/download-plans", response_model=DownloadPlan)
+async def create_manga_download_plan(
+    manga_id: str = Path(..., description="Target manga ID"),
+    payload: CreateDownloadPlanRequest = Body(...),
+):
+    """
+    Creates a server-side validated download plan for a manga and datasource.
+    Enforces source linkage and selection policy against existing chapters.
+    """
+    try:
+        plan = await download_plan_service.create_plan(
+            manga_id=manga_id,
+            source=payload.source,
+            source_work_id=payload.source_work_id,
+            release_ids=payload.release_ids,
+            selection_policy=payload.selection_policy,
+            save_to_disk=payload.save_to_disk,
+            download_path=payload.download_path,
+        )
+        return plan
+    except IdentityConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating download plan for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download-plans/{plan_id}", response_model=DownloadPlan)
+async def get_download_plan(plan_id: str = Path(..., description="Plan ID")):
+    """
+    Retrieves the status, preview items, and decisions for a download plan.
+    """
+    plan = await download_plan_service.get_plan(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Download plan not found")
+    return plan
+
+
+@router.post("/download-plans/{plan_id}/execute", response_model=ExecuteDownloadPlanResponse)
+async def execute_download_plan(
+    plan_id: str = Path(..., description="Plan ID"),
+    payload: ExecuteDownloadPlanRequest = Body(default_factory=ExecuteDownloadPlanRequest),
+):
+    """
+    Executes a verified download plan and starts background downloading.
+    """
+    try:
+        result = await download_plan_service.execute_plan(plan_id=plan_id, idempotency_key=payload.idempotency_key)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing download plan {plan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

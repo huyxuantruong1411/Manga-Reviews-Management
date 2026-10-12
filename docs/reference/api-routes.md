@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **165**
+Total Endpoints Discovered: **168**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -35,14 +35,16 @@ Total Endpoints Discovered: **165**
 | `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:38`](../../backend/routers/datasources.py#L38) | Yes |
 | `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:72`](../../backend/routers/datasources.py#L72) | Yes |
 | `GET` | `/api/dictionary/define/{word}` | `define_word` | vision | [`vision.py:512`](../../backend/routers/vision.py#L512) | Yes |
-| `GET` | `/api/downloads/base-path` | `get_base_path` | Downloads | [`downloads.py:21`](../../backend/routers/downloads.py#L21) | Yes |
-| `PUT` | `/api/downloads/base-path` | `update_base_path` | Downloads | [`downloads.py:34`](../../backend/routers/downloads.py#L34) | Yes |
-| `GET` | `/api/downloads/tasks` | `list_download_tasks` | Downloads | [`downloads.py:252`](../../backend/routers/downloads.py#L252) | Yes |
-| `DELETE` | `/api/downloads/tasks/{task_id}` | `delete_download_task` | Downloads | [`downloads.py:285`](../../backend/routers/downloads.py#L285) | Yes |
-| `GET` | `/api/downloads/tasks/{task_id}` | `get_download_task` | Downloads | [`downloads.py:258`](../../backend/routers/downloads.py#L258) | Yes |
-| `POST` | `/api/downloads/tasks/{task_id}/cancel` | `cancel_download_task` | Downloads | [`downloads.py:267`](../../backend/routers/downloads.py#L267) | Yes |
-| `POST` | `/api/downloads/tasks/{task_id}/resume` | `resume_download_task` | Downloads | [`downloads.py:276`](../../backend/routers/downloads.py#L276) | Yes |
-| `POST` | `/api/downloads/verify-path` | `verify_download_path` | Downloads | [`downloads.py:66`](../../backend/routers/downloads.py#L66) | Yes |
+| `GET` | `/api/download-plans/{plan_id}` | `get_download_plan` | Downloads | [`downloads.py:336`](../../backend/routers/downloads.py#L336) | Yes |
+| `POST` | `/api/download-plans/{plan_id}/execute` | `execute_download_plan` | Downloads | [`downloads.py:347`](../../backend/routers/downloads.py#L347) | Yes |
+| `GET` | `/api/downloads/base-path` | `get_base_path` | Downloads | [`downloads.py:29`](../../backend/routers/downloads.py#L29) | Yes |
+| `PUT` | `/api/downloads/base-path` | `update_base_path` | Downloads | [`downloads.py:42`](../../backend/routers/downloads.py#L42) | Yes |
+| `GET` | `/api/downloads/tasks` | `list_download_tasks` | Downloads | [`downloads.py:260`](../../backend/routers/downloads.py#L260) | Yes |
+| `DELETE` | `/api/downloads/tasks/{task_id}` | `delete_download_task` | Downloads | [`downloads.py:293`](../../backend/routers/downloads.py#L293) | Yes |
+| `GET` | `/api/downloads/tasks/{task_id}` | `get_download_task` | Downloads | [`downloads.py:266`](../../backend/routers/downloads.py#L266) | Yes |
+| `POST` | `/api/downloads/tasks/{task_id}/cancel` | `cancel_download_task` | Downloads | [`downloads.py:275`](../../backend/routers/downloads.py#L275) | Yes |
+| `POST` | `/api/downloads/tasks/{task_id}/resume` | `resume_download_task` | Downloads | [`downloads.py:284`](../../backend/routers/downloads.py#L284) | Yes |
+| `POST` | `/api/downloads/verify-path` | `verify_download_path` | Downloads | [`downloads.py:74`](../../backend/routers/downloads.py#L74) | Yes |
 | `POST` | `/api/image-tools/convert-format` | `convert_format` | Image Tools | [`image_tools.py:119`](../../backend/routers/image_tools.py#L119) | Yes |
 | `POST` | `/api/image-tools/delete-duplicates` | `delete_duplicates` | Image Tools | [`image_tools.py:102`](../../backend/routers/image_tools.py#L102) | Yes |
 | `GET` | `/api/image-tools/file` | `get_local_image_file` | Image Tools | [`image_tools.py:153`](../../backend/routers/image_tools.py#L153) | Yes |
@@ -65,7 +67,8 @@ Total Endpoints Discovered: **165**
 | `DELETE` | `/api/manga/{manga_id}/covers` | `delete_manga_covers` | Cover Arts | [`cover_arts.py:33`](../../backend/routers/cover_arts.py#L33) | Yes |
 | `GET` | `/api/manga/{manga_id}/covers` | `get_manga_covers` | Cover Arts | [`cover_arts.py:9`](../../backend/routers/cover_arts.py#L9) | Yes |
 | `POST` | `/api/manga/{manga_id}/covers/sync` | `sync_manga_covers` | Cover Arts | [`cover_arts.py:21`](../../backend/routers/cover_arts.py#L21) | Yes |
-| `POST` | `/api/manga/{manga_id}/download` | `download_manga_chapters` | Downloads | [`downloads.py:149`](../../backend/routers/downloads.py#L149) | Yes |
+| `POST` | `/api/manga/{manga_id}/download` | `download_manga_chapters` | Downloads | [`downloads.py:157`](../../backend/routers/downloads.py#L157) | Yes |
+| `POST` | `/api/manga/{manga_id}/download-plans` | `create_manga_download_plan` | Downloads | [`downloads.py:307`](../../backend/routers/downloads.py#L307) | Yes |
 | `POST` | `/api/manga/{manga_id}/enrich-trackers` | `enrich_manga_tracker_metadata` | Manga | [`manga.py:228`](../../backend/routers/manga.py#L228) | Yes |
 | `GET` | `/api/manga/{manga_id}/export/download/{export_id}` | `download_manga_export` | Chapters & Reader | [`chapters.py:243`](../../backend/routers/chapters.py#L243) | Yes |
 | `POST` | `/api/manga/{manga_id}/export/open-folder` | `open_export_folder_in_explorer` | Chapters & Reader | [`chapters.py:257`](../../backend/routers/chapters.py#L257) | Yes |

@@ -98,6 +98,61 @@ class MinioService:
             logger.error(f"Error uploading chapter page {filename} to MinIO: {e}")
             raise
 
+    def upload_chapter_page_revision(
+        self,
+        manga_id: str,
+        chapter_id: str,
+        media_revision_id: str,
+        filename: str,
+        data: bytes,
+        content_type: str = "image/jpeg",
+    ) -> tuple:
+        """
+        Uploads a chapter page image to MinIO under immutable revision key.
+        Returns (object_key, file_size, width, height, sha256_hash, md5_hash).
+        """
+        import hashlib
+
+        from PIL import Image
+
+        try:
+            if not self.client.bucket_exists(self.bucket):
+                self.client.make_bucket(self.bucket)
+
+            sha256_hash = hashlib.sha256(data).hexdigest()
+            md5_hash = hashlib.md5(data).hexdigest()
+            file_size = len(data)
+            width, height = None, None
+
+            try:
+                with Image.open(io.BytesIO(data)) as img:
+                    width, height = img.size
+            except Exception as ie:
+                logger.warning(f"Could not read image dimensions for {filename}: {ie}")
+
+            object_name = f"chapters/{manga_id}/{chapter_id}/revisions/{media_revision_id}/{filename}"
+            data_stream = io.BytesIO(data)
+            self.client.put_object(self.bucket, object_name, data_stream, length=file_size, content_type=content_type)
+            return object_name, file_size, width, height, sha256_hash, md5_hash
+        except Exception as e:
+            logger.error(f"Error uploading chapter page revision {filename} to MinIO: {e}")
+            raise
+
+    def put_object_bytes(self, object_name: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+        """
+        Uploads arbitrary raw bytes to MinIO bucket and returns object_name.
+        """
+        try:
+            if not self.client.bucket_exists(self.bucket):
+                self.client.make_bucket(self.bucket)
+
+            data_stream = io.BytesIO(data)
+            self.client.put_object(self.bucket, object_name, data_stream, length=len(data), content_type=content_type)
+            return object_name
+        except Exception as e:
+            logger.error(f"Error putting object {object_name} to MinIO: {e}")
+            raise
+
     def delete_cover(self, object_name: str) -> bool:
         """
         Deletes a cover image from the MinIO bucket.

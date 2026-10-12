@@ -50,3 +50,17 @@ def _init_builtin_providers() -> None:
             register_datasource_provider(MangaDexSourceProvider())
         except Exception as e:
             logger.error(f"Failed to initialize MangaDexSourceProvider: {e}")
+
+
+class ProviderRegistry:
+    def get_provider(self, name: str) -> MangaSourceProvider:
+        return get_datasource_provider(name)
+
+    def register_provider(self, provider: MangaSourceProvider) -> None:
+        register_datasource_provider(provider)
+
+    def list_providers(self) -> List[MangaSourceProvider]:
+        return list_datasource_providers()
+
+
+provider_registry = ProviderRegistry()
