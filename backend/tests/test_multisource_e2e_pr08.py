@@ -4,16 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from bson import ObjectId
 
+from backend.models.datasource import SourceRelease, SourceWork, SSRFSecurityError
+from backend.models.download_plan import DownloadSelectionPolicy
 from backend.services.chapter_lifecycle_service import chapter_lifecycle_service
 from backend.services.chapter_service import chapter_service
 from backend.services.chapter_slot_service import chapter_slot_service
-from backend.models.datasource import SSRFSecurityError, SourceRelease, SourceWork
-from backend.models.download_plan import DownloadSelectionPolicy
 from backend.services.datasources.url_utils import validate_and_parse_source_url
 from backend.services.download_plan_service import DownloadPlanService
 from backend.services.metadata_merge_service import (
     MetadataMergeService,
-    metadata_merge_service,
 )
 
 
@@ -556,11 +555,15 @@ def test_multisource_ssrf_and_security_boundaries():
         validate_and_parse_source_url("https://mangafire.to.attacker.com/title/oj8n8")
 
     # Valid URLs pass normalization
-    provider, work_id, canonical = validate_and_parse_source_url("https://mangafire.to/title/oj8n8-sheeply-horned-witch-romii")
+    provider, work_id, canonical = validate_and_parse_source_url(
+        "https://mangafire.to/title/oj8n8-sheeply-horned-witch-romii"
+    )
     assert provider == "mangafire"
     assert work_id == "oj8n8"
     assert "https://mangafire.to/title/oj8n8" in canonical
 
-    provider_md, work_id_md, _ = validate_and_parse_source_url("https://mangadex.org/title/8627e210-25dc-4e9a-8531-142c917e4760")
+    provider_md, work_id_md, _ = validate_and_parse_source_url(
+        "https://mangadex.org/title/8627e210-25dc-4e9a-8531-142c917e4760"
+    )
     assert provider_md == "mangadex"
     assert work_id_md == "8627e210-25dc-4e9a-8531-142c917e4760"

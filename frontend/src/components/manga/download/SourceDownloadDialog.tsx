@@ -1,17 +1,24 @@
 import {
 	AlertCircle,
+	AlertTriangle,
+	BookOpen,
 	Check,
 	CheckCircle2,
+	Database,
 	Download,
+	DownloadCloud,
 	ExternalLink,
-	Folder,
+	FolderPlus,
 	Globe,
+	Info,
 	Layers,
 	Loader2,
+	Plus,
 	RefreshCw,
 	Search,
-	ShieldCheck,
 	Sparkles,
+	X,
+	Zap,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -26,16 +33,6 @@ import type {
 	SourceRelease,
 	SourceWork,
 } from "../../../types/datasource";
-import { Badge } from "../../ui/badge";
-import { Button } from "../../ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "../../ui/dialog";
 
 interface SourceDownloadDialogProps {
 	isOpen: boolean;
@@ -45,6 +42,18 @@ interface SourceDownloadDialogProps {
 	mangadexId?: string | null;
 	defaultSource?: string;
 	onDownloadStarted?: (taskId: string) => void;
+}
+
+interface VerifyResult {
+	exists: boolean;
+	writable: boolean;
+	message: string;
+}
+
+interface StoredChapterInfo {
+	chapter_number?: string;
+	pages_count?: number;
+	pages?: unknown[];
 }
 
 export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
@@ -77,10 +86,19 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 	const [loadingReleases, setLoadingReleases] = useState<boolean>(false);
 	const [releaseError, setReleaseError] = useState<string | null>(null);
 
+	// Group selection filter
+	const [selectedGroups, setSelectedGroups] = useState<string[]>(["all"]);
+
 	// Storage coverage
 	const [existingChapterIds, setExistingChapterIds] = useState<Set<string>>(
 		new Set(),
 	);
+	const [storageChapterMap, setStorageChapterMap] = useState<
+		Map<string, StoredChapterInfo>
+	>(new Map());
+	const [latestStoredChapter, setLatestStoredChapter] = useState<{
+		chapter_number: string;
+	} | null>(null);
 	const [_loadingStorage, setLoadingStorage] = useState<boolean>(false);
 
 	// Selection & Filters
@@ -96,11 +114,14 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 	// Disk storage options
 	const [saveToDisk, setSaveToDisk] = useState<boolean>(false);
 	const [customPath, setCustomPath] = useState<string>("");
+	const [verifying, setVerifying] = useState<boolean>(false);
+	const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+	const [isTitleModalOpen, setIsTitleModalOpen] = useState<boolean>(false);
 
 	// Execution state
 	const [executing, setExecuting] = useState<boolean>(false);
 
-	// Load providers on open
+	// Load providers and storage info on modal open
 	useEffect(() => {
 		if (!isOpen) return;
 
@@ -119,11 +140,26 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				const res = await client.get(`/api/manga/${mangaId}/chapters`);
 				const chaps = res.data?.chapters || [];
 				const set = new Set<string>();
+				const sMap = new Map<string, StoredChapterInfo>();
+				let highest: { chapter_number: string; numeric: number } | null = null;
+
 				for (const c of chaps) {
 					if (c.source_id) set.add(String(c.source_id));
-					if (c.chapter_number) set.add(`num:${c.chapter_number}`);
+					if (c.chapter_number) {
+						const chapKey = String(c.chapter_number).trim().toLowerCase();
+						set.add(`num:${chapKey}`);
+						sMap.set(chapKey, c);
+						const num = Number.parseFloat(c.chapter_number);
+						if (!Number.isNaN(num) && (!highest || num > highest.numeric)) {
+							highest = { chapter_number: c.chapter_number, numeric: num };
+						}
+					}
 				}
 				setExistingChapterIds(set);
+				setStorageChapterMap(sMap);
+				if (highest) {
+					setLatestStoredChapter({ chapter_number: highest.chapter_number });
+				}
 			} catch (e) {
 				console.error("Failed to fetch storage chapters:", e);
 			} finally {
@@ -152,6 +188,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		setActiveWork(null);
 		setReleases([]);
 		setSelectedReleaseIds(new Set());
+		setSelectedGroups(["all"]);
 		setReleaseError(null);
 
 		const initWork = async () => {
@@ -172,10 +209,11 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 					} else if (res.data.available_languages?.[0]) {
 						setSelectedLang(res.data.available_languages[0]);
 					}
-				} catch (err: any) {
+				} catch (err: unknown) {
 					console.error("Failed to resolve MangaDex work:", err);
+					const error = err as { response?: { data?: { detail?: string } } };
 					setReleaseError(
-						err.response?.data?.detail || "Không thể kết nối với MangaDex",
+						error.response?.data?.detail || "Không thể kết nối với MangaDex",
 					);
 				} finally {
 					setResolvingWork(false);
@@ -207,9 +245,10 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				`Đã nhận diện: "${res.data.title}" từ ${selectedProvider}`,
 				"success",
 			);
-		} catch (err: any) {
+		} catch (err: unknown) {
+			const error = err as { response?: { data?: { detail?: string } } };
 			const msg =
-				err.response?.data?.detail || "Không thể phân tích URL của nguồn này";
+				error.response?.data?.detail || "Không thể phân tích URL của nguồn này";
 			setReleaseError(msg);
 			showToast(msg, "error");
 		} finally {
@@ -234,13 +273,14 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 						},
 					},
 				);
-				setReleases(res.data.items || []);
+				const items = res.data.items || [];
+				setReleases(items);
 
 				// Auto-select based on one-per-chapter mode
 				const initialSelected = new Set<string>();
 				const seenNumbers = new Set<string>();
 
-				for (const rel of res.data.items || []) {
+				for (const rel of items) {
 					if (onePerChapterMode) {
 						if (!seenNumbers.has(rel.chapter_number)) {
 							seenNumbers.add(rel.chapter_number);
@@ -251,10 +291,11 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 					}
 				}
 				setSelectedReleaseIds(initialSelected);
-			} catch (err: any) {
+			} catch (err: unknown) {
 				console.error("Failed to load releases:", err);
+				const error = err as { response?: { data?: { detail?: string } } };
 				setReleaseError(
-					err.response?.data?.detail || "Không thể tải danh sách chương",
+					error.response?.data?.detail || "Không thể tải danh sách chương",
 				);
 			} finally {
 				setLoadingReleases(false);
@@ -264,9 +305,74 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		fetchReleases();
 	}, [activeWork, selectedLang, onePerChapterMode]);
 
-	// Filtered releases based on search & release type
-	const filteredReleases = useMemo(() => {
+	// Extract unique scanlation groups
+	const uniqueGroups = useMemo(() => {
+		const counts = new Map<
+			string,
+			{ id: string; name: string; count: number }
+		>();
+		for (const r of releases) {
+			const gid = r.group_name || "Mặc định";
+			if (!counts.has(gid)) {
+				counts.set(gid, { id: gid, name: gid, count: 0 });
+			}
+			const existingGroup = counts.get(gid);
+			if (existingGroup) {
+				existingGroup.count++;
+			}
+		}
+		return Array.from(counts.values());
+	}, [releases]);
+
+	// Duplicates & Logical Chapter Numbers analysis
+	const duplicatesInfo = useMemo(() => {
+		const chapMap = new Map<string, SourceRelease[]>();
+		for (const r of releases) {
+			const key = String(r.chapter_number ?? "")
+				.trim()
+				.toLowerCase();
+			if (!chapMap.has(key)) chapMap.set(key, []);
+			const list = chapMap.get(key);
+			if (list) {
+				list.push(r);
+			}
+		}
+		const duplicateKeys = new Set<string>();
+		chapMap.forEach((list, key) => {
+			if (list.length > 1) duplicateKeys.add(key);
+		});
+		return {
+			chapMap,
+			duplicateKeys,
+			uniqueChaptersCount: chapMap.size,
+			duplicateCount: duplicateKeys.size,
+		};
+	}, [releases]);
+
+	// Storage coverage statistics
+	const missingStats = useMemo(() => {
+		const totalUnique = duplicatesInfo.uniqueChaptersCount;
+		let storedUnique = 0;
+		duplicatesInfo.chapMap.forEach((_, key) => {
+			if (existingChapterIds.has(`num:${key}`)) {
+				storedUnique++;
+			}
+		});
+		return {
+			totalUnique,
+			storedUnique,
+			missingUnique: Math.max(0, totalUnique - storedUnique),
+		};
+	}, [duplicatesInfo, existingChapterIds]);
+
+	// Filtered releases based on search, group & release type
+	const displayedReleases = useMemo(() => {
 		return releases.filter((r) => {
+			// Group filter
+			if (!selectedGroups.includes("all")) {
+				const gid = r.group_name || "Mặc định";
+				if (!selectedGroups.includes(gid)) return false;
+			}
 			// Search filter
 			if (searchQuery.trim()) {
 				const q = searchQuery.toLowerCase();
@@ -280,7 +386,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 			}
 			return true;
 		});
-	}, [releases, searchQuery, releaseTypeFilter]);
+	}, [releases, selectedGroups, searchQuery, releaseTypeFilter]);
 
 	// Toggle single selection
 	const toggleRelease = (id: string) => {
@@ -295,10 +401,10 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		});
 	};
 
-	// Select all in view
+	// Select all displayed
 	const handleSelectAll = () => {
 		const next = new Set(selectedReleaseIds);
-		for (const r of filteredReleases) {
+		for (const r of displayedReleases) {
 			next.add(r.id);
 		}
 		setSelectedReleaseIds(next);
@@ -309,28 +415,133 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		setSelectedReleaseIds(new Set());
 	};
 
-	// Select only missing in storage
+	// Toggle group selection
+	const handleToggleGroup = (groupId: string) => {
+		if (selectedGroups.includes("all")) {
+			setSelectedGroups([groupId]);
+		} else if (selectedGroups.includes(groupId)) {
+			const next = selectedGroups.filter((g) => g !== groupId);
+			setSelectedGroups(next.length === 0 ? ["all"] : next);
+		} else {
+			setSelectedGroups([...selectedGroups, groupId]);
+		}
+	};
+
+	const handleSelectAllGroups = () => {
+		setSelectedGroups(["all"]);
+	};
+
+	// Select only missing chapters (intelligent resume)
 	const handleSelectMissing = () => {
 		const next = new Set<string>();
-		const seenNumbers = new Set<string>();
+		const seenMissingNumbers = new Set<string>();
 
-		for (const r of filteredReleases) {
+		for (const rel of releases) {
+			const chapKey = String(rel.chapter_number).trim().toLowerCase();
 			const isStored =
-				existingChapterIds.has(r.id) ||
-				existingChapterIds.has(`num:${r.chapter_number}`);
+				existingChapterIds.has(rel.id) ||
+				existingChapterIds.has(`num:${chapKey}`);
+
 			if (!isStored) {
-				if (onePerChapterMode) {
-					if (!seenNumbers.has(r.chapter_number)) {
-						seenNumbers.add(r.chapter_number);
-						next.add(r.id);
-					}
-				} else {
-					next.add(r.id);
+				if (!seenMissingNumbers.has(chapKey)) {
+					seenMissingNumbers.add(chapKey);
+					next.add(rel.id);
 				}
 			}
 		}
+
 		setSelectedReleaseIds(next);
+		showToast(
+			`Đã chọn ${next.size} chương còn thiếu trong kho lưu trữ!`,
+			"success",
+		);
 	};
+
+	// Auto-deduplicate (choose exactly 1 release per chapter)
+	const handleAutoDeduplicate = () => {
+		const next = new Set<string>();
+		const seen = new Set<string>();
+
+		for (const rel of displayedReleases) {
+			const chapKey = String(rel.chapter_number).trim().toLowerCase();
+			if (!seen.has(chapKey)) {
+				seen.add(chapKey);
+				next.add(rel.id);
+			}
+		}
+
+		setSelectedReleaseIds(next);
+		showToast(`Đã tự động chọn ${next.size} chương duy nhất!`, "success");
+	};
+
+	// Path verification
+	const handleVerifyPath = async () => {
+		if (!customPath.trim()) return;
+		setVerifying(true);
+		setVerifyResult(null);
+		try {
+			const res = await client.post<VerifyResult>(
+				"/api/downloads/verify-path",
+				{ path: customPath.trim() },
+			);
+			setVerifyResult(res.data);
+			showToast(res.data.message || "Đường dẫn hợp lệ!", "success");
+		} catch (err: unknown) {
+			const error = err as { response?: { data?: { detail?: string } } };
+			const msg =
+				error.response?.data?.detail || "Không thể kiểm tra đường dẫn thư mục";
+			setVerifyResult({ exists: false, writable: false, message: msg });
+			showToast(msg, "error");
+		} finally {
+			setVerifying(false);
+		}
+	};
+
+	// Append cleaned title to destination path
+	const appendCleanedTitle = (titleStr: string) => {
+		const cleanedTitle = titleStr
+			.replace(/[\\/:*?"<>|]/g, "")
+			.replace(/\s+/g, " ")
+			.trim();
+		if (!cleanedTitle) return;
+
+		let newPath = customPath.trim();
+		if (newPath) {
+			const separator = newPath.includes("\\") ? "\\" : "/";
+			if (newPath.endsWith("/") || newPath.endsWith("\\")) {
+				newPath += cleanedTitle;
+			} else {
+				newPath += separator + cleanedTitle;
+			}
+		} else {
+			newPath = cleanedTitle;
+		}
+		setCustomPath(newPath);
+		setVerifyResult(null);
+		showToast(`Đã thêm tên "${cleanedTitle}" vào đường dẫn`, "success");
+	};
+
+	// Title options for Append Title modal
+	const titleOptions = useMemo(() => {
+		const list: { title: string; label: string }[] = [];
+		if (mangaTitle) {
+			list.push({ title: mangaTitle, label: "Tên chính của manga" });
+		}
+		if (activeWork?.title && activeWork.title !== mangaTitle) {
+			list.push({
+				title: activeWork.title,
+				label: `Tên từ ${selectedProvider}`,
+			});
+		}
+		if (activeWork?.alt_titles) {
+			for (const alt of activeWork.alt_titles) {
+				if (!list.some((item) => item.title === alt)) {
+					list.push({ title: alt, label: "Tên phụ / Tên khác" });
+				}
+			}
+		}
+		return list;
+	}, [mangaTitle, activeWork, selectedProvider]);
 
 	// Execute Download Plan
 	const handleStartDownload = async () => {
@@ -342,7 +553,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 
 		setExecuting(true);
 		try {
-			// 1. Create Download Plan
+			// 1. Create server-side Download Plan
 			const createPlanRes = await client.post<DownloadPlan>(
 				`/api/manga/${mangaId}/download-plans`,
 				{
@@ -375,10 +586,11 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 			);
 
 			onClose();
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Execution error:", err);
+			const error = err as { response?: { data?: { detail?: string } } };
 			showToast(
-				err.response?.data?.detail || "Đã xảy ra lỗi khi tạo tác vụ.",
+				error.response?.data?.detail || "Đã xảy ra lỗi khi tạo tác vụ.",
 				"error",
 			);
 		} finally {
@@ -386,53 +598,61 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		}
 	};
 
-	// Summary statistics
-	const totalSelected = selectedReleaseIds.size;
-	const readyCount = useMemo(() => {
-		let count = 0;
-		for (const id of selectedReleaseIds) {
-			const r = releases.find((item) => item.id === id);
-			if (
-				r &&
-				(existingChapterIds.has(r.id) ||
-					existingChapterIds.has(`num:${r.chapter_number}`))
-			) {
-				count++;
-			}
-		}
-		return count;
-	}, [selectedReleaseIds, releases, existingChapterIds]);
+	if (!isOpen) return null;
 
 	return (
-		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)]">
-				{/* Header */}
-				<DialogHeader className="px-6 py-4 border-b border-[var(--border-primary)] shrink-0">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center space-x-2">
-							<div className="p-2 rounded-lg bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
-								<Download className="w-5 h-5" />
-							</div>
-							<div>
-								<DialogTitle className="text-lg font-bold">
-									Tải Chương Đa Nguồn (Multi-Source Downloader)
-								</DialogTitle>
-								<DialogDescription className="text-xs text-[var(--text-secondary)]">
+		<div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200">
+			<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full max-w-4xl lg:max-w-5xl max-h-[92vh] flex flex-col shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
+				{/* 1. Header */}
+				<div className="px-6 py-4.5 border-b border-[var(--border-primary)] bg-[var(--bg-card)]/90 backdrop-blur flex justify-between items-center z-10 shrink-0">
+					<div className="flex items-center space-x-3.5 min-w-0">
+						<div className="p-2.5 rounded-2xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] shrink-0">
+							<Download size={22} />
+						</div>
+						<div className="min-w-0">
+							<h2 className="text-lg font-bold font-spartan text-[var(--text-primary)] flex items-center gap-2 flex-wrap">
+								<span>Download Chapters</span>
+								<span className="text-xs font-normal text-zinc-400 hidden sm:inline">
+									•
+								</span>
+								<span
+									className="text-sm font-semibold text-[var(--brand-orange)] truncate max-w-[280px] sm:max-w-md"
+									title={mangaTitle}
+								>
 									{mangaTitle}
-								</DialogDescription>
-							</div>
+								</span>
+							</h2>
+							<p className="text-xs text-[var(--text-secondary)] mt-0.5">
+								Chọn nguồn, ngôn ngữ, nhóm dịch, phương thức lưu trữ và danh
+								sách chương cần tải
+							</p>
 						</div>
 					</div>
-				</DialogHeader>
+					<button
+						type="button"
+						onClick={onClose}
+						className="p-2 rounded-xl text-zinc-400 hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer shrink-0 ml-2"
+						title="Đóng modal"
+					>
+						<X size={18} />
+					</button>
+				</div>
 
-				{/* Body Content */}
-				<div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-					{/* 1. Source Selector Tabs */}
-					<div className="space-y-2">
-						<label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-							Chọn Nguồn Cung Cấp (Datasource)
-						</label>
-						<div className="flex flex-wrap gap-2">
+				{/* 2. Scrollable Body */}
+				<div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+					{/* Group 0: Datasource Selection */}
+					<div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-3">
+						<div className="flex items-center justify-between flex-wrap gap-2">
+							<div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+								<Globe size={15} />
+								<span>Nguồn Cung Cấp (Datasource Provider)</span>
+							</div>
+							<span className="text-[11px] text-zinc-400">
+								Chuyển đổi linh hoạt giữa MangaDex và MangaFire
+							</span>
+						</div>
+
+						<div className="flex flex-wrap gap-2.5">
 							{providers.map((p) => {
 								const isSelected = selectedProvider === p.name;
 								return (
@@ -440,229 +660,335 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 										key={p.name}
 										type="button"
 										onClick={() => setSelectedProvider(p.name)}
-										className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg border text-xs font-medium transition ${
+										className={`px-4 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
 											isSelected
-												? "border-[var(--brand-orange)] bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] shadow-sm"
-												: "border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]/80 text-[var(--text-secondary)]"
+												? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-md ring-2 ring-[var(--brand-orange)]/30"
+												: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400 hover:text-[var(--text-primary)]"
 										}`}
 									>
-										<Globe className="w-4 h-4" />
+										<Globe
+											size={14}
+											className={isSelected ? "text-white" : "text-zinc-400"}
+										/>
 										<span className="capitalize">{p.display_name}</span>
 										{p.requires_session && (
-											<Badge
-												variant="secondary"
-												className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-500 border-amber-500/20"
+											<span
+												className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+													isSelected
+														? "bg-white/20 text-white"
+														: "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+												}`}
 											>
 												Browser Session
-											</Badge>
+											</span>
 										)}
 									</button>
 								);
 							})}
 						</div>
-					</div>
 
-					{/* 2. Source Work Resolution & URL Input (especially for MangaFire) */}
-					{selectedProvider === "mangafire" && !activeWork && (
-						<div className="p-4 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)]/40 space-y-3">
-							<div className="flex items-center space-x-2 text-xs font-semibold text-[var(--text-primary)]">
-								<Sparkles className="w-4 h-4 text-[var(--brand-orange)]" />
-								<span>Liên kết tác phẩm MangaFire</span>
-							</div>
-							<p className="text-xs text-[var(--text-secondary)]">
-								Nhập đường link truyện trên MangaFire (ví dụ:{" "}
-								<code className="text-[var(--brand-orange)]">
-									https://mangafire.to/title/oj8n8-sheeply-horned-witch-romii
-								</code>
-								) để phân tích mục lục và chapter.
-							</p>
-							<div className="flex items-center space-x-2">
-								<input
-									type="url"
-									value={sourceUrlInput}
-									onChange={(e) => setSourceUrlInput(e.target.value)}
-									placeholder="https://mangafire.to/title/..."
-									className="flex-1 px-3 py-2 text-xs rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
-								/>
-								<Button
-									type="button"
-									size="sm"
-									disabled={resolvingWork || !sourceUrlInput.trim()}
-									onClick={handleResolveUrl}
-									className="bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs shrink-0"
-								>
-									{resolvingWork ? (
-										<Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-									) : (
-										<Check className="w-3.5 h-3.5 mr-1.5" />
-									)}
-									Nhận diện nguồn
-								</Button>
-							</div>
-						</div>
-					)}
-
-					{/* Active Work Info Card */}
-					{activeWork && (
-						<div className="p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)]/30 flex items-center justify-between">
-							<div className="flex items-center space-x-3 min-w-0">
-								{activeWork.cover_url ? (
-									<img
-										src={activeWork.cover_url}
-										alt={activeWork.title}
-										className="w-10 h-14 object-cover rounded shadow-sm border border-[var(--border-primary)] shrink-0"
-									/>
+						{/* MangaFire URL Input & Linking Banner */}
+						{selectedProvider === "mangafire" && (
+							<div className="mt-3 p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+								{activeWork ? (
+									<div className="flex items-center space-x-3 min-w-0 flex-1">
+										{activeWork.cover_url ? (
+											<img
+												src={activeWork.cover_url}
+												alt={activeWork.title}
+												className="w-10 h-14 object-cover rounded-lg shadow-sm border border-[var(--border-primary)] shrink-0"
+											/>
+										) : (
+											<div className="w-10 h-14 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center shrink-0 border border-[var(--border-primary)]">
+												<Layers className="w-4 h-4 text-[var(--text-secondary)]" />
+											</div>
+										)}
+										<div className="min-w-0">
+											<div className="flex items-center gap-2">
+												<h4 className="text-xs font-bold text-[var(--text-primary)] truncate max-w-sm">
+													{activeWork.title}
+												</h4>
+												<span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+													Đã kết nối
+												</span>
+											</div>
+											<p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+												ID:{" "}
+												<span className="font-mono text-zinc-400">
+													{activeWork.source_work_id}
+												</span>
+											</p>
+											<a
+												href={activeWork.url}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="text-[11px] text-[var(--brand-orange)] hover:underline flex items-center gap-1 mt-0.5"
+											>
+												<span>Mở link gốc</span>
+												<ExternalLink size={10} />
+											</a>
+										</div>
+									</div>
 								) : (
-									<div className="w-10 h-14 rounded bg-[var(--bg-secondary)] flex items-center justify-center shrink-0 border border-[var(--border-primary)]">
-										<Layers className="w-4 h-4 text-[var(--text-secondary)]" />
+									<div className="w-full space-y-2">
+										<p className="text-xs text-[var(--text-secondary)]">
+											Nhập đường dẫn truyện trên MangaFire để tải chương (Ví dụ:{" "}
+											<code className="text-zinc-400">
+												https://mangafire.to/manga/sheeply-horned-witch-romi.48y2
+											</code>
+											):
+										</p>
+										<div className="flex gap-2">
+											<input
+												type="text"
+												value={sourceUrlInput}
+												onChange={(e) => setSourceUrlInput(e.target.value)}
+												placeholder="https://mangafire.to/manga/..."
+												className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] font-mono"
+											/>
+											<button
+												type="button"
+												onClick={handleResolveUrl}
+												disabled={resolvingWork || !sourceUrlInput.trim()}
+												className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+											>
+												{resolvingWork ? (
+													<Loader2 size={13} className="animate-spin" />
+												) : (
+													<RefreshCw size={13} />
+												)}
+												<span>Phân tích URL</span>
+											</button>
+										</div>
 									</div>
 								)}
-								<div className="min-w-0">
-									<h4 className="text-xs font-bold truncate">
-										{activeWork.title}
-									</h4>
-									<p className="text-[11px] text-[var(--text-secondary)] truncate">
-										Nguồn:{" "}
-										<span className="font-semibold capitalize text-[var(--brand-orange)]">
-											{activeWork.source}
-										</span>{" "}
-										· ID: {activeWork.source_work_id}
-									</p>
-									<a
-										href={activeWork.url}
-										target="_blank"
-										rel="noreferrer"
-										className="text-[10px] text-blue-500 hover:underline flex items-center space-x-1 mt-0.5"
-									>
-										<span>Mở link gốc</span>
-										<ExternalLink className="w-2.5 h-2.5" />
-									</a>
-								</div>
-							</div>
 
-							{/* Language Pills */}
-							<div className="flex items-center space-x-1.5 shrink-0">
-								<span className="text-[11px] text-[var(--text-secondary)] font-medium">
-									Ngôn ngữ:
+								{activeWork && (
+									<button
+										type="button"
+										onClick={() => {
+											setActiveWork(null);
+											setSourceUrlInput("");
+										}}
+										className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] text-[11px] font-semibold text-zinc-400 hover:text-[var(--text-primary)] transition shrink-0 cursor-pointer"
+									>
+										Đổi URL khác
+									</button>
+								)}
+							</div>
+						)}
+					</div>
+
+					{/* Group 1: Source & Translation */}
+					<div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+						<div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+							<Globe size={15} />
+							<span>Ngôn ngữ & Nhóm dịch (Source & Translation)</span>
+						</div>
+
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							{/* Language Selector */}
+							<div>
+								<span className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-2">
+									Ngôn ngữ (Language)
 								</span>
-								<div className="flex space-x-1">
-									{availableLangs.map((lang) => (
-										<button
-											key={lang}
-											type="button"
-											onClick={() => setSelectedLang(lang)}
-											className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
-												selectedLang === lang
-													? "bg-[var(--brand-orange)] text-white shadow-xs"
-													: "bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]/80"
-											}`}
-										>
-											{lang.toUpperCase()}
-										</button>
-									))}
-								</div>
-							</div>
-						</div>
-					)}
-
-					{/* Loading State */}
-					{(resolvingWork || loadingReleases) && (
-						<div className="py-12 flex flex-col items-center justify-center space-y-3">
-							<Loader2 className="w-8 h-8 animate-spin text-[var(--brand-orange)]" />
-							<p className="text-xs text-[var(--text-secondary)]">
-								{resolvingWork
-									? "Đang phân tích định danh và cấu trúc tác phẩm..."
-									: "Đang tải mục lục và các bản phát hành..."}
-							</p>
-						</div>
-					)}
-
-					{/* Error State */}
-					{releaseError && !resolvingWork && !loadingReleases && (
-						<div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-xs flex items-start space-x-2.5">
-							<AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-							<div className="flex-1">
-								<p className="font-semibold">Lỗi tải dữ liệu</p>
-								<p className="text-[11px] text-red-400 mt-0.5">
-									{releaseError}
-								</p>
-							</div>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								onClick={() => handleResolveUrl()}
-								className="text-xs h-7 text-red-500 hover:bg-red-500/10"
-							>
-								<RefreshCw className="w-3 h-3 mr-1" /> Thử lại
-							</Button>
-						</div>
-					)}
-
-					{/* 3. Releases Table & Filters */}
-					{activeWork && !loadingReleases && releases.length > 0 && (
-						<div className="space-y-3">
-							{/* Filter Toolbar */}
-							<div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-								<div className="flex items-center space-x-2 flex-1 min-w-[200px]">
-									<div className="relative flex-1">
-										<Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
-										<input
-											type="text"
-											value={searchQuery}
-											onChange={(e) => setSearchQuery(e.target.value)}
-											placeholder="Tìm số chương hoặc tiêu đề..."
-											className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
-										/>
+								{availableLangs.length > 0 ? (
+									<div className="flex flex-wrap gap-2">
+										{availableLangs.map((lang) => {
+											const isSelected = selectedLang === lang;
+											return (
+												<button
+													key={lang}
+													type="button"
+													onClick={() => setSelectedLang(lang)}
+													className={`px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+														isSelected
+															? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm ring-2 ring-[var(--brand-orange)]/30"
+															: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400 hover:text-[var(--text-primary)]"
+													}`}
+												>
+													<span>{lang.toUpperCase()}</span>
+												</button>
+											);
+										})}
 									</div>
-									<select
-										value={releaseTypeFilter}
-										onChange={(e) => setReleaseTypeFilter(e.target.value)}
-										className="px-2.5 py-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] focus:outline-none"
-									>
-										<option value="all">Tất cả loại release</option>
-										<option value="official">Chỉ Official</option>
-										<option value="unofficial">Chỉ Unofficial</option>
-									</select>
+								) : (
+									<span className="text-xs text-zinc-400 italic">
+										{resolvingWork
+											? "Đang nhận diện ngôn ngữ khả dụng..."
+											: "Chưa có ngôn ngữ khả dụng."}
+									</span>
+								)}
+							</div>
+
+							{/* Group Selector */}
+							<div>
+								<div className="flex items-center justify-between mb-2">
+									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase">
+										Nhóm dịch & Bộ lọc gộp (Scanlation Groups & Merge)
+									</span>
+									{uniqueGroups.length > 1 && (
+										<div className="flex items-center gap-2 text-[11px]">
+											<button
+												type="button"
+												onClick={handleSelectAllGroups}
+												className={`font-semibold transition cursor-pointer hover:underline ${
+													selectedGroups.includes("all")
+														? "text-[var(--brand-orange)] font-bold"
+														: "text-zinc-400 hover:text-[var(--text-primary)]"
+												}`}
+											>
+												Chọn tất cả
+											</button>
+											<span className="text-zinc-400">·</span>
+											<span className="text-zinc-400">
+												{uniqueGroups.length} nhóm khả dụng
+											</span>
+										</div>
+									)}
 								</div>
 
-								{/* Action Buttons */}
-								<div className="flex items-center space-x-1.5 shrink-0">
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										onClick={handleSelectMissing}
-										className="text-[11px] h-7 border-[var(--border-primary)]"
-									>
-										Tải phần còn thiếu
-									</Button>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										onClick={handleSelectAll}
-										className="text-[11px] h-7 border-[var(--border-primary)]"
-									>
-										Chọn tất cả
-									</Button>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										onClick={handleClearSelection}
-										className="text-[11px] h-7 text-[var(--text-secondary)]"
-									>
-										Bỏ chọn
-									</Button>
+								{uniqueGroups.length > 1 ? (
+									<div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+										{/* Option: Merge All Groups */}
+										<button
+											type="button"
+											onClick={handleSelectAllGroups}
+											className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shadow-xs ${
+												selectedGroups.includes("all")
+													? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm ring-2 ring-[var(--brand-orange)]/30"
+													: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-zinc-400 hover:text-[var(--text-primary)]"
+											}`}
+											title="Gộp toàn bộ bản dịch của tất cả các nhóm dịch để hoàn thiện danh sách chương"
+										>
+											<Sparkles
+												size={13}
+												className={
+													selectedGroups.includes("all")
+														? "text-amber-200"
+														: "text-[var(--brand-orange)]"
+												}
+											/>
+											<span>Tất cả nhóm dịch (Gộp bản dịch)</span>
+											<span
+												className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5 ${
+													selectedGroups.includes("all")
+														? "bg-white/20 text-white"
+														: "bg-zinc-500/10 text-zinc-500"
+												}`}
+											>
+												{releases.length} chap
+											</span>
+										</button>
+
+										{/* Individual Groups */}
+										{uniqueGroups.map((group) => {
+											const isSelected =
+												selectedGroups.includes("all") ||
+												selectedGroups.includes(group.id);
+											const isExplicitSingle =
+												!selectedGroups.includes("all") &&
+												selectedGroups.includes(group.id);
+
+											return (
+												<button
+													key={group.id}
+													type="button"
+													onClick={() => handleToggleGroup(group.id)}
+													className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 truncate max-w-full ${
+														isExplicitSingle
+															? "bg-amber-600 border-amber-600 text-white shadow-sm ring-2 ring-amber-500/30"
+															: isSelected && selectedGroups.includes("all")
+																? "bg-[var(--bg-primary)] border-zinc-300 dark:border-zinc-700 text-[var(--text-primary)] hover:border-[var(--brand-orange)]"
+																: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-zinc-400 hover:border-zinc-400 opacity-60 hover:opacity-100"
+													}`}
+													title={`${group.name} (${group.count} chương)`}
+												>
+													{isExplicitSingle && (
+														<Check size={12} className="stroke-[3]" />
+													)}
+													<span className="truncate">{group.name}</span>
+													<span
+														className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
+															isExplicitSingle
+																? "bg-white/20 text-white"
+																: "bg-zinc-500/10 text-zinc-500"
+														}`}
+													>
+														{group.count}
+													</span>
+												</button>
+											);
+										})}
+									</div>
+								) : (
+									<div className="text-xs text-[var(--text-secondary)] py-1 font-medium flex items-center gap-2">
+										<span className="px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] font-bold text-[var(--text-primary)]">
+											{uniqueGroups[0]?.name || "Mặc định (Default)"}
+										</span>
+										<span className="text-zinc-400 text-[11px]">
+											({releases.length} chương khả dụng)
+										</span>
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+
+					{/* Group 2: Storage Destination & Save to Disk Option */}
+					<div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+						<div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider">
+							<Layers size={15} />
+							<span>Điểm đến lưu trữ & Sao lưu (Storage & Backup)</span>
+						</div>
+
+						{/* Default System Storage Banner */}
+						<div className="p-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+							<div className="flex items-start sm:items-center space-x-3.5 min-w-0">
+								<div className="p-2.5 rounded-2xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] shrink-0">
+									<Database size={20} />
+								</div>
+								<div className="min-w-0">
+									<div className="flex items-center gap-2 flex-wrap">
+										<span className="text-sm font-bold text-[var(--text-primary)]">
+											Lưu trữ System Storage
+										</span>
+										<span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 border border-[var(--brand-orange)]/20 text-[var(--brand-orange)] font-bold text-[10px] uppercase tracking-wider">
+											Mặc định
+										</span>
+									</div>
+									<p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+										Hệ thống tự động lưu trữ, lập chỉ mục và quản lý để bạn có
+										thể đọc trực tiếp bất cứ lúc nào.
+									</p>
 								</div>
 							</div>
 
-							{/* Selection Policy Switcher */}
-							<div className="p-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)]/20 flex flex-wrap items-center justify-between gap-3 text-xs">
-								<div className="flex items-center space-x-2">
-									<ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-									<span className="text-[var(--text-secondary)]">
+							{/* Live pulsing badge */}
+							<div className="shrink-0 self-start sm:self-center flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-bold text-xs whitespace-nowrap shadow-xs">
+								<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+								<span>Sẵn sàng lưu trữ</span>
+							</div>
+						</div>
+
+						{/* Policy & Selection Controls */}
+						<div className="p-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl space-y-3.5">
+							<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+								<label className="flex items-center space-x-2.5 cursor-pointer select-none">
+									<input
+										type="checkbox"
+										checked={onePerChapterMode}
+										onChange={(e) => setOnePerChapterMode(e.target.checked)}
+										className="w-4 h-4 rounded text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] cursor-pointer"
+									/>
+									<span className="text-xs font-bold text-[var(--text-primary)]">
+										Chỉ chọn 1 bản mỗi chương (Tránh tải trùng lặp giữa các
+										nhóm/release)
+									</span>
+								</label>
+
+								<div className="flex items-center gap-2">
+									<span className="text-[11px] font-semibold text-[var(--text-secondary)] whitespace-nowrap">
 										Chính sách xử lý:
 									</span>
 									<select
@@ -672,207 +998,616 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 												e.target.value as DownloadSelectionPolicy,
 											)
 										}
-										className="px-2 py-1 rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] font-medium text-[var(--text-primary)]"
+										className="px-2.5 py-1 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
 									>
 										<option value="skip_existing_release">
 											Bỏ qua nếu đã tải sẵn (Khuyến nghị)
 										</option>
-										<option value="replace_preferred_after_commit">
-											Thay thế bản ưu tiên sau khi commit
+										<option value="replace_preferred">
+											Thay thế bản lưu trữ hiện có
 										</option>
 										<option value="keep_alternative">
-											Lưu song song như bản phụ (Alternative)
+											Lưu song song cả hai bản
 										</option>
 									</select>
 								</div>
+							</div>
 
-								<label className="flex items-center space-x-2 cursor-pointer select-none">
+							{/* External Folder Backup Option */}
+							<div className="pt-2 border-t border-[var(--border-primary)]">
+								<label className="flex items-start sm:items-center space-x-3 cursor-pointer select-none">
 									<input
 										type="checkbox"
-										checked={onePerChapterMode}
-										onChange={(e) => setOnePerChapterMode(e.target.checked)}
-										className="rounded text-[var(--brand-orange)] focus:ring-0 w-3.5 h-3.5"
+										checked={saveToDisk}
+										onChange={(e) => setSaveToDisk(e.target.checked)}
+										className="w-4 h-4 rounded text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] cursor-pointer mt-0.5 sm:mt-0"
 									/>
-									<span className="text-[11px] text-[var(--text-secondary)]">
-										Chỉ chọn 1 bản mỗi chương (Tránh trùng lặp)
-									</span>
+									<div className="min-w-0">
+										<span className="text-xs font-bold text-[var(--text-primary)] block sm:inline">
+											Tải thêm một bản sao lưu ra thư mục ổ đĩa trên máy tính
+										</span>
+										<span className="text-[11px] text-[var(--text-secondary)] ml-0 sm:ml-1.5 block sm:inline">
+											(Duplicate to external folder)
+										</span>
+									</div>
 								</label>
-							</div>
 
-							{/* Releases Table */}
-							<div className="border border-[var(--border-primary)] rounded-xl overflow-hidden">
-								<div className="max-h-[320px] overflow-y-auto">
-									<table className="w-full text-left text-xs">
-										<thead className="bg-[var(--bg-secondary)] sticky top-0 border-b border-[var(--border-primary)] text-[var(--text-secondary)] uppercase text-[10px] tracking-wider z-10">
-											<tr>
-												<th className="p-2.5 w-10 text-center">
-													<input
-														type="checkbox"
-														checked={
-															filteredReleases.length > 0 &&
-															filteredReleases.every((r) =>
-																selectedReleaseIds.has(r.id),
-															)
-														}
-														onChange={(e) => {
-															if (e.target.checked) handleSelectAll();
-															else handleClearSelection();
-														}}
-														className="rounded text-[var(--brand-orange)] focus:ring-0 w-3.5 h-3.5"
+								{saveToDisk && (
+									<div className="pt-3 border-t border-[var(--border-primary)] space-y-3 animate-in fade-in duration-200">
+										<div className="flex items-center justify-between">
+											<span className="text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex items-center space-x-1.5">
+												<FolderPlus size={14} />
+												<span>Download Destination Path</span>
+											</span>
+											<span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] border border-[var(--brand-orange)]/15">
+												Editable Base Path
+											</span>
+										</div>
+
+										<div className="flex flex-wrap gap-2">
+											<input
+												type="text"
+												value={customPath}
+												onChange={(e) => {
+													setCustomPath(e.target.value);
+													setVerifyResult(null);
+												}}
+												placeholder="e.g. C:\Downloads\Manga"
+												className="flex-1 min-w-[220px] px-3.5 py-2.5 rounded-xl border border-[var(--border-primary)] focus:border-[var(--brand-orange)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]/30 transition shadow-sm"
+											/>
+											<button
+												type="button"
+												onClick={handleVerifyPath}
+												disabled={verifying || !customPath.trim()}
+												className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-[var(--text-primary)] shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
+											>
+												{verifying ? (
+													<Loader2 size={14} className="animate-spin" />
+												) : (
+													<Check size={14} />
+												)}
+												<span>Verify Path</span>
+											</button>
+											<button
+												type="button"
+												onClick={() => {
+													setIsTitleModalOpen(true);
+													setVerifyResult(null);
+												}}
+												title="Select and append manga title or alternative title as subfolder"
+												className="px-4 py-2.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] border border-[var(--brand-orange)] rounded-xl text-xs font-bold text-white shadow-sm hover:shadow transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
+											>
+												<Plus size={14} className="stroke-[3]" />
+												<span>Append Title</span>
+											</button>
+										</div>
+
+										{verifyResult && (
+											<div
+												className={`p-3 rounded-xl text-xs font-semibold flex items-start space-x-2 border animate-in fade-in duration-200 ${
+													verifyResult.writable
+														? verifyResult.exists
+															? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+															: "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400"
+														: "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+												}`}
+											>
+												{verifyResult.writable ? (
+													verifyResult.exists ? (
+														<Check size={14} className="shrink-0 mt-0.5" />
+													) : (
+														<Info size={14} className="shrink-0 mt-0.5" />
+													)
+												) : (
+													<AlertTriangle
+														size={14}
+														className="shrink-0 mt-0.5"
 													/>
-												</th>
-												<th className="p-2.5 w-24">Chương</th>
-												<th className="p-2.5">Tiêu đề / Bản phát hành</th>
-												<th className="p-2.5 w-28">Loại</th>
-												<th className="p-2.5 w-28">Trạng thái</th>
-											</tr>
-										</thead>
-										<tbody className="divide-y divide-[var(--border-primary)]">
-											{filteredReleases.map((rel) => {
-												const isSelected = selectedReleaseIds.has(rel.id);
-												const isStored =
-													existingChapterIds.has(rel.id) ||
-													existingChapterIds.has(`num:${rel.chapter_number}`);
+												)}
+												<span className="leading-relaxed">
+													{verifyResult.message}
+												</span>
+											</div>
+										)}
 
-												return (
-													<tr
-														key={rel.id}
-														onClick={() => toggleRelease(rel.id)}
-														className={`cursor-pointer transition hover:bg-[var(--bg-secondary)]/50 ${
-															isSelected ? "bg-[var(--brand-orange)]/5" : ""
-														}`}
-													>
-														<td
-															className="p-2.5 text-center"
-															onClick={(e) => e.stopPropagation()}
-														>
-															<input
-																type="checkbox"
-																checked={isSelected}
-																onChange={() => toggleRelease(rel.id)}
-																className="rounded text-[var(--brand-orange)] focus:ring-0 w-3.5 h-3.5"
-															/>
-														</td>
-														<td className="p-2.5 font-bold">
-															Ch. {rel.chapter_number}
-														</td>
-														<td className="p-2.5">
-															<div className="font-medium truncate max-w-[320px]">
-																{rel.title || "(Không có tên)"}
-															</div>
-															<div className="text-[10px] text-[var(--text-secondary)]">
-																ID: {rel.id}
-															</div>
-														</td>
-														<td className="p-2.5">
-															{rel.release_type === "official" ? (
-																<Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px] px-1.5 py-0 font-medium">
-																	Official
-																</Badge>
-															) : rel.release_type === "unofficial" ? (
-																<Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] px-1.5 py-0 font-medium">
-																	Unofficial
-																</Badge>
-															) : (
-																<span className="text-[var(--text-secondary)] text-[10px]">
-																	-
-																</span>
-															)}
-														</td>
-														<td className="p-2.5">
-															{isStored ? (
-																<Badge
-																	variant="secondary"
-																	className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] px-1.5 py-0 font-medium flex items-center space-x-1 w-fit"
-																>
-																	<CheckCircle2 className="w-2.5 h-2.5" />
-																	<span>Đã có</span>
-																</Badge>
-															) : (
-																<span className="text-[var(--text-secondary)] text-[11px]">
-																	Chưa tải
-																</span>
-															)}
-														</td>
-													</tr>
-												);
-											})}
-										</tbody>
-									</table>
-								</div>
+										<div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)]">
+											<Info
+												size={14}
+												className="text-[var(--brand-orange)] shrink-0 mt-0.5"
+											/>
+											<span>
+												Đường dẫn này được khởi tạo từ cấu hình mặc định. Bạn có
+												thể chỉnh sửa trực tiếp. Nhấn{" "}
+												<strong>Append Title</strong> để thêm tên manga vào thư
+												mục con.
+											</span>
+										</div>
+									</div>
+								)}
 							</div>
 						</div>
-					)}
+					</div>
 
-					{/* 4. Local Disk Mirror Option */}
-					<div className="p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)]/20 space-y-2 text-xs">
-						<label className="flex items-center space-x-2 cursor-pointer select-none">
-							<input
-								type="checkbox"
-								checked={saveToDisk}
-								onChange={(e) => setSaveToDisk(e.target.checked)}
-								className="rounded text-[var(--brand-orange)] focus:ring-0 w-3.5 h-3.5"
-							/>
-							<span className="font-semibold text-[var(--text-primary)]">
-								Lưu thêm bản sao ảnh vào ổ đĩa máy tính (Mirror to Disk)
-							</span>
-						</label>
-						{saveToDisk && (
-							<div className="flex items-center space-x-2 pt-1">
-								<Folder className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
-								<input
-									type="text"
-									value={customPath}
-									onChange={(e) => setCustomPath(e.target.value)}
-									placeholder="D:\MangaStorage\..."
-									className="flex-1 px-3 py-1.5 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
+					{/* Group 3: Chapters List */}
+					<div className="bg-zinc-500/5 dark:bg-zinc-900/40 border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-4">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+							<div className="flex items-center space-x-2 text-xs font-bold text-[var(--brand-orange)] uppercase tracking-wider flex-wrap">
+								<BookOpen size={15} />
+								<span>Danh sách chương ({displayedReleases.length})</span>
+								{duplicatesInfo.uniqueChaptersCount > 0 &&
+									duplicatesInfo.uniqueChaptersCount !==
+										displayedReleases.length && (
+										<span className="text-[11px] font-semibold text-zinc-400 normal-case">
+											({duplicatesInfo.uniqueChaptersCount} chap duy nhất)
+										</span>
+									)}
+								{selectedReleaseIds.size > 0 && (
+									<span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] text-[10px] font-bold">
+										{selectedReleaseIds.size} đã chọn
+									</span>
+								)}
+							</div>
+
+							<div className="flex items-center gap-2 flex-wrap">
+								{/* Chapter Search Filter */}
+								<div className="relative min-w-[150px] sm:min-w-[180px]">
+									<Search
+										size={13}
+										className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
+									/>
+									<input
+										type="text"
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										placeholder="Tìm số hoặc tên chương..."
+										className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+									/>
+									{searchQuery && (
+										<button
+											type="button"
+											onClick={() => setSearchQuery("")}
+											className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-[var(--text-primary)] cursor-pointer"
+										>
+											<X size={12} />
+										</button>
+									)}
+								</div>
+
+								{/* Release Type Filter Dropdown */}
+								<select
+									value={releaseTypeFilter}
+									onChange={(e) => setReleaseTypeFilter(e.target.value)}
+									className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition cursor-pointer"
+								>
+									<option value="all">Tất cả loại release</option>
+									<option value="scanlation">Bản dịch nhóm (Scanlation)</option>
+									<option value="official">Bản chính thức (Official)</option>
+								</select>
+
+								{/* Quick Action: Select Only Missing Chapters */}
+								{missingStats.missingUnique > 0 && (
+									<button
+										type="button"
+										onClick={handleSelectMissing}
+										className="px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-xs font-bold text-blue-700 dark:text-blue-300 transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+										title="Chỉ chọn những chương chưa có trong kho lưu trữ (tự động loại bỏ trùng lặp)"
+									>
+										<CheckCircle2
+											size={13}
+											className="text-blue-600 dark:text-blue-400"
+										/>
+										<span>Chọn chap thiếu ({missingStats.missingUnique})</span>
+									</button>
+								)}
+
+								{/* Auto Deduplicate Quick Action */}
+								{duplicatesInfo.duplicateCount > 0 && (
+									<button
+										type="button"
+										onClick={handleAutoDeduplicate}
+										className="px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-xs font-bold text-amber-700 dark:text-amber-300 transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-xs"
+										title="Tự động chọn 1 bản dịch duy nhất cho mỗi chương, loại bỏ các bản dịch trùng lặp"
+									>
+										<Sparkles
+											size={13}
+											className="text-amber-600 dark:text-amber-400"
+										/>
+										<span>Tự động lọc</span>
+									</button>
+								)}
+
+								{/* Select All Toggle */}
+								<button
+									type="button"
+									onClick={() => {
+										const allDisplayedIds = displayedReleases.map((r) => r.id);
+										const allSelected =
+											allDisplayedIds.length > 0 &&
+											allDisplayedIds.every((id) => selectedReleaseIds.has(id));
+										if (allSelected) {
+											handleClearSelection();
+										} else {
+											handleSelectAll();
+										}
+									}}
+									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)] text-xs font-bold text-[var(--brand-orange)] transition cursor-pointer whitespace-nowrap"
+								>
+									{displayedReleases.length > 0 &&
+									displayedReleases.every((r) => selectedReleaseIds.has(r.id))
+										? "Bỏ chọn tất cả"
+										: "Chọn tất cả"}
+								</button>
+							</div>
+						</div>
+
+						{/* Storage & Resume Intelligence Banner */}
+						{existingChapterIds.size > 0 && (
+							<div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-900 dark:text-blue-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
+								<div className="flex items-start gap-3 min-w-0">
+									<div className="p-2 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+										<DownloadCloud size={18} />
+									</div>
+									<div className="min-w-0">
+										<div className="flex items-center gap-2 flex-wrap">
+											<span className="text-xs font-bold text-blue-800 dark:text-blue-200">
+												Kho lưu trữ: Đã tải {missingStats.storedUnique} /{" "}
+												{missingStats.totalUnique} chap
+											</span>
+											{missingStats.missingUnique > 0 ? (
+												<span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+													Còn thiếu {missingStats.missingUnique} chap
+												</span>
+											) : (
+												<span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+													Đã tải trọn bộ
+												</span>
+											)}
+											{latestStoredChapter && (
+												<span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+													(Chap cao nhất:{" "}
+													<strong>
+														Ch. {latestStoredChapter.chapter_number}
+													</strong>
+													)
+												</span>
+											)}
+										</div>
+										<p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+											{missingStats.missingUnique > 0
+												? "Hệ thống phát hiện manga này đã có một phần chương trong kho. Bạn có thể chọn tải tiếp các chap còn thiếu."
+												: "Toàn bộ các chương của manga này đã có trong bộ nhớ lưu trữ."}
+										</p>
+									</div>
+								</div>
+
+								{missingStats.missingUnique > 0 && (
+									<button
+										type="button"
+										onClick={handleSelectMissing}
+										className="flex-1 md:flex-initial px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+										title="Chỉ chọn những chương chưa được tải về máy (tự động loại bỏ chương trùng lặp)"
+									>
+										<CheckCircle2 size={14} />
+										<span>
+											Tải chap còn thiếu ({missingStats.missingUnique})
+										</span>
+									</button>
+								)}
+							</div>
+						)}
+
+						{/* Error Banner */}
+						{releaseError && !resolvingWork && !loadingReleases && (
+							<div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-xs flex items-start space-x-2.5">
+								<AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+								<div className="flex-1">
+									<p className="font-semibold">Lỗi tải dữ liệu</p>
+									<p className="text-[11px] text-red-400 mt-0.5">
+										{releaseError}
+									</p>
+								</div>
+								<button
+									type="button"
+									onClick={() => setReleaseError(null)}
+									className="text-red-400 hover:text-red-500"
+								>
+									<X size={14} />
+								</button>
+							</div>
+						)}
+
+						{/* Loading Releases Spinner */}
+						{loadingReleases ? (
+							<div className="py-12 flex flex-col items-center justify-center space-y-3">
+								<Loader2
+									size={28}
+									className="animate-spin text-[var(--brand-orange)]"
 								/>
+								<span className="text-xs font-semibold text-zinc-400">
+									Đang đồng bộ danh sách chương từ{" "}
+									{selectedProvider.toUpperCase()}...
+								</span>
+							</div>
+						) : displayedReleases.length > 0 ? (
+							/* 3-Column Chapter Cards Grid */
+							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto p-1.5 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]/50">
+								{displayedReleases.map((chap) => {
+									const isSelected = selectedReleaseIds.has(chap.id);
+									const chapKey = String(chap.chapter_number ?? "")
+										.trim()
+										.toLowerCase();
+									const isDuplicate = duplicatesInfo.duplicateKeys.has(chapKey);
+									const duplicateVariants = isDuplicate
+										? duplicatesInfo.chapMap.get(chapKey)
+										: [];
+									const isStored =
+										existingChapterIds.has(chap.id) ||
+										existingChapterIds.has(`num:${chapKey}`);
+									const storedChap = storageChapterMap.get(chapKey);
+									const isLatestStored =
+										latestStoredChapter &&
+										String(latestStoredChapter.chapter_number)
+											.trim()
+											.toLowerCase() === chapKey;
+
+									return (
+										<button
+											key={chap.id}
+											type="button"
+											onClick={() => toggleRelease(chap.id)}
+											className={`p-3 rounded-xl border text-left transition-all duration-150 flex items-start gap-2.5 cursor-pointer select-none group relative w-full ${
+												isSelected
+													? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] shadow-xs ring-1 ring-[var(--brand-orange)]/30"
+													: isDuplicate
+														? "bg-[var(--bg-card)] border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/5"
+														: "bg-[var(--bg-card)] border-[var(--border-primary)] hover:border-zinc-400/70 dark:hover:border-zinc-600 hover:bg-zinc-500/5"
+											}`}
+										>
+											{/* Selection Checkbox */}
+											<div
+												className={`w-4 h-4 mt-0.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+													isSelected
+														? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+														: isDuplicate
+															? "border-amber-500/60 group-hover:border-[var(--brand-orange)]"
+															: "border-zinc-400/50 dark:border-zinc-600 group-hover:border-[var(--brand-orange)]"
+												}`}
+											>
+												{isSelected && (
+													<Check size={11} className="stroke-[3]" />
+												)}
+											</div>
+
+											{/* Chapter Details */}
+											<div className="min-w-0 flex-1">
+												<div className="flex items-center justify-between gap-1.5 flex-wrap">
+													<div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+														<span
+															className={`text-xs font-bold ${
+																isSelected
+																	? "text-[var(--brand-orange)]"
+																	: "text-[var(--text-primary)]"
+															}`}
+														>
+															Ch. {chap.chapter_number}
+														</span>
+
+														{/* Stored / Missing Badge */}
+														{isStored ? (
+															<span
+																className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 shrink-0 flex items-center gap-1"
+																title="Chương này đã có trong bộ nhớ lưu trữ"
+															>
+																<CheckCircle2 size={10} /> Đã tải
+																{storedChap?.pages_count
+																	? ` (${storedChap.pages_count} trang)`
+																	: ""}
+															</span>
+														) : (
+															<span className="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-[var(--border-primary)] shrink-0">
+																Chưa tải
+															</span>
+														)}
+
+														{/* Latest Stored Indicator */}
+														{isLatestStored && (
+															<span
+																className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25 shrink-0 flex items-center gap-1"
+																title="Chương mới nhất đã tải"
+															>
+																<Zap size={10} /> Chap gần nhất
+															</span>
+														)}
+
+														{/* Duplicate indicator */}
+														{isDuplicate && (
+															<span
+																className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 shrink-0"
+																title={`Có ${duplicateVariants?.length || 2} bản phát hành cho chương này`}
+															>
+																Trùng ({duplicateVariants?.length || 2})
+															</span>
+														)}
+													</div>
+
+													{chap.volume ? (
+														<span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+															Vol. {chap.volume}
+														</span>
+													) : (
+														<span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 shrink-0">
+															No Vol
+														</span>
+													)}
+												</div>
+
+												{/* Chapter Title */}
+												{chap.title ? (
+													<p
+														className="text-xs font-medium text-[var(--text-secondary)] mt-0.5 line-clamp-1 leading-snug break-words"
+														title={chap.title}
+													>
+														{chap.title}
+													</p>
+												) : (
+													<p className="text-[11px] italic text-zinc-400 mt-0.5">
+														Không có tiêu đề
+													</p>
+												)}
+
+												{/* Group, Pages, Uploader, Date & Source Badges */}
+												<div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+													<span className="px-2 py-0.5 rounded-md bg-zinc-500/10 border border-[var(--border-primary)] text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-full">
+														👥 {chap.group_name || "No Group"}
+													</span>
+													{chap.pages_count > 0 && (
+														<span className="px-1.5 py-0.5 rounded-md bg-zinc-500/10 border border-[var(--border-primary)] text-[10px] font-medium text-[var(--text-secondary)] shrink-0">
+															{chap.pages_count} trang
+														</span>
+													)}
+													{chap.uploader && (
+														<span
+															className="px-1.5 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-medium text-blue-600 dark:text-blue-400 shrink-0 truncate max-w-[120px]"
+															title={`Người đăng: ${chap.uploader}`}
+														>
+															👤 {chap.uploader}
+														</span>
+													)}
+													{chap.publish_at && (
+														<span
+															className="text-[10px] text-zinc-400 shrink-0"
+															title={`Ngày đăng: ${new Date(chap.publish_at).toLocaleString()}`}
+														>
+															📅{" "}
+															{new Date(chap.publish_at).toLocaleDateString()}
+														</span>
+													)}
+													<span className="px-1.5 py-0.5 rounded-md bg-[var(--brand-orange)]/10 border border-[var(--brand-orange)]/20 text-[10px] font-semibold text-[var(--brand-orange)] uppercase shrink-0">
+														{chap.source || selectedProvider}
+													</span>
+												</div>
+											</div>
+										</button>
+									);
+								})}
+							</div>
+						) : (
+							<div className="py-8 text-center text-xs text-[var(--text-secondary)]">
+								Không tìm thấy chương nào phù hợp với bộ lọc hiện tại.
 							</div>
 						)}
 					</div>
 				</div>
 
-				{/* Footer */}
-				<DialogFooter className="px-6 py-3 border-t border-[var(--border-primary)] shrink-0 bg-[var(--bg-secondary)]/40 flex items-center justify-between sm:justify-between">
-					<div className="text-xs text-[var(--text-secondary)]">
-						Đã chọn{" "}
-						<span className="font-bold text-[var(--text-primary)]">
-							{totalSelected}
-						</span>{" "}
-						bản phát hành
-						{readyCount > 0 && (
-							<span className="text-emerald-500 ml-1">
-								({readyCount} đã có sẵn trong kho)
+				{/* 3. Footer */}
+				<div className="px-6 py-4 border-t border-[var(--border-primary)] bg-[var(--bg-card)]/90 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3 z-10 shrink-0">
+					<div className="text-xs text-[var(--text-secondary)] flex items-center gap-2 flex-wrap">
+						<span>
+							Đã chọn{" "}
+							<strong className="text-[var(--brand-orange)] font-bold text-sm">
+								{selectedReleaseIds.size}
+							</strong>{" "}
+							bản phát hành
+						</span>
+						{duplicatesInfo.uniqueChaptersCount > 0 && (
+							<span className="text-zinc-400 hidden sm:inline">
+								(tương ứng với các chương của {mangaTitle})
 							</span>
 						)}
 					</div>
-					<div className="flex items-center space-x-2">
-						<Button
+
+					<div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+						<button
 							type="button"
-							variant="outline"
-							size="sm"
 							onClick={onClose}
-							className="text-xs border-[var(--border-primary)]"
+							className="px-5 py-2.5 border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer"
 						>
-							Huỷ
-						</Button>
-						<Button
+							Hủy
+						</button>
+						<button
 							type="button"
-							size="sm"
-							disabled={executing || totalSelected === 0}
 							onClick={handleStartDownload}
-							className="bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-semibold shadow-sm"
+							disabled={executing || selectedReleaseIds.size === 0}
+							className="px-6 py-2.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow-lg transition disabled:opacity-50 flex items-center space-x-2 cursor-pointer disabled:cursor-not-allowed"
 						>
 							{executing ? (
-								<Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+								<>
+									<Loader2 size={14} className="animate-spin" />
+									<span>Đang khởi tạo...</span>
+								</>
 							) : (
-								<Download className="w-3.5 h-3.5 mr-1.5" />
+								<>
+									<Download size={14} />
+									<span>Tải xuống ({selectedReleaseIds.size}) chương</span>
+								</>
 							)}
-							Tạo Plan & Bắt đầu tải
-						</Button>
+						</button>
 					</div>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+				</div>
+			</div>
+
+			{/* Append Title Popup Modal */}
+			{isTitleModalOpen && (
+				<div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+						<div className="flex justify-between items-center border-b border-[var(--border-primary)] pb-3">
+							<div>
+								<h3 className="text-base font-bold font-spartan text-[var(--text-primary)]">
+									Chọn tên Manga để thêm vào đường dẫn
+								</h3>
+								<p className="text-xs text-[var(--text-secondary)] mt-0.5">
+									Hệ thống sẽ tự động làm sạch các ký tự đặc biệt không hợp lệ
+									trên Windows/Linux.
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setIsTitleModalOpen(false)}
+								className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+							>
+								<X size={18} />
+							</button>
+						</div>
+
+						<div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+							{titleOptions.map((opt) => (
+								<button
+									key={opt.title}
+									type="button"
+									onClick={() => {
+										appendCleanedTitle(opt.title);
+										setIsTitleModalOpen(false);
+									}}
+									className="w-full text-left p-3 border border-[var(--border-primary)] rounded-2xl flex items-center justify-between gap-3 hover:bg-[var(--brand-orange)]/5 hover:border-[var(--brand-orange)]/40 transition cursor-pointer group"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="text-xs font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] truncate">
+											{opt.title}
+										</p>
+										<p className="text-[10px] text-zinc-400 mt-0.5">
+											{opt.label}
+										</p>
+									</div>
+									<Plus
+										size={14}
+										className="text-zinc-400 group-hover:text-[var(--brand-orange)] shrink-0"
+									/>
+								</button>
+							))}
+						</div>
+
+						<div className="pt-3 border-t border-[var(--border-primary)] flex justify-end">
+							<button
+								type="button"
+								onClick={() => setIsTitleModalOpen(false)}
+								className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-xs font-bold text-[var(--text-secondary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+							>
+								Đóng
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+		</div>
 	);
 };
