@@ -8,6 +8,32 @@ import { expect, test } from "@playwright/test";
  */
 
 test.describe("Manga Platform Visual & Responsive Audit", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route(
+			(url) => url.pathname.startsWith("/api/"),
+			(route) => {
+				const path = new URL(route.request().url()).pathname;
+				const json =
+					path === "/api/manga/"
+						? {
+								items: [
+									{
+										_id: "fixture-manga",
+										title: "Synthetic visual fixture",
+										read_status: "unread",
+										tag_ids: [],
+									},
+								],
+								total: 1,
+							}
+						: [];
+				return route.fulfill({
+					json,
+					headers: { "Access-Control-Allow-Origin": "*" },
+				});
+			},
+		);
+	});
 	test("1. Manga List & Navigation Bar Layout Integrity", async ({
 		page,
 		isMobile,
@@ -15,6 +41,9 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 		// Navigate to manga library homepage
 		await page.goto("/", { waitUntil: "domcontentloaded" });
 
+		await expect(
+			page.getByText("Synthetic visual fixture", { exact: true }),
+		).toBeVisible();
 		// Verify main header / navigation presence
 		const header = page.locator("header");
 		await expect(header).toBeVisible({ timeout: 10000 });
@@ -25,12 +54,12 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 
 		// Verify no horizontal viewport clipping or overflow
 		const hasOverflow = await page.evaluate(() => {
-			return document.documentElement.scrollWidth > window.innerWidth;
+			return document.documentElement.scrollWidth;
 		});
 		expect(
 			hasOverflow,
 			"Manga list page should not suffer from horizontal overflow",
-		).toBeFalsy();
+		).toBeLessThanOrEqual(page.viewportSize()!.width);
 
 		// Capture visual snapshot for QA inspection
 		const viewportTag = isMobile ? "mobile-375px" : "desktop-1440px";
@@ -45,7 +74,7 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 		isMobile,
 	}) => {
 		// Mock telemetry and stats
-		await page.route("**/api/panels/scan/status*", async (route) => {
+		await page.route("**/api/panels/scan-status*", async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: "application/json",
@@ -73,7 +102,8 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 				status: 200,
 				contentType: "application/json",
 				body: JSON.stringify({
-					total_panels_scanned: 100,
+					total_panels: 100,
+					total_pages_scanned: 20,
 					total_mangas_scanned: 5,
 					total_unique_words: 1500,
 					frequent_words: [
@@ -135,18 +165,21 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 		await searchInput.fill("pirate");
 		await searchInput.press("Enter");
 
-		// Wait for search result panel card or empty state
-		const panelCard = page.locator(".rounded-2xl").first();
+		// Require the actual OCR token and vocabulary from the fixture, not a generic container.
+		const panelCard = page.getByRole("button", { name: "PIRATE", exact: true });
 		await expect(panelCard).toBeVisible({ timeout: 10000 });
+		await expect(
+			page.getByRole("button", { name: "pirate NOUN", exact: true }),
+		).toBeVisible();
 
 		// Verify no horizontal overflow in panel reader viewport
 		const hasOverflow = await page.evaluate(() => {
-			return document.documentElement.scrollWidth > window.innerWidth;
+			return document.documentElement.scrollWidth;
 		});
 		expect(
 			hasOverflow,
 			"Panel words detector must fit within viewport width without horizontal clipping",
-		).toBeFalsy();
+		).toBeLessThanOrEqual(page.viewportSize()!.width);
 
 		// Capture visual snapshot of panel reader / OCR vocabulary UI
 		const viewportTag = isMobile ? "mobile-375px" : "desktop-1440px";

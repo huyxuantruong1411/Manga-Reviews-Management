@@ -110,7 +110,12 @@ sequenceDiagram
 ```
 
 ### Mechanism C: Isolated Translation Subprocess Envelope (Translation ARQ Worker Flow)
-Used for deep-learning translation, OCR, inpainting, and rendering without polluting the FastAPI runtime dependencies:
+The diagram below is the intended flow after real engine integration. Currently the
+API rejects create/retry before persistence with `TRANSLATION_ENGINE_UNAVAILABLE`;
+the bundled adapter only runs an explicitly labelled synthetic protocol harness.
+Neither GPU detection nor a configured API key enables inference. The dedicated
+ARQ worker is the sole execution owner; no inline API worker is launched.
+
 
 ```mermaid
 sequenceDiagram
@@ -125,7 +130,7 @@ sequenceDiagram
 
     UI->>API: POST /api/translation/jobs (manga_id, chapter_id, pages, profile)
     API->>DB: Create translation_job (status: pending)
-    API->>Redis: enqueue_job('process_translation_job', job_id)
+    API->>Redis: enqueue_job('execute_translation_job_page', job_id, page_identity)
     API-->>UI: 202 Accepted (job_id, status: pending)
 
     Worker->>Redis: Claim translation job

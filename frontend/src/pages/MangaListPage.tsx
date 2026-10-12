@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import client from "../api/client";
+import client, { apiErrorMessage } from "../api/client";
 import { BlurredCover } from "../components/ui/BlurredCover";
+import { Button } from "../components/ui/button";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
@@ -72,6 +73,8 @@ export const MangaListPage: React.FC = () => {
 	const [mangas, setMangas] = useState<Manga[]>([]);
 	const [total, setTotal] = useState(0);
 	const [loading, setLoading] = useState(true);
+	const [libraryError, setLibraryError] = useState("");
+	const libraryRequestRef = useRef<AbortController | null>(null);
 
 	// Filter States
 	const [search, setSearch] = useState(() => searchParams.get("search") || "");
@@ -229,8 +232,63 @@ export const MangaListPage: React.FC = () => {
 		};
 	}, [search]);
 
+	const lastWrittenQuery = useRef(searchParams.toString());
+	const skipUrlWrite = useRef(false);
+	// Saved links and Back/Forward must restore the same state as an initial load.
+	useEffect(() => {
+		const query = searchParams.toString();
+		if (query === lastWrittenQuery.current) return;
+		lastWrittenQuery.current = query;
+		skipUrlWrite.current = true;
+		const values = (key: string) =>
+			(searchParams.get(key) || "").split(",").filter(Boolean);
+		const searchValue = searchParams.get("search") || "";
+		setSearch(searchValue);
+		setDebouncedSearch(searchValue);
+		setSelectedReadStatuses(
+			values("readStatuses").length
+				? values("readStatuses")
+				: values("readStatus"),
+		);
+		setExcludeReadStatuses(values("excludeReadStatuses"));
+		setSelectedTags(values("selectedTags"));
+		setExcludeTags(values("excludeTags"));
+		setTagMode(searchParams.get("tagMode") === "any" ? "any" : "all");
+		setContentRatings(values("contentRatings"));
+		setDemographics(values("demographics"));
+		setStatuses(values("statuses"));
+		setOriginalLanguages(values("originalLanguages"));
+		setSelectedAuthors(values("selectedAuthors"));
+		setSelectedArtists(values("selectedArtists"));
+		setYear(searchParams.get("year") || "");
+		setRatingMin(
+			searchParams.has("ratingMin")
+				? Number(searchParams.get("ratingMin"))
+				: "",
+		);
+		setRatingMax(
+			searchParams.has("ratingMax")
+				? Number(searchParams.get("ratingMax"))
+				: "",
+		);
+		const source = searchParams.get("source");
+		setSourceFilter(
+			source === "manual" || source === "mangadex" ? source : "all",
+		);
+		setSortBy(searchParams.get("sortBy") || "added_at");
+		setSortOrder(searchParams.get("sortOrder") || "desc");
+		setPage(Math.max(1, Math.floor(Number(searchParams.get("page")) || 1)));
+		setIsAdvancedSearchOpen(
+			searchParams.get("isAdvancedSearchOpen") === "true",
+		);
+	}, [searchParams]);
+
 	// Sync filter state to URL Search Params
 	useEffect(() => {
+		if (skipUrlWrite.current) {
+			skipUrlWrite.current = false;
+			return;
+		}
 		const params = new URLSearchParams();
 		if (search) params.set("search", search);
 		if (selectedReadStatuses.length)
@@ -262,6 +320,7 @@ export const MangaListPage: React.FC = () => {
 		const currentQuery = searchParams.toString();
 		const newQuery = params.toString();
 		if (currentQuery !== newQuery) {
+			lastWrittenQuery.current = newQuery;
 			setSearchParams(params, { replace: true });
 		}
 	}, [
@@ -366,8 +425,12 @@ export const MangaListPage: React.FC = () => {
 
 	// Load Library & Tags
 	const fetchLibrary = async () => {
+		libraryRequestRef.current?.abort();
+		const controller = new AbortController();
+		libraryRequestRef.current = controller;
 		try {
 			setLoading(true);
+			setLibraryError("");
 			const params: any = {
 				skip: (page - 1) * limit,
 				limit: limit,
@@ -411,13 +474,20 @@ export const MangaListPage: React.FC = () => {
 				params.is_manual = false;
 			}
 
-			const res = await client.get("/api/manga/", { params });
+			const res = await client.get("/api/manga/", {
+				params,
+				signal: controller.signal,
+			});
+			if (controller.signal.aborted) return;
 			setMangas(res.data.items);
 			setTotal(res.data.total);
 		} catch (err) {
-			console.error("Error loading library:", err);
+			if (!controller.signal.aborted)
+				setLibraryError(
+					apiErrorMessage(err, "Không tải được thư viện. Vui lòng thử lại."),
+				);
 		} finally {
-			setLoading(false);
+			if (!controller.signal.aborted) setLoading(false);
 		}
 	};
 
@@ -429,6 +499,8 @@ export const MangaListPage: React.FC = () => {
 			console.error("Error loading tags:", err);
 		}
 	};
+
+	useEffect(() => () => libraryRequestRef.current?.abort(), []);
 
 	useEffect(() => {
 		fetchLibrary();
@@ -1619,7 +1691,7 @@ export const MangaListPage: React.FC = () => {
 			</div>
 
 			{/* View Switcher Toolbar */}
-			{!loading && mangas.length > 0 && (
+			{!loading && !libraryError && mangas.length > 0 && (
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--border-primary)] pb-4 gap-4">
 					<span className="text-sm font-semibold text-[var(--text-secondary)]">
 						Showing{" "}
@@ -1633,11 +1705,12 @@ export const MangaListPage: React.FC = () => {
 						manga
 					</span>
 					<div className="flex flex-wrap items-center gap-4">
-						<div className="flex items-center space-x-2">
+						<div className="flex flex-wrap min-w-0 items-center gap-2">
 							<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
 								Sort:
 							</span>
 							<select
+								aria-label="Sắp xếp theo"
 								value={sortBy}
 								onChange={(e) => {
 									setSortBy(e.target.value);
@@ -1663,6 +1736,7 @@ export const MangaListPage: React.FC = () => {
 								<option value="re_reading_at">Date Re-reading</option>
 							</select>
 							<select
+								aria-label="Thứ tự sắp xếp"
 								value={sortOrder}
 								onChange={(e) => {
 									setSortOrder(e.target.value);
@@ -1680,6 +1754,7 @@ export const MangaListPage: React.FC = () => {
 								Per Page:
 							</span>
 							<select
+								aria-label="Số manga mỗi trang"
 								value={limit}
 								onChange={(e) => handleLimitChange(Number(e.target.value))}
 								className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
@@ -1754,6 +1829,16 @@ export const MangaListPage: React.FC = () => {
 			{loading ? (
 				<div className="flex justify-center items-center py-24">
 					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
+				</div>
+			) : libraryError ? (
+				<div
+					role="alert"
+					className="rounded-xl border border-destructive p-6 text-foreground space-y-4"
+				>
+					<p>{libraryError}</p>
+					<Button onClick={() => void fetchLibrary()} variant="outline">
+						Thử lại
+					</Button>
 				</div>
 			) : mangas.length > 0 ? (
 				<div className="space-y-8">

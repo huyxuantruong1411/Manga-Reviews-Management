@@ -8,7 +8,17 @@
 
 ## 1. System Overview & Component Topology
 
-The Translation Studio subsystem delivers automated, multi-engine translation for manga chapters and individual pages, alongside an isolated administrative workspace and a live reader integration.
+The Translation Studio has an administrative workspace, reader integration and job
+orchestration, but **no integrated real inference engine**. The bundled adapter is a
+synthetic protocol harness. API create/retry returns `503 TRANSLATION_ENGINE_UNAVAILABLE`
+before writing jobs. Do not enable readiness by changing a flag: first integrate and
+validate the detector, OCR, translator, inpainting and typesetting stages, real source
+hashes, queue recovery and cancellation, then run quality acceptance on licensed fixtures.
+
+The harness only runs with explicit `--synthetic`; its manifests are labelled synthetic
+and rejected by the worker. Placeholder legacy source hashes cannot be published or
+exported as verified translations. Hardware detection and API-key presence are separate
+from inference readiness.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -59,9 +69,16 @@ The Translation Studio subsystem delivers automated, multi-engine translation fo
 
 ### B. Starting Storage & Queues
 
+Compose uses digest-pinned images, relative data paths and credentials from the local
+`backend/.env`. Its MinIO and Redis ports bind only to loopback. Existing containers
+must be recreated to apply binding changes; preserve data mounts and take a backup
+first. Never use `down -v`. Review media buckets stay private and persisted media URLs
+resolve through the API to short-lived signed storage URLs.
+
+
 ```powershell
 # 1. Start Docker containers (Redis & MinIO)
-docker compose -f backend/docker-compose.yml up -d redis minio
+docker compose --env-file backend/.env -f backend/docker-compose.yml up -d redis minio
 
 # 2. Verify Redis AOF storage mount
 docker exec manga-redis redis-cli ping
@@ -135,19 +152,22 @@ uv run --project backend python -m pytest services/translator-runtime/tests/
 
 ### A. MongoDB Database Backup & Restore
 
-```powershell
-# Backup Translation collections
-mongodump --db manga_library --collection translation_profiles --out ./backup_translation/
-mongodump --db manga_library --collection translation_results --out ./backup_translation/
-mongodump --db manga_library --collection translation_page_bindings --out ./backup_translation/
-mongodump --db manga_library --collection translation_jobs --out ./backup_translation/
-mongodump --db manga_library --collection translation_job_pages --out ./backup_translation/
-mongodump --db manga_library --collection translation_font_packs --out ./backup_translation/
-mongodump --db manga_library --collection translation_assets --out ./backup_translation/
+Use a destination **outside the repository**, with sufficient capacity and restricted
+local access. The helper reads the application connection settings and never prints
+credentials. It backs up all non-system collections as BSON with indexes and hashes.
 
-# Restore Translation collections
-mongorestore --db manga_library ./backup_translation/manga_library/
+```powershell
+uv run --project backend python scripts/backup_metadata.py backup <external-backup-directory>
+uv run --project backend python scripts/backup_metadata.py verify <external-backup-directory>
 ```
+
+`verify` creates a fresh UUID database, validates every BSON document and index creation,
+then deletes only that drill database. It never restores over the live database. A live
+backup is labelled `best_effort_live`; pause application writers before using
+`--writers-paused` for a consistent metadata snapshot. For physical MinIO backups stop
+MinIO before the final copy; restore a copy of that backup into an isolated container
+with separate loopback ports. Retain original snapshot files. A metadata live backup
+and a storage snapshot at another time are not a coordinated point-in-time restore.
 
 ### B. Migration Rollback Guide
 

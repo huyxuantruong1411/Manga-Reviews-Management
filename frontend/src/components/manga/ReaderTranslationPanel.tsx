@@ -32,6 +32,8 @@ interface ReaderTranslationPanelProps {
 	isTranslating: boolean;
 	jobProgress: { completed: number; total: number };
 	errorMessage?: string;
+	engineReady: boolean;
+	engineMessage: string;
 	onTranslateCurrentPage: () => void;
 	onTranslateChapter: () => void;
 }
@@ -55,6 +57,8 @@ export const ReaderTranslationPanel: React.FC<ReaderTranslationPanelProps> = ({
 	isTranslating,
 	jobProgress,
 	errorMessage,
+	engineReady,
+	engineMessage,
 	onTranslateCurrentPage,
 	onTranslateChapter,
 }) => {
@@ -65,6 +69,14 @@ export const ReaderTranslationPanel: React.FC<ReaderTranslationPanelProps> = ({
 
 	return (
 		<div className="flex flex-col space-y-4 text-xs font-sans">
+			{!engineReady && (
+				<p
+					role="status"
+					className="rounded-lg border border-border bg-muted p-3 text-foreground"
+				>
+					{engineMessage}
+				</p>
+			)}
 			{/* Header / Mode Indicator */}
 			<div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
 				<div className="flex items-center space-x-2 text-zinc-200">
@@ -225,7 +237,7 @@ export const ReaderTranslationPanel: React.FC<ReaderTranslationPanelProps> = ({
 				<button
 					type="button"
 					onClick={onTranslateCurrentPage}
-					disabled={isTranslating}
+					disabled={isTranslating || !engineReady}
 					className="w-full py-2.5 px-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center space-x-2 shadow-lg transition cursor-pointer"
 				>
 					{isTranslating ? (
@@ -242,7 +254,7 @@ export const ReaderTranslationPanel: React.FC<ReaderTranslationPanelProps> = ({
 				<button
 					type="button"
 					onClick={onTranslateChapter}
-					disabled={isTranslating}
+					disabled={isTranslating || !engineReady}
 					className="w-full py-2 px-3 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-200 border border-zinc-800 rounded-xl font-semibold flex items-center justify-center space-x-2 transition cursor-pointer"
 				>
 					<RotateCw size={13} className={isTranslating ? "animate-spin" : ""} />

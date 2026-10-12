@@ -173,6 +173,15 @@ export const TranslationStudioPage: React.FC = () => {
 	const renderOverview = () => {
 		return (
 			<div className="space-y-6">
+				{capabilities?.ready_for_inference !== true && (
+					<p
+						role="status"
+						className="rounded-xl border border-border bg-muted p-4 text-foreground"
+					>
+						{capabilities?.engine?.message ||
+							"Chưa xác minh được engine dịch thực. Các chức năng quản lý vẫn có thể sử dụng."}
+					</p>
+				)}
 				{/* Top Status Cards */}
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 					<div className="p-5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl shadow-sm">
@@ -416,7 +425,7 @@ export const TranslationStudioPage: React.FC = () => {
 	};
 
 	const handleRunDemo = async () => {
-		if (!demoFile) return;
+		if (!demoFile || capabilities?.ready_for_inference !== true) return;
 		setDemoTranslating(true);
 		setPageError("");
 		try {
@@ -547,7 +556,11 @@ export const TranslationStudioPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={handleRunDemo}
-								disabled={!demoFile || demoTranslating}
+								disabled={
+									!demoFile ||
+									demoTranslating ||
+									capabilities?.ready_for_inference !== true
+								}
 								className="w-full py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer mt-2"
 							>
 								{demoTranslating ? (

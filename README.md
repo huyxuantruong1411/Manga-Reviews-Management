@@ -41,11 +41,16 @@
 ## ✨ Key Features
 
 ### 1. 🌐 Manga AI Translation Studio & In-Reader Translation
+
+**Current status:** the UI and protocol harness exist; real inference is not integrated.
+New translation jobs return a clear 503 and synthetic outputs cannot be published.
+See the [operational runbook](docs/translation/operational-runbook.md) for readiness requirements.
+
 - **Reader Split-View Comparison**: Compare original manga artwork and AI-translated pages using an interactive split comparison slider (`clip-path`) or toggle mode.
 - **Dedicated Translation Studio (`/translation`)**: 7-tab console for chapter job orchestration, typography diagnostics, synthetic mock workspace, and live storage audit.
-- **Isolated Subprocess Runtime Envelope**: Heavy ML dependencies (OCR, translation models, inpainting) run in an isolated CLI runner envelope (`services/translator-runtime`), protecting FastAPI from memory leaks and C++ library collisions.
+- **Isolated Subprocess Runtime Envelope**: `services/translator-runtime` provides a tested protocol harness with explicit synthetic mode. Integrating and validating real OCR, translation and inpainting remains outstanding.
 - **Pure-Canvas Re-rendering (Zero LLM Tokens)**: Pillow-based canvas renderer enables instant font, alignment, and translation text tweaks without paying extra LLM token costs.
-- **Vietnamese Typography Engine**: Pure-Python TrueType/OpenType glyph validator verifies Vietnamese diacritics coverage (`ơ`, `ư`, `ắ`, `ề`, `ộ`) before rasterization.
+- **Typography Workspace**: Font upload and rendering controls are present; reliable glyph coverage and overflow validation remain under development.
 - **Sequential ZIP Chapter Export**: Export translated chapters with zero-padded filenames and structured `manifest.json`.
 
 ### 2. 🔍 System-Wide Panel Words Detector (Manga Lexis & Vision)
@@ -73,10 +78,12 @@
 - **Anti-Freeze Concurrency Engine**: Asynchronous chapter downloader decoupled from main HTTP server threads, preventing API lockups during bulk downloads.
 - **MinIO Object Storage**: High-speed S3-compatible local bucket (`manga-library`) with deduplication checks (MD5 hash).
 - **Smart Folder Parsing**: Intelligently parses folder naming conventions (`Vol. 1 Ch. 2`, `Chapter 1 - Title [Group]`, `Oneshot`).
+- **Multi-Format Chapter Export**: Export downloaded chapters into PDF, CBZ, ZIP, or uncompressed image folders with real-time SSE progress streaming and native OS file explorer reveal.
 - **Storage Management UI**: Pagination controls, natural numeric sorting, duplicate detection, and cascading panel metadata cleanup.
 
 ### 6. ✍️ Rich Media Review Editor & Gemini AI
 - **TipTap WYSIWYG Editor**: Slash commands (`/`), resizable images, audio recordings, video player, file attachments.
+- **Formatting Tools & Live Metrics**: One-click clear formatting button and shortcut (`Ctrl+\`), sticky reading time & word count status header, and smooth canvas width adjustments.
 - **Interactive Manga Reference Mentions**: Type `@manga` to embed live manga cards with hover tooltips.
 - **Gemini AI Integration**: AI-assisted grammar refinement, tone adjustment, automatic summary generation, and chapter scene analysis.
 
@@ -150,14 +157,20 @@ Detailed guide available at [`docs/development.md`](docs/development.md).
 
 ### 2. Infrastructure Setup (MinIO & Redis)
 
-Start MinIO and Redis containers using Docker Compose:
+1. Configure environment variables first:
 
 ```bash
-docker compose -f backend/docker-compose.yml up -d minio redis
+cp backend/.env.example backend/.env
+```
+
+2. Start MinIO and Redis containers using Docker Compose:
+
+```bash
+docker compose --env-file backend/.env -f backend/docker-compose.yml up -d minio redis
 ```
 
 - **MinIO S3 API**: `http://localhost:9000`
-- **MinIO Web Console**: `http://localhost:9001` (Credentials: `admin` / `password`)
+- **MinIO Web Console**: `http://localhost:9001` (Credentials: configured in `backend/.env`)
 - **Redis**: `localhost:6379`
 - *Note*: Ensure MongoDB is running on `localhost:27017`.
 
@@ -171,17 +184,11 @@ docker compose -f backend/docker-compose.yml up -d minio redis
 uv sync --project backend
 ```
 
-2. Configure environment variables:
+2. Initialize database indexes and seed tags:
 
 ```bash
-cp backend/.env.example backend/.env
-```
-
-3. Initialize database indexes and seed tags:
-
-```bash
-python setup_env.py
-python seed_mangadex_tags.py
+uv run --project backend python setup_env.py
+uv run --project backend python seed_mangadex_tags.py
 ```
 
 4. Start FastAPI server:

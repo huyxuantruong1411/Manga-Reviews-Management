@@ -14,6 +14,8 @@ import uuid
 from datetime import timedelta
 from typing import Any, Dict
 
+from fastapi import HTTPException
+
 from backend.database.connection import get_db
 from backend.models.translation import (
     RegionData,
@@ -21,6 +23,7 @@ from backend.models.translation import (
     TranslationResultInDB,
     utc_now,
 )
+from backend.services.translation.runtime import require_translation_engine
 from backend.services.translation.storage_service import translation_storage_service
 
 logger = logging.getLogger("translation_worker")
@@ -42,7 +45,9 @@ async def _update_parent_job_progress(jobs_col, job_id: str, success: bool) -> N
         completed = job.get("completed_pages", 0)
         failed = job.get("failed_pages", 0)
         if completed + failed >= total:
-            final_state = "completed" if completed > 0 else "failed"
+            final_state = "partial" if completed and failed else "completed" if completed else "failed"
+            if job.get("cancel_requested"):
+                final_state = "cancelled"
             await jobs_col.update_one(
                 {"job_id": job_id},
                 {
@@ -78,6 +83,7 @@ async def execute_translation_job_page(
             "job_id": job_id,
             "page_identity": page_identity,
             "state": {"$in": ["queued", "preparing"]},
+            "attempt": attempt,
         },
         {
             "$set": {
@@ -113,6 +119,17 @@ async def execute_translation_job_page(
         return {"status": "cancelled"}
 
     # 2. Materialize input image
+    # Also protect jobs queued by older API versions before the readiness gate.
+    try:
+        require_translation_engine()
+    except HTTPException:
+        await pages_col.update_one(
+            {"job_id": job_id, "page_identity": page_identity, "fencing_token": fence_token},
+            {"$set": {"state": "failed", "stage": None, "error_code": "TRANSLATION_ENGINE_UNAVAILABLE"}},
+        )
+        await _update_parent_job_progress(jobs_col, job_id, success=False)
+        return {"status": "failed", "error": "TRANSLATION_ENGINE_UNAVAILABLE"}
+
     source_manifest = job_doc.get("source_manifest", {})
     profile_snapshot = job_doc.get("profile_snapshot", {})
     target_language = profile_snapshot.get("target_language", "vi")
@@ -225,6 +242,8 @@ async def execute_translation_job_page(
                 elif line.startswith("MANIFEST:"):
                     manifest = json.loads(line[len("MANIFEST:") :])
 
+            if manifest and manifest.get("success") and manifest.get("execution_mode") != "real":
+                manifest = {"success": False, "error_code": "SYNTHETIC_RESULT_REJECTED"}
             if not manifest or not manifest.get("success"):
                 err_code = manifest.get("error_code", "MANIFEST_ERROR") if manifest else "NO_MANIFEST"
                 await pages_col.update_one(

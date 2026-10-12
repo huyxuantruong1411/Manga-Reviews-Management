@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
+from fastapi import HTTPException
 
 from backend.database.connection import get_db
 from backend.services.cover_art_service import cover_art_service
@@ -57,6 +58,11 @@ def build_filter_query(filters: Dict[str, Any]) -> Dict[str, Any]:
     return query
 
 
+def validate_schedule(config: Dict[str, Any]) -> None:
+    if config.get("schedule", {}).get("type", "manual") != "manual":
+        raise HTTPException(422, "Đồng bộ định kỳ chưa được hỗ trợ. Hãy chọn chạy thủ công.")
+
+
 class SyncManagerService:
     def __init__(self):
         self.active_tasks = {}
@@ -70,6 +76,7 @@ class SyncManagerService:
         return pools
 
     async def create_sync_pool(self, pool_config: Dict[str, Any]) -> Dict[str, Any]:
+        validate_schedule(pool_config)
         db = get_db()
         doc = {
             "name": pool_config["name"],
@@ -90,6 +97,7 @@ class SyncManagerService:
         return doc
 
     async def update_sync_pool(self, pool_id: str, pool_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        validate_schedule(pool_config)
         if not ObjectId.is_valid(pool_id):
             return None
         db = get_db()
@@ -270,16 +278,23 @@ class SyncManagerService:
 
         async def _run_batch():
             logger.info(f"Starting background batch sync task {task_id} for {len(manga_ids)} mangas...")
+            all_completed = bool(manga_ids)
             try:
                 for idx, m_id in enumerate(manga_ids):
                     try:
-                        await self.execute_single_sync(m_id, options, sync_config_id)
+                        result = await self.execute_single_sync(m_id, options, sync_config_id)
+                        all_completed = all_completed and result.get("status") == "completed"
                     except Exception as e:
+                        all_completed = False
                         logger.error(f"Batch sync item failed for {m_id}: {e}")
 
                     # Throttle requests: 1.5 seconds gap between mangas to avoid rate limits
                     if idx < len(manga_ids) - 1:
                         await asyncio.sleep(1.5)
+                if all_completed and sync_config_id:
+                    await get_db().sync_configs.update_one(
+                        {"_id": ObjectId(sync_config_id)}, {"$set": {"last_synced_at": datetime.utcnow()}}
+                    )
                 logger.info(f"Background batch sync task {task_id} completed.")
             except asyncio.CancelledError:
                 logger.info(f"Background batch sync task {task_id} was cancelled.")
@@ -366,9 +381,6 @@ class SyncManagerService:
 
         # Run batch sync
         await self.execute_batch_sync(manga_ids, pool.get("sync_options", {}), pool_id)
-
-        # Update last synced at
-        await db.sync_configs.update_one({"_id": ObjectId(pool_id)}, {"$set": {"last_synced_at": datetime.utcnow()}})
 
         return {"status": "queued", "count": len(manga_ids), "pool_name": pool.get("name")}
 

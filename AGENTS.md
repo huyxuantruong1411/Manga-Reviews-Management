@@ -52,7 +52,7 @@ After editing files, run appropriate formatters, linters, and verification suite
 - **Backend (Python)**:
   ```bash
   uv run --project backend python scripts/ci/check_python.py
-  uv run --project backend python -m pytest backend/tests
+  uv run --project backend python -m pytest backend/tests services/translator-runtime/tests
   ```
 - **Frontend (TypeScript / React)**:
   ```bash

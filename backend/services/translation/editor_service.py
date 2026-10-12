@@ -5,15 +5,18 @@ pure-canvas re-rendering (rendering text directly onto clean image with ZERO LLM
 and publishing verified results into chapter page bindings.
 """
 
+import hashlib
 import io
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
+from bson import ObjectId
 from PIL import Image, ImageDraw, ImageFont
 
 import backend.database.connection as db_conn
 from backend.models.translation import RegionData
+from backend.services.translation.runtime import has_verified_source
 from backend.services.translation.storage_service import translation_storage_service
 
 logger = logging.getLogger("backend.translation.editor")
@@ -48,19 +51,24 @@ class TranslationEditorService:
                 serialized_regions.append(dict(r))
 
         now = datetime.now(timezone.utc)
-        await db["translation_results"].update_one(
-            {"result_id": result_id},
+        write = await db["translation_results"].update_one(
+            {"result_id": result_id, "active_revision": expected_revision},
             {
                 "$set": {
                     "active_revision": new_revision,
                     "regions": serialized_regions,
+                    "output_object_key": "",
                     "updated_at": now,
                 }
             },
         )
 
+        if write.matched_count != 1:
+            raise ValueError("Revision conflict: another editor saved this result; reload before retrying")
+
         result["active_revision"] = new_revision
         result["regions"] = serialized_regions
+        result["output_object_key"] = ""
         result["updated_at"] = now
         result.pop("_id", None)
         return result
@@ -77,23 +85,15 @@ class TranslationEditorService:
         if not result:
             raise KeyError(f"Translation result '{result_id}' not found")
 
-        source_key = result.get("clean_object_key") or result.get("output_object_key")
-        img_bytes = b""
-        if source_key:
-            try:
-                img_bytes = await translation_storage_service.get_object_bytes(source_key)
-            except Exception as e:
-                logger.warning(f"Failed to fetch image bytes for rerender: {e}")
-
-        if img_bytes:
-            try:
-                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            except Exception:
-                img = Image.new("RGB", (800, 1200), color=(255, 255, 255))
-        else:
-            w = result.get("width") or 800
-            h = result.get("height") or 1200
-            img = Image.new("RGB", (w, h), color=(255, 255, 255))
+        source_key = result.get("clean_object_key")
+        if not source_key:
+            raise ValueError("Clean artwork is missing; rerender cannot safely preserve the original image")
+        try:
+            img_bytes = await translation_storage_service.get_object_bytes(source_key)
+            with Image.open(io.BytesIO(img_bytes)) as source:
+                img = source.convert("RGB")
+        except Exception as exc:
+            raise ValueError("Clean artwork is unavailable or invalid; retry after restoring the source") from exc
 
         draw = ImageDraw.Draw(img)
 
@@ -154,12 +154,13 @@ class TranslationEditorService:
 
         # Upload and update active revision
         cur_rev = result.get("active_revision", 1)
-        new_output_key = f"translation/outputs/{result_id}_rev{cur_rev}.jpg"
+        image_hash = hashlib.sha256(new_image_bytes).hexdigest()
+        new_output_key = f"translation/outputs/{result_id}_rev{cur_rev}_{image_hash}.jpg"
         await translation_storage_service.upload_file(new_output_key, new_image_bytes, "image/jpeg")
 
         now = datetime.now(timezone.utc)
-        await db["translation_results"].update_one(
-            {"result_id": result_id},
+        write = await db["translation_results"].update_one(
+            {"result_id": result_id, "active_revision": cur_rev},
             {
                 "$set": {
                     "output_object_key": new_output_key,
@@ -168,6 +169,8 @@ class TranslationEditorService:
             },
         )
 
+        if write.matched_count != 1:
+            raise ValueError("Revision conflict: result changed while rendering; reload before retrying")
         result["output_object_key"] = new_output_key
         result["updated_at"] = now
         result.pop("_id", None)
@@ -186,19 +189,40 @@ class TranslationEditorService:
         if not result:
             raise KeyError(f"Translation result '{result_id}' not found")
 
-        active_rev = revision or result.get("active_revision", 1)
+        if not has_verified_source(result):
+            raise ValueError("Synthetic or unverified legacy result cannot be published; regenerate with a real engine")
+        active_rev = result.get("active_revision", 1)
+        if revision is not None and revision != active_rev:
+            raise ValueError("Requested result revision is unavailable; reload before publishing")
+        if result.get("chapter_id") != chapter_id or result.get("page_uid") != page_uid:
+            raise ValueError("Result does not belong to this chapter page")
+        chapter = await db["chapters"].find_one(
+            {"_id": ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id}
+        )
+        if not chapter:
+            raise KeyError("Chapter not found")
+        page = next((item for item in chapter.get("pages", []) if item.get("page_uid") == page_uid), None)
+        if not page or not page.get("object_key"):
+            raise KeyError("Page not found")
+        source_bytes = await translation_storage_service.get_object_bytes(page["object_key"])
+        if hashlib.sha256(source_bytes).hexdigest() != result["source_sha256"]:
+            raise ValueError("Source image changed; this translation is stale")
         output_key = result.get("output_object_key", "")
+        if not output_key:
+            raise ValueError("Translation output is missing")
         source_hash = result.get("source_sha256", "")
         target_lang = result.get("target_language", "vi")
 
         now = datetime.now(timezone.utc)
         query = {
+            "scope": "local",
             "chapter_id": chapter_id,
             "page_uid": page_uid,
             "target_language": target_lang,
         }
         update = {
             "$set": {
+                "scope": "local",
                 "chapter_id": chapter_id,
                 "page_uid": page_uid,
                 "target_language": target_lang,

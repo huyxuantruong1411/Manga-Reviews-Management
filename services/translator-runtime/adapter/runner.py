@@ -60,7 +60,17 @@ def check_cancellation(workdir: str) -> bool:
     return os.path.exists(cancel_file)
 
 
-def run_pipeline(envelope: InputEnvelope) -> OutputManifest:
+def run_pipeline(envelope: InputEnvelope, *, synthetic: bool = False) -> OutputManifest:
+    if not synthetic:
+        return OutputManifest(
+            job_id=envelope.job_id,
+            page_identity=envelope.page_identity,
+            attempt_id=envelope.attempt_id,
+            operation_kind=envelope.operation_kind,
+            success=False,
+            error_code="TRANSLATION_ENGINE_UNAVAILABLE",
+            error_message="Only an explicit --synthetic protocol harness is installed; no real translation engine.",
+        )
     start_time = time.time()
     workdir = os.path.abspath(envelope.workdir)
     os.makedirs(workdir, exist_ok=True)
@@ -186,6 +196,7 @@ def run_pipeline(envelope: InputEnvelope) -> OutputManifest:
         attempt_id=envelope.attempt_id,
         operation_kind=envelope.operation_kind,
         success=True,
+        execution_mode="synthetic",
         output_image_path=final_output_path,
         clean_image_path=clean_output_path,
         output_sha256=out_sha256,
@@ -194,11 +205,11 @@ def run_pipeline(envelope: InputEnvelope) -> OutputManifest:
         detected_regions_count=1,
         translated_regions_count=1,
         regions=[sample_region],
-        warnings=[],
+        warnings=["Synthetic protocol fixture: no OCR, translation or inpainting was performed."],
         timings_ms=timings,
     )
 
-    emit_event("stage_completed", "assembly", 100.0, "Page translated successfully", elapsed_ms=total_elapsed)
+    emit_event("stage_completed", "assembly", 100.0, "Synthetic fixture completed", elapsed_ms=total_elapsed)
     return manifest
 
 
@@ -206,6 +217,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MangaTranslator Runtime Subprocess Runner")
     parser.add_argument("--envelope-stdin", action="store_true", help="Read input envelope from stdin")
     parser.add_argument("--envelope-file", type=str, help="Read input envelope from JSON file")
+    parser.add_argument("--synthetic", action="store_true", help="Explicit protocol test only; never publish output")
     args = parser.parse_args()
 
     if args.envelope_file:
@@ -222,7 +234,7 @@ def main() -> None:
         sys.exit(1)
 
     envelope = InputEnvelope.from_dict(raw_data)
-    manifest = run_pipeline(envelope)
+    manifest = run_pipeline(envelope, synthetic=args.synthetic)
 
     # Emit final manifest prefixed with MANIFEST:
     print(f"MANIFEST:{manifest.to_json()}", flush=True)

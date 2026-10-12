@@ -18,6 +18,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from backend.config import settings
 from backend.database.connection import db_instance
+from backend.database.indexes import DELETION_REFERENCE_INDEXES
+from backend.database.migrations import m_20261009_deletion_reference_indexes as deletion_indexes
 from backend.main import app
 from backend.services.minio_service import minio_service
 from backend.services.panel_scanner_service import panel_scanner_service
@@ -37,6 +39,14 @@ class StorageIntegration(unittest.IsolatedAsyncioTestCase):
         try:
             await mongo.admin.command("ping")
             db_instance.db = mongo[database_name]
+            # Run both directions twice on only the isolated database.
+            await deletion_indexes.upgrade()
+            await deletion_indexes.upgrade()
+            await deletion_indexes.downgrade()
+            await deletion_indexes.downgrade()
+            await deletion_indexes.upgrade()
+            for collection, _, index_name in DELETION_REFERENCE_INDEXES:
+                self.assertIn(index_name, await db_instance.db[collection].index_information())
             await asyncio.to_thread(minio_service.client.make_bucket, bucket)
             created_bucket = True
             minio_service.bucket = bucket
@@ -102,14 +112,69 @@ class StorageIntegration(unittest.IsolatedAsyncioTestCase):
                 foreign = await client.post(f"/api/manga/{ObjectId()}/reading-progress", json=progress)
                 self.assertEqual(foreign.status_code, 422, foreign.text)
                 self.assertEqual(await db_instance.db.panel_scan_pages.count_documents({}), 1)
+                analysis_id = ObjectId()
+                await db_instance.db.vision_page_analyses.insert_one(
+                    {"_id": analysis_id, "chapter_id": str(chapter_id), "manga_id": str(manga_id)}
+                )
+                await db_instance.db.vision_regions.insert_one({"page_analysis_id": str(analysis_id)})
+                await db_instance.db.translation_page_bindings.insert_one(
+                    {"scope": "local", "chapter_id": str(chapter_id), "page_uid": "fixture-page"}
+                )
+                await db_instance.db.translation_jobs.insert_one(
+                    {
+                        "scope": "local",
+                        "job_id": "fixture-job",
+                        "state": "queued",
+                        "source_manifest": {"chapter_id": str(chapter_id), "manga_id": str(manga_id)},
+                    }
+                )
+                await db_instance.db.translation_job_pages.insert_one({"job_id": "fixture-job", "state": "queued"})
                 deleted = await client.delete(f"/api/chapters/{chapter_id}")
                 self.assertEqual(deleted.status_code, 200, deleted.text)
                 self.assertEqual(await db_instance.db.manga_panels.count_documents({}), 0)
                 self.assertEqual(await db_instance.db.panel_scan_pages.count_documents({}), 0)
+                for collection in ("vision_regions", "vision_page_analyses", "translation_page_bindings"):
+                    self.assertEqual(await db_instance.db[collection].count_documents({}), 0)
+                self.assertEqual((await db_instance.db.translation_jobs.find_one({}))["state"], "cancelled")
+                self.assertEqual((await db_instance.db.translation_job_pages.find_one({}))["state"], "cancelled")
                 progress = (await client.get(f"/api/manga/{manga_id}/reading-progress")).json()
                 self.assertIsNone(progress["last_read_chapter_id"])
                 self.assertEqual(progress["read_chapter_ids"], [])
                 self.assertEqual((await client.get(f"/api/panels/{panel_id}/crop")).status_code, 404)
+                remaining = await asyncio.to_thread(
+                    lambda: list(minio_service.client.list_objects(bucket, recursive=True))
+                )
+                self.assertEqual(remaining, [])
+
+                # Two manga/chapter owners share one synthetic object. The first deletion
+                # must retain it; deleting its last owner must remove it.
+                other_manga = ObjectId()
+                await asyncio.to_thread(
+                    minio_service.client.put_object, bucket, key, io.BytesIO(data), len(data), content_type="image/png"
+                )
+                await db_instance.db.mangas.update_one({"_id": manga_id}, {"$set": {"minio_cover_key": key}})
+                await db_instance.db.mangas.insert_one(
+                    {"_id": other_manga, "title": "Other fixture", "minio_cover_key": key}
+                )
+                for owner in (manga_id, other_manga):
+                    await db_instance.db.chapters.insert_one(
+                        {"manga_id": str(owner), "chapter_number": "2", "pages": [{"object_key": key}]}
+                    )
+                    await db_instance.db.cover_arts.insert_one({"manga_id": str(owner), "minio_key": key})
+                await db_instance.db.reviews.insert_one({"manga_id": str(manga_id), "is_deleted": False})
+                deleted_manga = await client.delete(f"/api/manga/{manga_id}")
+                self.assertEqual(deleted_manga.status_code, 204, deleted_manga.text)
+                self.assertEqual(await db_instance.db.chapters.count_documents({"manga_id": str(manga_id)}), 0)
+                self.assertEqual(await db_instance.db.reading_progress.count_documents({"manga_id": str(manga_id)}), 0)
+                self.assertEqual(await db_instance.db.chapters.count_documents({"manga_id": str(other_manga)}), 1)
+                self.assertTrue((await db_instance.db.reviews.find_one({"manga_id": str(manga_id)}))["is_deleted"])
+                self.assertEqual(
+                    (await asyncio.to_thread(minio_service.client.stat_object, bucket, key)).size, len(data)
+                )
+                deleted_other = await client.delete(f"/api/manga/{other_manga}")
+                self.assertEqual(deleted_other.status_code, 204, deleted_other.text)
+                self.assertEqual(await db_instance.db.chapters.count_documents({}), 0)
+                self.assertEqual(await db_instance.db.cover_arts.count_documents({}), 0)
                 remaining = await asyncio.to_thread(
                     lambda: list(minio_service.client.list_objects(bucket, recursive=True))
                 )

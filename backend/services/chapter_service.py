@@ -22,6 +22,12 @@ from backend.models.chapter import (
     StorageDuplicateItem,
 )
 from backend.services.audit_service import audit_service
+from backend.services.content_deletion_service import (
+    DeletionStorageError,
+    cancel_source_jobs,
+    delete_chapter_dependencies,
+    source_object_is_shared,
+)
 from backend.services.minio_service import minio_service
 from backend.utils.file_utils import normalize_windows_path
 
@@ -373,16 +379,20 @@ class ChapterService:
 
         manga_id = chapter["manga_id"]
         c_id_str = str(chapter["_id"])
+        db = get_db()
+        await cancel_source_jobs(db, {"chapter_id": c_id_str})
 
         # Downloaded MangaDex pages use source UUIDs, not the Mongo chapter ID.
         # Delete the recorded objects and keep metadata if storage reports a failure.
         for page in chapter.get("pages", []):
             key = page.get("object_key")
+            if key and await source_object_is_shared(db, key, chapter_id=chapter["_id"]):
+                continue
             if key and not await asyncio.to_thread(minio_service.delete_chapter_page, key):
-                raise RuntimeError("Không xóa được ảnh chương trong kho lưu trữ; hãy thử lại.")
+                raise DeletionStorageError("Không xóa được ảnh chương trong kho lưu trữ; hãy thử lại.")
 
-        # Delete document from MongoDB
-        await self._get_chapters_col().delete_one(filter_query)
+        # Propagate cleanup failures and retain the parent so a retry can discover dependencies.
+        await delete_chapter_dependencies(db, c_id_str)
         await self._get_reading_col().update_many({"manga_id": manga_id}, {"$pull": {"read_chapter_ids": c_id_str}})
         await self._get_reading_col().update_many(
             {"manga_id": manga_id, "last_read_chapter_id": c_id_str},
@@ -396,13 +406,7 @@ class ChapterService:
             },
         )
 
-        # Cascading delete extracted panels and vision features
-        try:
-            from backend.services.panel_scanner_service import panel_scanner_service
-
-            await panel_scanner_service.delete_panels_for_chapter(c_id_str)
-        except Exception as pe:
-            logger.warning(f"Error cascading delete panels for chapter {c_id_str}: {pe}")
+        await self._get_chapters_col().delete_one(filter_query)
 
         # Log audit event
         try:
@@ -435,6 +439,8 @@ class ChapterService:
         current_pages = chapter.get("pages", [])
         pages_to_keep = []
         deleted_count = 0
+        deleted_page_numbers = []
+        failed_page_numbers = []
 
         target_set = set(page_numbers)
         for p in current_pages:
@@ -442,10 +448,26 @@ class ChapterService:
                 # Remove from MinIO
                 obj_key = p.get("object_key")
                 if obj_key:
-                    minio_service.delete_chapter_page(obj_key)
+                    try:
+                        removed = await asyncio.to_thread(minio_service.delete_chapter_page, obj_key)
+                    except Exception:
+                        removed = False
+                    if not removed:
+                        pages_to_keep.append(p)
+                        failed_page_numbers.append(p["page_number"])
+                        continue
                 deleted_count += 1
+                deleted_page_numbers.append(p["page_number"])
             else:
                 pages_to_keep.append(p)
+
+        if deleted_count == 0:
+            return {
+                "chapter_id": chapter_id,
+                "deleted_pages_count": 0,
+                "remaining_pages_count": len(current_pages),
+                "failed_page_numbers": failed_page_numbers,
+            }
 
         # Renumber remaining pages strictly 1..N and build mapping while preserving page_uid
         old_to_new = {}
@@ -461,7 +483,7 @@ class ChapterService:
         try:
             from backend.services.panel_scanner_service import panel_scanner_service
 
-            await panel_scanner_service.delete_panels_for_pages(str(chapter["_id"]), list(page_numbers))
+            await panel_scanner_service.delete_panels_for_pages(str(chapter["_id"]), deleted_page_numbers)
             await panel_scanner_service.renumber_panels_for_chapter(str(chapter["_id"]), old_to_new)
         except Exception as pe:
             logger.warning(f"Error cascading delete/renumber panels: {pe}")
@@ -496,6 +518,7 @@ class ChapterService:
             "chapter_id": chapter_id,
             "deleted_pages_count": deleted_count,
             "remaining_pages_count": len(pages_to_keep),
+            "failed_page_numbers": failed_page_numbers,
         }
 
     async def scan_local_folder(self, folder_path: str, manga_id: str) -> FolderScanResponse:

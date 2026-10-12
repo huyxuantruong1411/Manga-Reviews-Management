@@ -103,10 +103,19 @@ async def test_storage_usage_and_dry_run_cleanup(monkeypatch):
     fake_assets = [
         {"asset_id": "a1", "kind": "demo_input", "file_size": 1000, "state": "available"},
         {"asset_id": "a2", "kind": "output_image", "file_size": 2500, "state": "available"},
-        {"asset_id": "a3", "kind": "clean_image", "file_size": 1500, "state": "deleting"},
+        {
+            "asset_id": "a3",
+            "kind": "clean_image",
+            "file_size": 1500,
+            "state": "deleting",
+            "object_key": "translation/clean/a3.png",
+        },
     ]
 
     class MockAssetsCol:
+        async def find_one(self, query):
+            return None
+
         def find(self, query=None):
             class Cursor:
                 async def to_list(self, length=None):

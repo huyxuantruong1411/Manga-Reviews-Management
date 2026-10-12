@@ -10,6 +10,7 @@ from backend.models.chapter import DeletePagesRequest, FolderImportRequest, Fold
 from backend.models.chapter_export import ChapterExportOpenFolderRequest, ChapterExportRequest
 from backend.services.chapter_export_service import chapter_export_service
 from backend.services.chapter_service import chapter_service
+from backend.services.content_deletion_service import DeletionBusyError, DeletionStorageError
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ async def delete_chapter(chapter_id: str = Path(...)):
         if not success:
             raise HTTPException(status_code=404, detail="Chapter not found or already deleted")
         return {"success": True, "message": "Chapter deleted successfully"}
+    except DeletionBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DeletionStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as e:

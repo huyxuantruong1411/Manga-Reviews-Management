@@ -211,8 +211,8 @@ class AnalyticsService:
             "field": "read_status",
             "new_value": {"$in": ["completed", "ReadStatus.COMPLETED"]},
         }
-        if manga_ids:
-            base_audit_filter["entity_id"] = {"$in": manga_ids}
+        # An empty filtered library is still a scope, never permission to count all logs.
+        base_audit_filter["entity_id"] = {"$in": manga_ids}
 
         completed_last_7d = await audit_coll.count_documents(
             {**base_audit_filter, "timestamp": {"$gte": seven_days_ago, "$lte": now}}

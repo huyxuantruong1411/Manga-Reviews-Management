@@ -21,6 +21,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client, { apiErrorMessage } from "../api/client";
+import { saveReadingProgress } from "../api/readingProgress";
 import { ReaderTranslationPanel } from "../components/manga/ReaderTranslationPanel";
 import { TranslatedPageImage } from "../components/manga/TranslatedPageImage";
 import { useTranslation } from "../hooks/useTranslation";
@@ -161,6 +162,14 @@ export const MangaReaderPage: React.FC = () => {
 		return () => chapterRequestRef.current?.abort();
 	}, [chapterId, initialPageParam, loadChapter]);
 
+	const pendingProgressRef = useRef<(() => void) | null>(null);
+	useEffect(() => {
+		return () => {
+			pendingProgressRef.current?.();
+			pendingProgressRef.current = null;
+		};
+	}, [mangaId, chapterId]);
+
 	useEffect(() => {
 		if (
 			!mangaId ||
@@ -170,23 +179,39 @@ export const MangaReaderPage: React.FC = () => {
 			!pages.length
 		)
 			return;
-		const timer = window.setTimeout(() => {
-			client
-				.post(`/api/manga/${mangaId}/reading-progress`, {
-					chapter_id: currentChapter.id,
-					chapter_number: currentChapter.chapter_number,
-					page: currentPage,
-					reading_mode: readingMode,
-					fit_mode: fitMode,
-					language: currentChapter.language,
-					mark_as_read: currentPage === pages.length,
+		let current = true;
+		const persist = () => {
+			if (pendingProgressRef.current === persist)
+				pendingProgressRef.current = null;
+			void saveReadingProgress(mangaId, {
+				chapter_id: currentChapter.id,
+				chapter_number: currentChapter.chapter_number,
+				page: currentPage,
+				reading_mode: readingMode,
+				fit_mode: fitMode,
+				language: currentChapter.language,
+				mark_as_read:
+					readingMode === "double_ltr" || readingMode === "double_rtl"
+						? Math.min(
+								pages.length,
+								currentPage % 2 === 0 ? currentPage : currentPage + 1,
+							) === pages.length
+						: currentPage === pages.length,
+			})
+				.then(() => {
+					if (current) setProgressError("");
 				})
-				.then(() => setProgressError(""))
-				.catch(() =>
-					setProgressError("Chưa lưu được tiến độ đọc. Kiểm tra kết nối."),
-				);
-		}, 350);
-		return () => window.clearTimeout(timer);
+				.catch(() => {
+					if (current)
+						setProgressError("Chưa lưu được tiến độ đọc. Kiểm tra kết nối.");
+				});
+		};
+		pendingProgressRef.current = persist;
+		const timer = window.setTimeout(persist, 350);
+		return () => {
+			current = false;
+			window.clearTimeout(timer);
+		};
 	}, [
 		mangaId,
 		chapterId,
@@ -1103,7 +1128,7 @@ export const MangaReaderPage: React.FC = () => {
 
 								{/* Page View */}
 								{pages[currentPage - 1] && (
-									<div className="relative z-10 flex flex-col items-center">
+									<div className="relative flex flex-col items-center w-full min-w-0">
 										<TranslatedPageImage
 											page={pages[currentPage - 1]}
 											binding={
@@ -1319,6 +1344,8 @@ export const MangaReaderPage: React.FC = () => {
 								)}
 								totalTranslatedPages={Object.keys(translation.bindings).length}
 								isTranslating={translation.isTranslating}
+								engineReady={translation.engineReady}
+								engineMessage={translation.engineMessage}
 								jobProgress={translation.jobProgress}
 								errorMessage={translation.errorMessage}
 								onTranslateCurrentPage={() => {

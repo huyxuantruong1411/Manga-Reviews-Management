@@ -1,23 +1,30 @@
 import asyncio
 import io
-import json
 import logging
 import re
 import uuid as uuid_lib
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, List
 
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, Body, File, HTTPException, Path, UploadFile, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from backend.config import settings
 from backend.core.redis import delete_cache, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.review import ReviewCreate, ReviewResponse, ReviewUpdate
 from backend.services.audit_service import audit_service
 from backend.services.minio_service import minio_service
+from backend.services.review_media_service import (
+    MAX_IMAGE_UPLOAD,
+    adapt_review_media,
+    build_media_url,
+    read_bounded_upload,
+    resolve_media,
+    validate_image_upload,
+)
 from backend.utils.remote_images import fetch_public_image
 
 logger = logging.getLogger(__name__)
@@ -54,7 +61,7 @@ async def list_reviews(manga_id: str = Path(...)):
     cache_key = f"reviews:manga:{manga_id}"
     cached_reviews = await get_cache(cache_key)
     if cached_reviews is not None:
-        return cached_reviews
+        return [adapt_review_media(review) for review in cached_reviews]
 
     coll = get_db().reviews
     cursor = coll.find({"manga_id": manga_id, "is_deleted": {"$ne": True}}).sort("created_at", -1)
@@ -65,11 +72,11 @@ async def list_reviews(manga_id: str = Path(...)):
         reviews.append(doc)
 
     await set_cache(cache_key, reviews, ttl=180)
-    return reviews
+    return [adapt_review_media(review) for review in reviews]
 
 
 @router.post("/{manga_id}/reviews", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
-async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
+async def create_review(manga_id: str = Path(...), data: ReviewCreate = Body(...)):
     """Create a new review for a manga."""
     # Verify manga exists
     if not ObjectId.is_valid(manga_id):
@@ -78,23 +85,6 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
     manga = await get_db().mangas.find_one({"_id": ObjectId(manga_id)})
     if not manga:
         raise HTTPException(status_code=404, detail="Manga not found")
-
-    # Anti-duplicate / idempotency check: if review with same title created within 5 seconds, return it
-    five_seconds_ago = datetime.utcnow() - timedelta(seconds=5)
-    existing_recent = await get_db().reviews.find_one(
-        {
-            "manga_id": manga_id,
-            "title": data.title,
-            "is_deleted": {"$ne": True},
-            "created_at": {"$gte": five_seconds_ago},
-        }
-    )
-    if existing_recent:
-        logger.warning(
-            f"Duplicate review create prevented for manga {manga_id}: returning existing review {existing_recent['_id']}"
-        )
-        existing_recent["_id"] = str(existing_recent["_id"])
-        return existing_recent
 
     review_doc = {
         "manga_id": manga_id,
@@ -125,7 +115,7 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = None):
 
 
 @router.put("/{manga_id}/reviews/{review_id}", response_model=ReviewResponse)
-async def update_review(manga_id: str = Path(...), review_id: str = Path(...), data: ReviewUpdate = None):
+async def update_review(manga_id: str = Path(...), review_id: str = Path(...), data: ReviewUpdate = Body(...)):
     """Update a review's title or rich content."""
     if not ObjectId.is_valid(review_id):
         raise HTTPException(status_code=400, detail="Invalid review ID format")
@@ -223,6 +213,7 @@ async def cleanup_review_tabs(manga_id: str = Path(...), review_id: str = Path(.
         )
         review["content_json"] = cleaned_content
 
+    await delete_cache(f"reviews:manga:{manga_id}")
     if review and "_id" in review:
         review["_id"] = str(review["_id"])
     return review
@@ -233,7 +224,7 @@ REVIEW_VIDEOS_BUCKET = "review-videos"
 REVIEW_MEDIA_BUCKET = "review-media"
 
 # Allowed MIME types
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/bmp", "image/tiff"}
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/tiff"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska"}
 ALLOWED_AUDIO_TYPES = {
     "audio/mpeg",
@@ -267,30 +258,24 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB for other files
 
 
 def _ensure_bucket(bucket_name: str):
-    """Ensure a MinIO bucket exists with public read policy."""
+    """Create a private bucket without modifying any existing access policy."""
     minio = minio_service.client
     if not minio.bucket_exists(bucket_name):
         minio.make_bucket(bucket_name)
-    policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"AWS": ["*"]},
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{bucket_name}/*"],
-            }
-        ],
-    }
-    minio.set_bucket_policy(bucket_name, json.dumps(policy))
 
 
 def _build_public_url(bucket: str, object_key: str) -> str:
-    """Build a public URL for a MinIO object."""
-    endpoint = settings.minio_endpoint
-    if not endpoint.startswith("http"):
-        endpoint = f"http://{endpoint}"
-    return f"{endpoint}/{bucket}/{object_key}"
+    """Compatibility name: media now resolves through a persistent private-storage URL."""
+    return build_media_url(bucket, object_key)
+
+
+@router.get("/{manga_id}/reviews/media/{bucket}/{filename:path}")
+async def get_review_media(manga_id: str, bucket: str, filename: str):
+    return RedirectResponse(
+        await resolve_media(manga_id, bucket, filename),
+        status_code=307,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/{manga_id}/reviews/upload-image")
@@ -302,26 +287,21 @@ async def upload_review_image(manga_id: str = Path(...), file: UploadFile = File
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {file.content_type}")
 
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
-    unique_name = f"{uuid_lib.uuid4().hex}.{ext}"
-    object_key = f"{manga_id}/{unique_name}"
-
+    content = await read_bounded_upload(file, MAX_IMAGE_UPLOAD)
+    content_type, ext = await asyncio.to_thread(validate_image_upload, content)
+    object_key = f"{manga_id}/{uuid_lib.uuid4().hex}.{ext}"
     try:
-        _ensure_bucket(REVIEW_IMAGES_BUCKET)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MinIO bucket error: {str(e)}")
-
-    try:
-        content = await file.read()
-        minio_service.client.put_object(
+        await asyncio.to_thread(_ensure_bucket, REVIEW_IMAGES_BUCKET)
+        await asyncio.to_thread(
+            minio_service.client.put_object,
             REVIEW_IMAGES_BUCKET,
             object_key,
             io.BytesIO(content),
             length=len(content),
-            content_type=file.content_type or "image/jpeg",
+            content_type=content_type,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    except Exception as error:
+        raise HTTPException(status_code=503, detail="Image storage is unavailable; retry upload") from error
 
     url = _build_public_url(REVIEW_IMAGES_BUCKET, object_key)
     return {"url": url, "key": object_key, "bucket": REVIEW_IMAGES_BUCKET}
@@ -483,18 +463,20 @@ async def upload_review_media(manga_id: str = Path(...), file: UploadFile = File
     unique_name = f"{uuid_lib.uuid4().hex}.{ext}"
     object_key = f"{manga_id}/{media_type}/{unique_name}"
 
-    # Read with size limit
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail=f"File exceeds maximum size of {MAX_FILE_SIZE // (1024 * 1024)}MB")
+    content = await read_bounded_upload(file, MAX_IMAGE_UPLOAD if media_type == "image" else MAX_FILE_SIZE)
+    content_type = file.content_type or "application/octet-stream"
+    if media_type == "image":
+        content_type, ext = await asyncio.to_thread(validate_image_upload, content)
+        object_key = f"{manga_id}/{media_type}/{uuid_lib.uuid4().hex}.{ext}"
 
     try:
-        minio_service.client.put_object(
+        await asyncio.to_thread(
+            minio_service.client.put_object,
             REVIEW_MEDIA_BUCKET,
             object_key,
             io.BytesIO(content),
             length=len(content),
-            content_type=file.content_type or "application/octet-stream",
+            content_type=content_type,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
@@ -572,6 +554,7 @@ async def finalize_review(manga_id: str = Path(...), review_id: str = Path(...))
         {"_id": ObjectId(review_id)}, {"$set": {"finalized_at": datetime.utcnow(), "updated_at": datetime.utcnow()}}
     )
 
+    await delete_cache(f"reviews:manga:{manga_id}")
     return {
         "status": "finalized",
         "deleted_orphans": deleted_count,

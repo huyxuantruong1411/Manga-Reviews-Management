@@ -58,6 +58,16 @@ class MangaBase(BaseModel):
 
 
 class MangaCreate(MangaBase):
+    title: str = Field(min_length=1, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Title must not be blank")
+        return value
+
     cover_url: Optional[str] = None
     # For manual entry, the user can upload an image.
     # We will upload it to MinIO and set minio_cover_key.
@@ -66,12 +76,20 @@ class MangaCreate(MangaBase):
 class MangaCreateDex(BaseModel):
     mangadex_id: str
     read_status: ReadStatus = ReadStatus.UNREAD
-    personal_rating: Optional[float] = None
+    personal_rating: Optional[float] = Field(None, ge=0, le=10, multiple_of=0.5, allow_inf_nan=False)
     tag_ids: List[str] = Field(default_factory=list)
 
 
 class MangaUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        if value is None:
+            raise ValueError("Title cannot be null; omit it to leave unchanged")
+        return MangaCreate.validate_title(value)
+
     alt_titles: Optional[List[str]] = None
     description: Optional[str] = None
     author: Optional[str] = None

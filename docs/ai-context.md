@@ -14,7 +14,7 @@
 - A rich WYSIWYG review editor (TipTap) with interactive manga cards and Gemini AI writing assistance.
 - A **Panel Words Detector**: comic panel dialogue extraction and lexical search via OpenCV contour segmentation, RapidOCR (PP-OCRv4), dictionary lemmatization (spaCy), and MangaOCR cleanups.
 - An asynchronous task worker (ARQ + Redis) for background OCR and a Redis caching layer.
-- A **Translation Studio & Reader Translation Subsystem**: In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
+- A **Translation Studio & Reader Translation Subsystem** (UI/orchestration present; real inference unavailable): In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
 
 ---
 
@@ -24,7 +24,7 @@ Always refer to project manifests and lockfiles rather than assumptions:
 
 | Component | Manifest Source | Pinned / Declared Stack | Role |
 |---|---|---|---|
-| **Backend** | [`backend/pyproject.toml`](../backend/pyproject.toml) | Python `>=3.12`, FastAPI `>=0.110.0`, Motor `>=3.3.2`, Pydantic `>=2.6.4`, Uvicorn | Async REST API, DB abstraction, background coordination |
+| **Backend** | [`backend/pyproject.toml`](../backend/pyproject.toml) | Python `>=3.10` (CI: 3.12), FastAPI `>=0.100.0`, Motor `>=3.2.0`, Pydantic `>=2.0.0`, Uvicorn | Async REST API, DB abstraction, background coordination |
 | **Vision & NLP** | [`backend/pyproject.toml`](../backend/pyproject.toml) | OpenCV (headless), RapidOCR-ONNX, spaCy (`en_core_web_sm`), wordninja, manga-ocr | Panel segmentation, text detection, lemmatization |
 | **Caching & Queue** | [`backend/pyproject.toml`](../backend/pyproject.toml) | Redis-py `>=5.0.0`, ARQ `>=0.26.0` | In-memory key-value cache, async background OCR queue |
 | **Frontend** | [`frontend/package.json`](../frontend/package.json) | React `^19.2.6`, Vite `^8.0.12`, TypeScript `~6.0.2`, Tailwind CSS `^4.3.0`, shadcn/ui (`radix-nova`), TipTap `^3.23.5` | Single-Page Application (SPA) reader, review editor, search UI |
@@ -50,6 +50,15 @@ Always refer to project manifests and lockfiles rather than assumptions:
 ---
 
 ## 4. Asynchronous Processing Mechanisms
+
+**Translation readiness correction (2026-10-09):** the bundled runner is a synthetic
+protocol harness, not a real translation engine. Create/retry returns 503 before
+writing jobs; capabilities reports `ready_for_inference=false`. Synthetic execution
+requires `--synthetic` and cannot be published. Hardware and configured API keys do
+not establish inference readiness. The dedicated ARQ worker is the sole execution
+owner; the API no longer also launches an in-process translation task. Real engine
+integration, durable queue recovery and translation quality acceptance remain open.
+
 
 The system employs three asynchronous execution paths:
 

@@ -4,7 +4,6 @@ Handles durable job creation, MongoDB persistence, ARQ queue dispatching,
 cancellation, retry, and status reconciliation.
 """
 
-import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
@@ -19,61 +18,32 @@ from backend.models.translation import (
     TranslationJobPageInDB,
     utc_now,
 )
+from backend.services.translation.runtime import require_translation_engine
 
 logger = logging.getLogger(__name__)
 
-# Concurrency throttle for in-process background worker execution
-_in_process_semaphore: Optional[asyncio.Semaphore] = None
-
-
-def _get_semaphore() -> asyncio.Semaphore:
-    global _in_process_semaphore
-    if _in_process_semaphore is None:
-        _in_process_semaphore = asyncio.Semaphore(1)
-    return _in_process_semaphore
-
 
 async def enqueue_page_task(job_id: str, page_identity: str, attempt: int = 1) -> bool:
-    """Enqueues a translation page execution task into the dedicated arq:translation queue.
-    Also dispatches in-process background execution via asyncio.create_task to ensure
-    translation jobs run immediately without requiring a standalone external ARQ worker process.
-    """
-    enqueued_arq = False
+    """Dispatch only through the durable queue; never run work in the API process."""
     try:
         from backend.core.redis import get_arq_pool
 
         pool = await get_arq_pool()
-        if pool:
-            await pool.enqueue_job(
-                "execute_translation_job_page",
-                job_id=job_id,
-                page_identity=page_identity,
-                attempt=attempt,
-                _queue_name="arq:translation",
-            )
-            enqueued_arq = True
-    except Exception as e:
-        logger.warning(f"Could not enqueue translation task to Redis immediately: {e}")
-
-    # In-process asynchronous task dispatch fallback:
-    # Always spawn in-process task so development & standalone instances immediately process translations.
-    # Idempotency is guaranteed by the CAS fencing token in execute_translation_job_page.
-    async def _in_process_runner():
-        sem = _get_semaphore()
-        async with sem:
-            try:
-                from backend.tasks.translation import execute_translation_job_page
-
-                await execute_translation_job_page({}, job_id, page_identity, attempt)
-            except Exception as exc:
-                logger.error(f"In-process translation task failed for {job_id}/{page_identity}: {exc}", exc_info=True)
-
-    try:
-        asyncio.create_task(_in_process_runner())
-    except Exception as e:
-        logger.warning(f"Could not schedule in-process translation task: {e}")
-
-    return enqueued_arq or True
+        if pool is None:
+            return False
+        await pool.enqueue_job(
+            "execute_translation_job_page",
+            job_id=job_id,
+            page_identity=page_identity,
+            attempt=attempt,
+            _job_id=f"translation:{job_id}:{page_identity}:{attempt}",
+            _queue_name="arq:translation",
+        )
+        # ARQ returns None when the same deterministic job ID already exists.
+        return True
+    except Exception:
+        logger.warning("Translation queue dispatch unavailable for %s/%s", job_id, page_identity)
+        return False
 
 
 class TranslationJobService:
@@ -88,6 +58,7 @@ class TranslationJobService:
 
     async def create_job(self, req: TranslationJobCreate) -> Dict[str, Any]:
         """Creates a durable translation job and its constituent page records in MongoDB."""
+        require_translation_engine()
         page_uids = []
         source_manifest: Dict[str, Any] = {"kind": req.source.kind}
 
@@ -102,6 +73,13 @@ class TranslationJobService:
             if not chap:
                 raise HTTPException(status_code=404, detail="Chapter not found.")
 
+            if req.source.manga_id and req.source.manga_id != str(chap.get("manga_id")):
+                raise HTTPException(status_code=422, detail="Chapter does not belong to requested manga.")
+            revision = chap.get("pages_revision", 1)
+            if req.source.expected_pages_revision is not None and req.source.expected_pages_revision != revision:
+                raise HTTPException(status_code=409, detail="Chapter pages changed; reload before translating.")
+            if req.source.page_numbers and req.source.page_uids:
+                raise HTTPException(status_code=422, detail="Select pages by UID or number, not both.")
             stored_pages = chap.get("pages", [])
             modified_pages = False
             for p in stored_pages:
@@ -125,17 +103,15 @@ class TranslationJobService:
             if req.source.page_numbers:
                 for num in req.source.page_numbers:
                     found_uid = page_num_map.get(num)
-                    if found_uid and found_uid not in page_uids:
+                    if not found_uid:
+                        raise HTTPException(status_code=422, detail=f"Page number {num} does not belong to chapter.")
+                    if found_uid not in page_uids:
                         page_uids.append(found_uid)
             elif req.source.page_uids:
                 # Specific page subset requested
                 for uid in req.source.page_uids:
                     if uid in stored_uid_map:
                         page_uids.append(uid)
-                    elif uid.isdigit() and int(uid) in page_num_map:
-                        page_uids.append(page_num_map[int(uid)])
-                    elif len(req.source.page_uids) == 1 and len(stored_pages) == 1:
-                        page_uids.append(stored_pages[0]["page_uid"])
                     else:
                         raise HTTPException(status_code=422, detail=f"Page UID '{uid}' does not belong to chapter.")
             else:
@@ -157,6 +133,10 @@ class TranslationJobService:
             source_manifest.update({"demo_asset_ids": page_uids, "total_pages": len(page_uids)})
         else:
             raise HTTPException(status_code=422, detail=f"Unsupported source kind '{req.source.kind}'.")
+
+        page_uids = list(dict.fromkeys(page_uids))
+        if not page_uids:
+            raise HTTPException(status_code=422, detail="No pages selected for translation.")
 
         job_id = f"job_{uuid.uuid4().hex[:16]}"
         now = utc_now()
@@ -227,7 +207,7 @@ class TranslationJobService:
 
         # Reconcile counts from pages collection
         cursor = self._get_pages_col().find({"job_id": job_id})
-        pages = await cursor.to_list(length=1000)
+        pages = await cursor.to_list(length=None)
 
         completed = sum(1 for p in pages if p.get("state") == "completed")
         failed = sum(1 for p in pages if p.get("state") == "failed")
@@ -271,7 +251,7 @@ class TranslationJobService:
     async def get_job_pages(self, job_id: str) -> List[Dict[str, Any]]:
         """Retrieves all page slot states for a job."""
         cursor = self._get_pages_col().find({"job_id": job_id})
-        pages = await cursor.to_list(length=1000)
+        pages = await cursor.to_list(length=None)
         pages.sort(key=lambda p: p.get("ordinal", 0))
         for p in pages:
             p.pop("_id", None)
@@ -298,32 +278,35 @@ class TranslationJobService:
 
     async def retry_job(self, job_id: str) -> Dict[str, Any]:
         """Retries only failed or cancelled page slots in a job."""
+        require_translation_engine()
         job = await self._get_jobs_col().find_one({"job_id": job_id})
         if not job:
             raise HTTPException(status_code=404, detail="Job not found.")
 
         cursor = self._get_pages_col().find({"job_id": job_id, "state": {"$in": ["failed", "cancelled"]}})
-        pages_to_retry = await cursor.to_list(length=1000)
+        pages_to_retry = await cursor.to_list(length=None)
 
+        # Clear cancellation before any newly queued page can be claimed.
+        if pages_to_retry:
+            await self._get_jobs_col().update_one(
+                {"job_id": job_id},
+                {"$set": {"state": "queued", "cancel_requested": False, "updated_at": utc_now()}},
+            )
         retried_count = 0
         for p in pages_to_retry:
             p_ident = p["page_identity"]
             new_attempt = p.get("attempt", 1) + 1
-            await self._get_pages_col().update_one(
-                {"job_id": job_id, "page_identity": p_ident},
+            changed = await self._get_pages_col().update_one(
+                {"job_id": job_id, "page_identity": p_ident, "state": p["state"], "attempt": p.get("attempt", 1)},
                 {
                     "$set": {"state": "queued", "error_code": None, "error_message": None},
                     "$inc": {"attempt": 1},
                 },
             )
+            if changed.matched_count != 1:
+                continue
             await enqueue_page_task(job_id, p_ident, attempt=new_attempt)
             retried_count += 1
-
-        if retried_count > 0:
-            await self._get_jobs_col().update_one(
-                {"job_id": job_id},
-                {"$set": {"state": "queued", "cancel_requested": False, "updated_at": utc_now()}},
-            )
 
         return {"job_id": job_id, "retried_count": retried_count}
 

@@ -18,6 +18,12 @@ export const apiErrorMessage = (error: unknown, fallback: string) => {
 	) {
 		return error.response.data.detail;
 	}
+	if (
+		axios.isAxiosError(error) &&
+		typeof error.response?.data?.detail?.message === "string"
+	) {
+		return error.response.data.detail.message;
+	}
 	return fallback;
 };
 

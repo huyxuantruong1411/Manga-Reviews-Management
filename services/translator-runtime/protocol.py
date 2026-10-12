@@ -105,6 +105,7 @@ class OutputManifest:
     attempt_id: str
     operation_kind: str
     success: bool
+    execution_mode: str = "unavailable"
     protocol_version: int = 1
     output_image_path: Optional[str] = None
     clean_image_path: Optional[str] = None

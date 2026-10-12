@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import backend.database.connection as db_conn
 from backend.config import settings
 from backend.models.translation import TranslationProviderInDB
+from backend.services.translation.runtime import engine_status
 
 logger = logging.getLogger("backend.translation.providers")
 
@@ -96,20 +97,20 @@ class TranslationProviderService:
             )
             return {
                 "configured": has_key,
-                "status": "ready" if has_key else "missing_api_key",
+                "status": "configured_unverified" if has_key else "missing_api_key",
                 "message": "Gemini API key is configured" if has_key else "GEMINI_API_KEY environment variable not set",
             }
         elif kind == "openai_compatible":
             has_key = bool(os.environ.get("OPENAI_API_KEY"))
             return {
                 "configured": has_key,
-                "status": "ready" if has_key else "unconfigured",
+                "status": "configured_unverified" if has_key else "unconfigured",
                 "message": "OpenAI credentials detected" if has_key else "No OPENAI_API_KEY detected (optional)",
             }
         elif kind == "offline_stub":
             return {
                 "configured": True,
-                "status": "ready",
+                "status": "synthetic",
                 "message": "Offline stub always available for testing",
             }
         return {
@@ -119,6 +120,12 @@ class TranslationProviderService:
         }
 
     def probe_runtime_environment(self) -> Dict[str, Any]:
+        report = self._probe_hardware_environment()
+        report["engine"] = engine_status()
+        report["ready_for_inference"] = False
+        return report
+
+    def _probe_hardware_environment(self) -> Dict[str, Any]:
         """Probes runtime hardware, CUDA, and dependencies via translator-runtime probe script or fallback."""
         import importlib.util
         from pathlib import Path

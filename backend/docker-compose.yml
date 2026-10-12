@@ -1,19 +1,17 @@
-version: "3.9"
-
 services:
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: manga-minio
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in backend/.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in backend/.env}
     command: server /data --console-address ":9001"
     volumes:
-      - D:/Projects/Manga/Manga-Reviews-Management/backend/minio_data:/data
+      - ./minio_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -22,16 +20,16 @@ services:
       retries: 5
 
   redis:
-    image: redis:alpine
+    image: redis@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     container_name: manga-redis
     ports:
       - "127.0.0.1:6379:6379"
     command: redis-server --appendonly yes
     volumes:
-      - D:/Projects/Manga/Manga-Reviews-Management/backend/redis_data:/data
+      - ./redis_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 5

@@ -6,8 +6,11 @@ Tests verify:
 - Exporting chapter packages translated and original fallback pages into a valid ZIP with manifest.json.
 """
 
+import hashlib
 import io
 import zipfile
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -47,8 +50,8 @@ async def test_editor_update_regions_increments_revision(monkeypatch):
             rid = query.get("result_id")
             if rid in fake_results:
                 fake_results[rid].update(update.get("$set", {}))
-                return True
-            return False
+                return SimpleNamespace(matched_count=1)
+            return SimpleNamespace(matched_count=0)
 
     class MockDB:
         def __getitem__(self, item):
@@ -122,6 +125,7 @@ async def test_export_chapter_zip_structure(monkeypatch):
             "page_uid": "p1",
             "chosen_result_id": "res_1",
             "output_object_key": "translation/outputs/res_1.jpg",
+            "validated_source_hash": "a" * 64,
         }
     }
 
@@ -143,13 +147,19 @@ async def test_export_chapter_zip_structure(monkeypatch):
                 return MockChaptersCol()
             if item == "translation_page_bindings":
                 return MockBindingsCol()
+            if item == "translation_results":
+                return SimpleNamespace(find_one=AsyncMock(return_value={"source_sha256": "a" * 64}))
             raise KeyError(item)
 
     monkeypatch.setattr("backend.database.connection.get_db", lambda: MockDB())
 
     # Mock storage download
     async def mock_get_bytes(object_key):
-        return b"\xff\xd8\xff\xe0MockImageData"
+        from PIL import Image
+
+        image = io.BytesIO()
+        Image.new("RGB", (8, 8), "white").save(image, format="JPEG")
+        return image.getvalue()
 
     monkeypatch.setattr(translation_export_service, "_fetch_object_bytes", mock_get_bytes)
 
@@ -200,7 +210,7 @@ async def test_rerender_result_no_llm(monkeypatch):
             rid = query.get("result_id")
             if rid in fake_results:
                 fake_results[rid].update(update.get("$set", {}))
-                return True
+                return SimpleNamespace(matched_count=1)
             return False
 
     class MockDB:
@@ -210,6 +220,19 @@ async def test_rerender_result_no_llm(monkeypatch):
     monkeypatch.setattr("backend.database.connection.get_db", lambda: MockDB())
 
     uploaded_files = {}
+
+    # No live storage reads: use a real synthetic clean canvas, not the old blank fallback.
+    from PIL import Image
+
+    canvas = io.BytesIO()
+    Image.new("RGB", (800, 1200), "white").save(canvas, format="PNG")
+
+    async def mock_read(object_key):
+        return canvas.getvalue()
+
+    monkeypatch.setattr(
+        "backend.services.translation.storage_service.translation_storage_service.get_object_bytes", mock_read
+    )
 
     async def mock_upload(object_key, data, content_type="image/jpeg"):
         uploaded_files[object_key] = data
@@ -221,7 +244,8 @@ async def test_rerender_result_no_llm(monkeypatch):
 
     result = await translation_editor_service.rerender_result("res_rerender_1")
 
-    assert "res_rerender_1_rev2.jpg" in result["output_object_key"]
+    assert result["output_object_key"].startswith("translation/outputs/res_rerender_1_rev2_")
+    assert result["output_object_key"].endswith(".jpg")
     assert len(uploaded_files) == 1
     # Verify image was uploaded as valid JPEG
     uploaded_data = list(uploaded_files.values())[0]
@@ -236,12 +260,19 @@ async def test_publish_result(monkeypatch):
             "result_id": "res_pub_1",
             "active_revision": 3,
             "output_object_key": "translation/outputs/res_pub_1_rev3.jpg",
-            "source_sha256": "fake_sha_256",
+            "source_sha256": hashlib.sha256(b"fixture").hexdigest(),
+            "chapter_id": "chap_99",
+            "page_uid": "page_99_1",
             "target_language": "vi",
         }
     }
 
     bindings_storage = {}
+
+    monkeypatch.setattr(
+        "backend.services.translation.storage_service.translation_storage_service.get_object_bytes",
+        AsyncMock(return_value=b"fixture"),
+    )
 
     class MockResultsCol:
         async def find_one(self, query):
@@ -259,6 +290,15 @@ async def test_publish_result(monkeypatch):
                 return MockResultsCol()
             if item == "translation_page_bindings":
                 return MockBindingsCol()
+            if item == "chapters":
+                return SimpleNamespace(
+                    find_one=AsyncMock(
+                        return_value={
+                            "_id": "chap_99",
+                            "pages": [{"page_uid": "page_99_1", "object_key": "fixture.png"}],
+                        }
+                    )
+                )
             raise KeyError(item)
 
     monkeypatch.setattr("backend.database.connection.get_db", lambda: MockDB())

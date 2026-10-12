@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { PageBinding } from "../../api/translation";
 import type { TranslationDisplayMode } from "../../hooks/useTranslation";
 import type { PageItem } from "../../types/chapter";
+import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 
 interface TranslatedPageImageProps {
 	page: PageItem;
@@ -16,7 +18,16 @@ interface TranslatedPageImageProps {
 	onTranslateRequest?: (pageUid: string) => void;
 }
 
-export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = ({
+export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = (
+	props,
+) => (
+	<PageImageState
+		key={`${props.page.page_uid ?? props.page.page_number}:${props.page.url}:${props.binding?.url}:${props.displayMode}`}
+		{...props}
+	/>
+);
+
+const PageImageState: React.FC<TranslatedPageImageProps> = ({
 	page,
 	binding,
 	displayMode,
@@ -28,6 +39,8 @@ export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = ({
 }) => {
 	const [imageLoaded, setImageLoaded] = useState(false);
 	const [imageError, setImageError] = useState(false);
+	const [attempt, setAttempt] = useState(0);
+	const [compareLoaded, setCompareLoaded] = useState(false);
 
 	const originalUrl = page.url || "";
 	const translatedUrl = binding?.url;
@@ -45,68 +58,79 @@ export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = ({
 	};
 
 	return (
-		<div className="relative flex justify-center w-full" style={containerStyle}>
+		<div
+			className="relative flex justify-center w-full min-w-0"
+			style={containerStyle}
+		>
 			{/* Skeleton Shimmer Loading Placeholder */}
-			{!imageLoaded && !imageError && (
-				<div
-					className="w-full aspect-[2/3] bg-zinc-900 animate-pulse rounded-md flex items-center justify-center border border-zinc-800"
-					style={{ minHeight: "500px" }}
-				>
-					<div className="flex flex-col items-center space-y-2 text-zinc-500">
-						<Loader2
-							size={24}
-							className="animate-spin text-[var(--brand-orange)]"
-						/>
-						<span className="text-xs font-semibold">
-							Đang tải trang {page.page_number}...
-						</span>
-					</div>
-				</div>
-			)}
+			{(!imageLoaded ||
+				(displayMode === "compare" && hasTranslation && !compareLoaded)) &&
+				!imageError && (
+					<Skeleton className="w-full min-h-96 aspect-[2/3] rounded-md flex items-center justify-center border border-border">
+						<div className="flex flex-col items-center space-y-2 text-zinc-500">
+							<Loader2
+								size={24}
+								className="animate-spin text-[var(--brand-orange)]"
+							/>
+							<span className="text-xs font-semibold">
+								Đang tải trang {page.page_number}...
+							</span>
+						</div>
+					</Skeleton>
+				)}
 
 			{/* Error Fallback */}
 			{imageError && (
 				<div
-					className="w-full aspect-[2/3] bg-zinc-900 border border-zinc-800 rounded-md flex flex-col items-center justify-center p-6 text-center space-y-3"
-					style={{ minHeight: "400px" }}
+					role="alert"
+					className="relative z-30 w-full min-h-96 aspect-[2/3] bg-card text-card-foreground border border-border rounded-md flex flex-col items-center justify-center p-6 text-center space-y-3"
 				>
 					<AlertCircle size={32} className="text-rose-400" />
 					<p className="text-xs text-zinc-300 font-semibold">
 						Không tải được ảnh trang {page.page_number}
 					</p>
-					<button
+					<Button
 						type="button"
 						onClick={() => {
 							setImageError(false);
 							setImageLoaded(false);
+							setCompareLoaded(false);
+							setAttempt((value) => value + 1);
 						}}
-						className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg font-bold"
+						variant="secondary"
 					>
 						Thử lại
-					</button>
+					</Button>
 				</div>
 			)}
 
 			{/* Mode: Standard (Original or Translated) */}
-			{displayMode !== "compare" && (
+			{displayMode !== "compare" && !imageError && (
 				<img
+					key={attempt}
 					src={activeUrl}
 					alt={`Page ${page.page_number}`}
 					width={page.width || undefined}
 					height={page.height || undefined}
 					loading={priority ? "eager" : "lazy"}
+					fetchPriority={priority ? "high" : "auto"}
 					decoding="async"
 					onLoad={() => setImageLoaded(true)}
 					onError={() => setImageError(true)}
 					className={`${imageFitClass} shadow-2xl transition duration-200 select-none ${
-						imageLoaded ? "opacity-100" : "opacity-0 absolute"
+						imageLoaded
+							? "opacity-100"
+							: "opacity-0 absolute pointer-events-none"
 					}`}
 				/>
 			)}
 
 			{/* Mode: Compare Slider (Side-by-side split) */}
-			{displayMode === "compare" && hasTranslation && (
-				<div className="relative w-full overflow-hidden select-none">
+			{displayMode === "compare" && hasTranslation && !imageError && (
+				<div
+					key={attempt}
+					className={`relative w-full overflow-hidden select-none ${!imageLoaded || !compareLoaded ? "absolute opacity-0 pointer-events-none" : ""}`}
+				>
 					{/* Bottom Layer: Original Image */}
 					<img
 						src={originalUrl}
@@ -122,6 +146,8 @@ export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = ({
 					<img
 						src={translatedUrl}
 						alt={`Page ${page.page_number} (Translated)`}
+						onLoad={() => setCompareLoaded(true)}
+						onError={() => setImageError(true)}
 						loading={priority ? "eager" : "lazy"}
 						decoding="async"
 						className={`${imageFitClass} absolute inset-0 w-full h-full select-none pointer-events-none`}
@@ -151,8 +177,11 @@ export const TranslatedPageImage: React.FC<TranslatedPageImageProps> = ({
 			)}
 
 			{/* Mode: Compare but translation not yet generated for this page */}
-			{displayMode === "compare" && !hasTranslation && (
-				<div className="relative w-full flex flex-col items-center">
+			{displayMode === "compare" && !hasTranslation && !imageError && (
+				<div
+					key={attempt}
+					className="relative w-full flex flex-col items-center"
+				>
 					<img
 						src={originalUrl}
 						alt={`Page ${page.page_number}`}

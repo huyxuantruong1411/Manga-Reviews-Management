@@ -1,6 +1,8 @@
 import { Eye, EyeOff } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "./button";
+import { Skeleton } from "./skeleton";
 
 interface BlurredCoverProps {
 	src: string | null | undefined;
@@ -11,7 +13,14 @@ interface BlurredCoverProps {
 	onClick?: (e: React.MouseEvent) => void;
 }
 
-export const BlurredCover: React.FC<BlurredCoverProps> = ({
+export const BlurredCover: React.FC<BlurredCoverProps> = (props) => (
+	<CoverImage
+		key={`${props.src || "missing"}:${props.shouldBlur}`}
+		{...props}
+	/>
+);
+
+const CoverImage: React.FC<BlurredCoverProps> = ({
 	src,
 	alt,
 	className = "w-full h-full object-cover",
@@ -20,6 +29,9 @@ export const BlurredCover: React.FC<BlurredCoverProps> = ({
 	onClick,
 }) => {
 	const [revealed, setRevealed] = useState(false);
+	const [loaded, setLoaded] = useState(false);
+	const [failed, setFailed] = useState(false);
+	const [attempt, setAttempt] = useState(0);
 
 	if (!src) {
 		return (
@@ -30,16 +42,46 @@ export const BlurredCover: React.FC<BlurredCoverProps> = ({
 	}
 
 	const isCurrentlyBlurred = shouldBlur && !revealed;
+	if (failed)
+		return (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted p-2 text-center text-xs text-muted-foreground">
+				<span>Không tải được ảnh bìa</span>
+				<Button
+					type="button"
+					size="sm"
+					variant="outline"
+					className="h-auto whitespace-normal"
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						setFailed(false);
+						setLoaded(false);
+						setAttempt((value) => value + 1);
+					}}
+				>
+					Tải lại ảnh bìa
+				</Button>
+			</div>
+		);
 
 	return (
 		<div
 			className="relative w-full h-full overflow-hidden group/blur"
 			onClick={onClick}
 		>
+			{!loaded && (
+				<Skeleton
+					className="absolute inset-0 h-full w-full"
+					aria-hidden="true"
+				/>
+			)}
 			<img
+				key={attempt}
 				src={src}
 				alt={alt}
-				className={`${className} transition-all duration-300 ${
+				onLoad={() => setLoaded(true)}
+				onError={() => setFailed(true)}
+				className={`${className} ${loaded ? "opacity-100" : "opacity-0"} transition-all duration-300 ${
 					isCurrentlyBlurred ? "filter blur-2xl scale-110 brightness-[0.4]" : ""
 				}`}
 				referrerPolicy={referrerPolicy}

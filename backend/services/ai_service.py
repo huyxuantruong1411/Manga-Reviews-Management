@@ -134,9 +134,9 @@ async def call_gemini(
     async with httpx.AsyncClient(timeout=60) as client:
         for attempt in range(max_retries):
             resp = await client.post(
-                f"{GEMINI_API_URL}?key={settings.gemini_api_key}",
+                GEMINI_API_URL,
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": settings.gemini_api_key},
             )
             if resp.status_code == 200:
                 break
@@ -147,7 +147,7 @@ async def call_gemini(
                 break
 
     if resp.status_code != 200:
-        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:300]}")
+        raise RuntimeError(f"Gemini API error {resp.status_code}. Please check provider configuration and quota.")
 
     data = resp.json()
     try:

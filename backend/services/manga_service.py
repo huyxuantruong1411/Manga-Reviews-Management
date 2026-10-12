@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -9,6 +10,12 @@ from backend.core.redis import delete_cache, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.manga import MangaCreate, MangaCreateDex, MangaUpdate, ReadStatus
 from backend.services.audit_service import audit_service
+from backend.services.content_deletion_service import (
+    DeletionStorageError,
+    cancel_source_jobs,
+    delete_vision_metadata,
+    source_object_is_shared,
+)
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
 from backend.services.tracker_service import fetch_tracker_metadata
@@ -866,17 +873,27 @@ class MangaService:
         if not existing:
             return False
 
-        # Delete cover from MinIO
-        if existing.get("minio_cover_key"):
-            minio_service.delete_cover(existing["minio_cover_key"])
+        from backend.services.chapter_service import chapter_service
 
-        # Delete synced cover arts from MinIO & DB
         db = get_db()
+        await cancel_source_jobs(db, {"manga_id": manga_id})
+        async for chapter in db.chapters.find({"manga_id": manga_id}, {"_id": 1}):
+            await chapter_service.delete_chapter(str(chapter["_id"]))
+
+        # Keep cover metadata until every object deletion succeeds, making retry possible.
+        cover_keys = {existing["minio_cover_key"]} if existing.get("minio_cover_key") else set()
         cursor = db.cover_arts.find({"manga_id": manga_id})
         async for doc in cursor:
             if doc.get("minio_key"):
-                minio_service.delete_cover(doc["minio_key"])
+                cover_keys.add(doc["minio_key"])
+        for key in sorted(cover_keys):
+            if await source_object_is_shared(db, key, manga_id=existing["_id"]):
+                continue
+            if not await asyncio.to_thread(minio_service.delete_cover, key):
+                raise DeletionStorageError("Không xóa được ảnh bìa trong kho lưu trữ; hãy thử lại.")
         await db.cover_arts.delete_many({"manga_id": manga_id})
+        await delete_vision_metadata(db, {"manga_id": manga_id})
+        await db.reading_progress.delete_many({"manga_id": manga_id})
 
         # Delete recommendations
         await db.manga_recommendations.delete_many({"manga_id": manga_id})
@@ -899,6 +916,7 @@ class MangaService:
         # Delete manga
         await coll.delete_one({"_id": ObjectId(manga_id)})
         await delete_cache(f"manga:detail:{manga_id}")
+        await delete_cache(f"reviews:manga:{manga_id}")
 
         # Note: We preserve audit logs so historical operations remain trackable.
         return True

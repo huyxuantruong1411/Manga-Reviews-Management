@@ -47,7 +47,7 @@ flowchart TD
 | `secrets` | Unconditional | `gitleaks/gitleaks-action@v2` | Scans commit range for credential and secret leakage. |
 | `docs` | After `secrets` | `python scripts/check_docs.py`<br>`python scripts/generate_api_routes.py --check` | Prevents documentation broken links and API route reference drift. |
 | `backend-quality` | `backend_required == 'true'` | `uv sync --only-group lint`<br>`python scripts/ci/check_python.py` | Locked Ruff lint and format check across all tracked Python files. |
-| `backend-tests` | `backend_required == 'true'` | `uv sync --group test`<br>`python -m pytest backend/tests` | Runs unit, OCR, report, and system regression tests (74 items). |
+| `backend-tests` | `backend_required == 'true'` | `uv sync --group test`<br>`python -m pytest backend/tests services/translator-runtime/tests` | Runs backend and isolated translator protocol regression tests; includes the engine readiness boundary. |
 | `frontend` | `frontend_required == 'true'` | `pnpm --dir frontend run check`<br>`pnpm --dir frontend run typecheck`<br>`pnpm --dir frontend run build` | Biome lint/format, TypeScript project reference typecheck (`tsc -b`), and Vite production bundle. |
 | `ui-smoke` | `ui_required == 'true'` | `playwright install --with-deps chromium`<br>`pnpm --dir frontend run test:e2e` | Runs responsive Playwright browser smoke tests on Desktop (1440px) and Mobile (375px). |
 | `ci-gate` | `always()` after all jobs | `python scripts/ci/assert_gate.py` | Evaluates results against change requirements. Ensures required jobs succeeded and skips were intentional. |
@@ -64,7 +64,7 @@ To verify changes locally before pushing:
 uv run --project backend python scripts/ci/check_python.py
 
 # Test suite execution
-uv run --project backend python -m pytest backend/tests
+uv run --project backend python -m pytest backend/tests services/translator-runtime/tests
 ```
 
 ### Frontend (React / TypeScript)

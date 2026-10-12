@@ -1,26 +1,17 @@
-import subprocess
-import sys
+"""Legacy bootstrap using the locked project environment; never changes bucket policies."""
 
-# Ensure necessary packages are installed
-required_packages = ["pymongo", "minio", "requests"]
-for package in required_packages:
-    try:
-        __import__(package)
-    except ImportError:
-        print(f"Installing missing dependency: {package}...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+import httpx
+from minio import Minio
+from pymongo import MongoClient
 
-import requests  # noqa: E402
-from minio import Minio  # noqa: E402
-from pymongo import MongoClient  # noqa: E402
+from backend.config import settings
 
-# Configuration
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "manga_library"
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "admin"
-MINIO_SECRET_KEY = "password"
-MINIO_BUCKET = "manga-library"
+MONGO_URI = settings.mongodb_uri
+DB_NAME = settings.database_name
+MINIO_ENDPOINT = settings.minio_endpoint
+MINIO_ACCESS_KEY = settings.minio_access_key
+MINIO_SECRET_KEY = settings.minio_secret_key
+MINIO_BUCKET = settings.minio_bucket
 
 
 def setup_mongodb():
@@ -63,7 +54,9 @@ def setup_mongodb():
 def setup_minio():
     print("--- Setting up MinIO ---")
     try:
-        minio_client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
+        minio_client = Minio(
+            MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=settings.minio_secure
+        )
 
         # Check if bucket exists
         found = minio_client.bucket_exists(MINIO_BUCKET)
@@ -74,23 +67,7 @@ def setup_minio():
         else:
             print(f"Bucket '{MINIO_BUCKET}' already exists.")
 
-        # We can set the bucket policy to public read to ease local development,
-        # but the plan states we use presigned URLs. So keeping it private or setting
-        # to custom public read. Let's make sure it is accessible.
-        # Setting read-only policy for bucket (anonymous read for cover images):
-        policy = f"""{{
-            "Version": "2012-10-17",
-            "Statement": [
-                {{
-                    "Effect": "Allow",
-                    "Principal": {{"AWS": ["*"]}},
-                    "Action": ["s3:GetObject"],
-                    "Resource": ["arn:aws:s3:::{MINIO_BUCKET}/*"]
-                }}
-            ]
-        }}"""
-        minio_client.set_bucket_policy(MINIO_BUCKET, policy.strip())
-        print(f"Set read-only policy for anonymous access on '{MINIO_BUCKET}' bucket.")
+        print("Bucket policy preserved; new buckets remain private.")
 
     except Exception as e:
         print(f"Error setting up MinIO: {e}")
@@ -110,7 +87,7 @@ def seed_tags(db):
 
     try:
         print("Fetching tags from MangaDex API...")
-        response = requests.get("https://api.mangadex.org/manga/tag", timeout=15)
+        response = httpx.get("https://api.mangadex.org/manga/tag", timeout=15)
         response.raise_for_status()
         data = response.json()
 

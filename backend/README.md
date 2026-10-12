@@ -20,7 +20,5 @@ uv run --project backend uvicorn backend.main:app --reload --host 127.0.0.1 --po
 uv run --project backend arq backend.tasks.worker.WorkerSettings
 
 # Run test suites
-uv run --project backend python -m unittest backend/tests/test_redis_cache_and_worker.py
-uv run --project backend python -m unittest backend/tests/test_panel_regressions.py
-uv run --project backend python -m unittest backend/tests/test_system_regressions.py
+uv run --project backend python -m pytest backend/tests services/translator-runtime/tests
 ```

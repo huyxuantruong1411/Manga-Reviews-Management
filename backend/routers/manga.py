@@ -12,6 +12,7 @@ from backend.models.manga import (
     MangaResponse,
     MangaUpdate,
 )
+from backend.services.content_deletion_service import DeletionBusyError, DeletionStorageError
 from backend.services.manga_service import DuplicateMangaException, manga_service
 
 router = APIRouter(prefix="/api/manga", tags=["Manga"])
@@ -202,8 +203,13 @@ async def update_manga(
 
 @router.delete("/{manga_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_manga(manga_id: str = Path(...)):
-    """Delete a manga, its reviews, and cover image."""
-    deleted = await manga_service.delete_manga(manga_id)
+    """Delete manga, chapters and dependencies; soft-delete reviews and retain audit history."""
+    try:
+        deleted = await manga_service.delete_manga(manga_id)
+    except DeletionBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DeletionStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Manga not found")
     return None

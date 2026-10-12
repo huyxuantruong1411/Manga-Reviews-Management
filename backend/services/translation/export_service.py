@@ -11,7 +11,11 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from bson import ObjectId
+from PIL import Image
+
 import backend.database.connection as db_conn
+from backend.services.translation.runtime import binding_output_key
 from backend.services.translation.storage_service import translation_storage_service
 
 logger = logging.getLogger("backend.translation.export")
@@ -36,12 +40,16 @@ class TranslationExportService:
         if not chapter:
             # Fallback check for MongoDB ObjectId or string id
             chapter = await db["chapters"].find_one({"_id": chapter_id})
+        if not chapter and ObjectId.is_valid(chapter_id):
+            chapter = await db["chapters"].find_one({"_id": ObjectId(chapter_id)})
         if not chapter:
             raise KeyError(f"Chapter '{chapter_id}' not found")
 
         # Fetch active bindings
-        bindings_cursor = db["translation_page_bindings"].find({"chapter_id": chapter_id})
-        bindings_list = await bindings_cursor.to_list(length=2000)
+        bindings_cursor = db["translation_page_bindings"].find(
+            {"scope": "local", "chapter_id": chapter_id, "target_language": target_language}
+        )
+        bindings_list = await bindings_cursor.to_list(length=None)
         bindings_map = {b.get("page_uid"): b for b in bindings_list if b.get("page_uid")}
 
         raw_pages = chapter.get("pages", [])
@@ -55,17 +63,35 @@ class TranslationExportService:
             for idx, page in enumerate(sorted_pages):
                 page_num = page.get("page_number", idx + 1)
                 page_uid = page.get("page_uid", str(idx + 1))
-                filename = f"{page_num:03d}.jpg"
-
                 binding = bindings_map.get(page_uid)
-                if binding and binding.get("output_object_key"):
-                    target_key = binding["output_object_key"]
+                chosen_key = None
+                if binding and binding.get("chosen_result_id"):
+                    result = await db["translation_results"].find_one(
+                        {"scope": "local", "result_id": binding["chosen_result_id"]}
+                    )
+                    if result:
+                        chosen_key = binding_output_key(binding, result)
+                if chosen_key:
+                    target_key = chosen_key
                     status = "translated"
                 else:
                     target_key = page.get("object_key", "")
                     status = "original_fallback"
 
                 data = await self._fetch_object_bytes(target_key)
+                with Image.open(io.BytesIO(data)) as image:
+                    extension = {
+                        "JPEG": "jpg",
+                        "PNG": "png",
+                        "WEBP": "webp",
+                        "GIF": "gif",
+                        "TIFF": "tiff",
+                        "BMP": "bmp",
+                    }.get(image.format)
+                    image.verify()
+                if not extension:
+                    raise ValueError("Unsupported page image format")
+                filename = f"{page_num:03d}.{extension}"
                 zf.writestr(filename, data)
 
                 manifest_pages.append(

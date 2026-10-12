@@ -116,6 +116,8 @@ async def create_pool(req: SyncPoolCreate):
     """Create a new sync pool configuration."""
     try:
         return await sync_manager_service.create_sync_pool(req.dict())
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating sync pool: {e}")
 
@@ -146,6 +148,8 @@ async def update_pool(req: SyncPoolCreate, pool_id: str = Path(...)):
         return updated
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating sync pool: {e}")
 

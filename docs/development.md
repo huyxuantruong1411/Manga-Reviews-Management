@@ -16,14 +16,7 @@
 
 ## 2. Infrastructure Setup
 
-### Step 1: Start MinIO and Redis Containers
-MinIO and Redis are defined in [`backend/docker-compose.yml`](../backend/docker-compose.yml):
-```bash
-docker compose -f backend/docker-compose.yml up -d minio redis
-```
-*Note*: MongoDB is not part of this Compose file. Ensure your local MongoDB daemon is running on `127.0.0.1:27017`.
-
-### Step 2: Configure Environment Variables
+### Step 1: Configure Environment Variables
 Copy the template to your local `.env`:
 ```bash
 cp backend/.env.example backend/.env
@@ -33,6 +26,13 @@ Key configuration parameters:
 - `MINIO_ENDPOINT`: `localhost:9000` (Access: `admin`, Secret: `password`, Bucket: `manga-library`)
 - `REDIS_URL`: `redis://127.0.0.1:6379/0`
 - `DOWNLOAD_DIR`: `./downloads`
+
+### Step 2: Start MinIO and Redis Containers
+MinIO and Redis are defined in [`backend/docker-compose.yml`](../backend/docker-compose.yml):
+```bash
+docker compose --env-file backend/.env -f backend/docker-compose.yml up -d minio redis
+```
+*Note*: MongoDB is not part of this Compose file. Ensure your local MongoDB daemon is running on `127.0.0.1:27017`.
 
 ### Step 3: Install Dependencies
 ```bash
@@ -83,7 +83,13 @@ The application will be accessible at `http://localhost:5173` (Studio at `/trans
 ## 4. Test Suites & Verification
 
 ### A. Backend Unit & Regression Tests
-Execute targeted tests using pytest:
+Execute the comprehensive test suite across backend and translator runtime:
+```bash
+# Run all backend and translator runtime tests
+uv run --project backend python -m pytest backend/tests services/translator-runtime/tests
+```
+
+Or execute targeted tests:
 ```bash
 # Redis cache pool, invalidation & ARQ worker tests
 uv run --project backend python -m pytest backend/tests/test_redis_cache_and_worker.py
@@ -93,6 +99,9 @@ uv run --project backend python -m pytest backend/tests/test_panel_regressions.p
 
 # System-level regressions (SSRF, cascades, storage)
 uv run --project backend python -m pytest backend/tests/test_system_regressions.py
+
+# Chapter export (PDF, ZIP, CBZ, Folder)
+uv run --project backend python -m pytest backend/tests/test_chapter_export.py
 
 # MangaOCR text cleaner unit tests
 uv run --project backend python -m pytest backend/tests/test_manga_ocr_service.py

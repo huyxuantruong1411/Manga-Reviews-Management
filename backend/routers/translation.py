@@ -17,6 +17,7 @@ from backend.services.translation.fonts import translation_font_service
 from backend.services.translation.job_service import translation_job_service
 from backend.services.translation.profiles import translation_profile_service
 from backend.services.translation.providers import translation_provider_service
+from backend.services.translation.runtime import binding_output_key
 from backend.services.translation.storage_service import translation_storage_service
 
 logger = logging.getLogger(__name__)
@@ -292,7 +293,9 @@ async def get_chapter_bindings(
         r_id = b.get("chosen_result_id")
         res_doc = results_map.get(r_id)
         if p_uid and res_doc:
-            out_key = res_doc.get("output_object_key")
+            out_key = binding_output_key(b, res_doc)
+            if not out_key:
+                continue
             by_page_uid[p_uid] = {
                 "binding_id": str(b.get("_id", "")),
                 "page_uid": p_uid,
@@ -372,8 +375,10 @@ async def rerender_result(
         return updated
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to rerender result: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Translation storage is unavailable; retry later")
 
 
 @router.post("/results/{result_id}/publish")
@@ -391,8 +396,10 @@ async def publish_result(
         )
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to publish result: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Translation storage is unavailable; retry later")
 
 
 @router.get("/export/{chapter_id}")

@@ -671,13 +671,23 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 			if (activeChapter) {
 				// Delete selected pages from active chapter
 				if (selectedPageNumbers.length > 0) {
-					await client.post(`/api/chapters/${activeChapter.id}/delete-pages`, {
-						page_numbers: selectedPageNumbers,
-					});
+					const deletion = await client.post(
+						`/api/chapters/${activeChapter.id}/delete-pages`,
+						{
+							page_numbers: selectedPageNumbers,
+						},
+					);
 					// Refresh active chapter
 					const res = await client.get(`/api/chapters/${activeChapter.id}`);
 					setActiveChapterPages(res.data.pages || []);
 					setSelectedPageNumbers([]);
+					const failed = deletion.data.failed_page_numbers || [];
+					if (failed.length > 0)
+						showAlert({
+							title: "Một số trang chưa được xóa",
+							message: `Không xóa được ${failed.length} trang khỏi kho ảnh. Các trang này vẫn được giữ lại. Danh sách đã được tải lại; hãy chọn lại trang và thử lại.`,
+							type: "warning",
+						});
 					fetchChapters();
 				}
 			} else {

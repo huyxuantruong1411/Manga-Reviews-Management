@@ -49,8 +49,7 @@ class TranslationStorageService:
         """Uploads a binary file to MinIO under the specified object key."""
         client = self._get_minio_client()
         if not client:
-            logger.info(f"MinIO client unavailable, mock-uploading {object_key} ({len(data)} bytes)")
-            return object_key
+            raise RuntimeError("Translation storage is unavailable; upload was not performed")
 
         def _do_put():
             bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
@@ -71,8 +70,7 @@ class TranslationStorageService:
         """Retrieves raw object bytes from MinIO."""
         client = self._get_minio_client()
         if not client:
-            logger.info(f"MinIO client unavailable, returning empty bytes for {object_key}")
-            return b""
+            raise RuntimeError("Translation storage is unavailable")
 
         def _do_get():
             bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
@@ -161,39 +159,71 @@ class TranslationStorageService:
             "by_kind_count": by_kind_count,
         }
 
+    async def _is_asset_referenced(self, asset: Dict[str, Any]) -> bool:
+        db = db_conn.get_db()
+        key = asset.get("object_key", "")
+        if not key.startswith("translation/"):
+            return True  # Never let the translation cleaner delete source pages/covers.
+        references = (
+            (
+                "translation_results",
+                {"$or": [{field: key} for field in ("output_object_key", "clean_object_key", "mask_object_key")]},
+            ),
+            ("translation_page_bindings", {"output_object_key": key}),
+            ("translation_font_packs", {"variants.object_key": key, "state": "available"}),
+            ("chapters", {"pages.object_key": key}),
+            ("translation_assets", {"object_key": key, "state": "available"}),
+        )
+        for collection, query in references:
+            if await db[collection].find_one(query):
+                return True
+        return False
+
     async def preview_cleanup(self, dry_run: bool = True) -> Dict[str, Any]:
         """Identifies reclaimable assets marked for deletion or unreferenced."""
         db = db_conn.get_db()
         cursor = db["translation_assets"].find({"state": "deleting"})
         deleting_assets = await cursor.to_list(length=500)
 
-        reclaimable_bytes = sum(a.get("file_size", 0) for a in deleting_assets)
-        reclaimable_keys = [a.get("object_key") for a in deleting_assets if a.get("object_key")]
+        eligible = []
+        blocked_count = 0
+        for asset in deleting_assets:
+            if await self._is_asset_referenced(asset):
+                blocked_count += 1
+            else:
+                eligible.append(asset)
+        reclaimable_bytes = sum(a.get("file_size", 0) for a in eligible)
+        reclaimable_keys = [a["object_key"] for a in eligible]
+        failed_count = deleted_count = 0
 
-        if not dry_run and deleting_assets:
+        if not dry_run and eligible:
             client = self._get_minio_client()
             bucket = getattr(settings, "minio_bucket_name", getattr(settings, "minio_bucket", "manga-library"))
 
-            def _delete_objects():
-                for key in reclaimable_keys:
-                    try:
-                        client.remove_object(bucket, key)
-                    except Exception as err:
-                        logger.warning(f"Failed to remove object {key} from MinIO: {err}")
-
-            if client:
-                await asyncio.to_thread(_delete_objects)
-
-            await db["translation_assets"].update_many(
-                {"state": "deleting"},
-                {"$set": {"state": "deleted", "deleted_at": datetime.now(timezone.utc)}},
-            )
+            for asset in eligible:
+                if not client:
+                    failed_count += 1
+                    continue
+                try:
+                    await asyncio.to_thread(client.remove_object, bucket, asset["object_key"])
+                except Exception:
+                    failed_count += 1
+                    logger.warning("Translation asset cleanup failed; metadata retained for retry")
+                    continue
+                await db["translation_assets"].update_one(
+                    {"asset_id": asset["asset_id"], "object_key": asset["object_key"], "state": "deleting"},
+                    {"$set": {"state": "deleted", "deleted_at": datetime.now(timezone.utc)}},
+                )
+                deleted_count += 1
 
         return {
             "dry_run": dry_run,
-            "reclaimable_count": len(deleting_assets),
+            "reclaimable_count": len(eligible),
             "reclaimable_bytes": reclaimable_bytes,
             "object_keys": reclaimable_keys,
+            "blocked_count": blocked_count,
+            "deleted_count": deleted_count,
+            "failed_count": failed_count,
         }
 
 

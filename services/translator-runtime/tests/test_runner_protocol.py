@@ -13,6 +13,24 @@ from adapter.runner import run_pipeline
 from protocol import InputEnvelope, InputSource, ProfileSnapshot
 
 
+def test_runner_default_cannot_report_fake_translation_success(tmp_path):
+    source = tmp_path / "input.png"
+    Image.new("RGB", (16, 16), "red").save(source)
+    envelope = InputEnvelope(
+        job_id="default",
+        page_identity="page",
+        attempt_id="1",
+        fencing_token=1,
+        input=InputSource(local_path=str(source), sha256="fixture"),
+        workdir=str(tmp_path / "output"),
+        profile_snapshot=ProfileSnapshot(schema_version=1, config_hash="fixture"),
+    )
+    manifest = run_pipeline(envelope)
+    assert manifest.success is False
+    assert manifest.error_code == "TRANSLATION_ENGINE_UNAVAILABLE"
+    assert not (tmp_path / "output" / "translated.png").exists()
+
+
 def test_runner_executes_pipeline_and_emits_valid_manifest():
     with tempfile.TemporaryDirectory() as tmpdir:
         input_file = os.path.join(tmpdir, "test_page.png")
@@ -38,9 +56,11 @@ def test_runner_executes_pipeline_and_emits_valid_manifest():
             source_language="ja",
         )
 
-        manifest = run_pipeline(envelope)
+        manifest = run_pipeline(envelope, synthetic=True)
 
         assert manifest.success is True
+        assert manifest.execution_mode == "synthetic"
+        assert manifest.warnings
         assert manifest.job_id == "job_001"
         assert manifest.page_identity == "p_uid_123"
         assert manifest.width == 400
@@ -64,7 +84,7 @@ def test_runner_handles_missing_input_file_gracefully():
             profile_snapshot=ProfileSnapshot(schema_version=1, config_hash="hash"),
         )
 
-        manifest = run_pipeline(envelope)
+        manifest = run_pipeline(envelope, synthetic=True)
         assert manifest.success is False
         assert manifest.error_code == "INPUT_NOT_FOUND"
 
@@ -91,6 +111,6 @@ def test_runner_respects_cancellation_token():
             profile_snapshot=ProfileSnapshot(schema_version=1, config_hash="hash"),
         )
 
-        manifest = run_pipeline(envelope)
+        manifest = run_pipeline(envelope, synthetic=True)
         assert manifest.success is False
         assert manifest.error_code == "CANCELLED"

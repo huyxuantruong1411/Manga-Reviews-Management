@@ -38,8 +38,62 @@ export function useTranslation({
 	}>({ completed: 0, total: 0 });
 	const [isTranslating, setIsTranslating] = useState<boolean>(false);
 	const [errorMessage, setErrorMessage] = useState<string>("");
+	const [engineReady, setEngineReady] = useState(false);
+	const [engineMessage, setEngineMessage] = useState(
+		"Đang kiểm tra khả năng dịch...",
+	);
 
-	const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		translationApi
+			.getCapabilities()
+			.then((capabilities) => {
+				if (cancelled) return;
+				setEngineReady(
+					capabilities.ready_for_inference === true &&
+						capabilities.engine?.status === "ready",
+				);
+				setEngineMessage(
+					capabilities.engine?.message ||
+						"Chưa xác minh được engine dịch thực.",
+				);
+			})
+			.catch(() => {
+				if (!cancelled)
+					setEngineMessage(
+						"Không kiểm tra được engine dịch. Hãy tải lại trang để thử lại.",
+					);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const scopeGeneration = useRef(0);
+	const bindingRequest = useRef(0);
+	const pollingGeneration = useRef(0);
+
+	// Invalidate requests on chapter/language changes, including A -> B -> A.
+	useEffect(() => {
+		scopeGeneration.current++;
+		bindingRequest.current++;
+		pollingGeneration.current++;
+		if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+		setBindings({});
+		setActiveJob(null);
+		setIsTranslating(false);
+		setJobProgress({ completed: 0, total: 0 });
+		setErrorMessage("");
+		setDisplayMode("original");
+		return () => {
+			scopeGeneration.current++;
+			bindingRequest.current++;
+			pollingGeneration.current++;
+			if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+		};
+	}, [chapterId, mangaId, targetLanguage]);
 
 	// Load profiles
 	useEffect(() => {
@@ -58,17 +112,25 @@ export function useTranslation({
 	// Load chapter bindings when chapter or targetLanguage changes
 	const fetchBindings = useCallback(async () => {
 		if (!chapterId) return;
+		const generation = scopeGeneration.current;
+		const request = ++bindingRequest.current;
+		const current = () =>
+			generation === scopeGeneration.current &&
+			request === bindingRequest.current;
 		setLoadingBindings(true);
 		try {
 			const res = await translationApi.getChapterBindings(
 				chapterId,
 				targetLanguage,
 			);
-			setBindings(res.bindings || {});
+			if (current()) setBindings(res.bindings || {});
 		} catch (err) {
-			console.error("Error fetching translation bindings:", err);
+			if (current())
+				setErrorMessage(
+					apiErrorMessage(err, "Không tải được bản dịch. Hãy thử tải lại."),
+				);
 		} finally {
-			setLoadingBindings(false);
+			if (current()) setLoadingBindings(false);
 		}
 	}, [chapterId, targetLanguage]);
 
@@ -76,52 +138,61 @@ export function useTranslation({
 		void fetchBindings();
 	}, [fetchBindings]);
 
-	// Polling worker for active job
+	// Schedule only after a response settles, so slow requests cannot overlap.
 	const startPollingJob = useCallback(
 		(jobId: string) => {
-			if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+			if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+			const scope = scopeGeneration.current;
+			const pollId = ++pollingGeneration.current;
+			const current = () =>
+				scope === scopeGeneration.current &&
+				pollId === pollingGeneration.current;
 			setIsTranslating(true);
-
-			pollTimerRef.current = setInterval(async () => {
+			const poll = async () => {
 				try {
 					const job = await translationApi.getJobStatus(jobId);
+					if (!current()) return;
 					setActiveJob(job);
 					setJobProgress({
 						completed: job.completed_pages || 0,
 						total: job.total_pages || 1,
 					});
-
 					if (
 						["completed", "partial", "failed", "cancelled"].includes(job.state)
 					) {
-						if (pollTimerRef.current) clearInterval(pollTimerRef.current);
 						setIsTranslating(false);
 						void fetchBindings();
-						if (job.state === "completed" || job.completed_pages > 0) {
-							setDisplayMode("translated");
-						}
+						if (job.completed_pages > 0) setDisplayMode("translated");
+						return;
 					}
+					pollTimerRef.current = setTimeout(poll, 1500);
 				} catch (err) {
-					console.error("Error polling job status:", err);
-					if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+					if (!current()) return;
 					setIsTranslating(false);
+					setErrorMessage(
+						apiErrorMessage(
+							err,
+							"Không tải được trạng thái dịch. Job vẫn có thể đang chạy.",
+						),
+					);
 				}
-			}, 1500);
+			};
+			pollTimerRef.current = setTimeout(poll, 1500);
 		},
 		[fetchBindings],
 	);
 
-	useEffect(() => {
-		return () => {
-			if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-		};
-	}, []);
-
 	// Trigger translation for a single page
 	const translatePage = useCallback(
 		async (pageUid?: string, pageNumber?: number) => {
+			if (!engineReady) {
+				setErrorMessage(engineMessage);
+				return;
+			}
 			if (!chapterId || !mangaId) return;
+			const generation = scopeGeneration.current;
 			setErrorMessage("");
+			setIsTranslating(true);
 			try {
 				const res = await translationApi.createJob({
 					source: {
@@ -129,26 +200,43 @@ export function useTranslation({
 						manga_id: mangaId,
 						chapter_id: chapterId,
 						page_uids: pageUid ? [pageUid] : [],
-						page_numbers: pageNumber !== undefined ? [pageNumber] : undefined,
+						page_numbers:
+							!pageUid && pageNumber !== undefined ? [pageNumber] : undefined,
 					},
 					profile_id: selectedProfileId || undefined,
 					target_language: targetLanguage,
-					reuse_policy: "regenerate",
+					reuse_policy: "reuse_existing",
 				});
-				startPollingJob(res.job_id);
+				if (generation === scopeGeneration.current) startPollingJob(res.job_id);
 			} catch (err: unknown) {
+				if (generation !== scopeGeneration.current) return;
+				setIsTranslating(false);
 				setErrorMessage(
 					apiErrorMessage(err, "Không thể khởi động dịch trang."),
 				);
 			}
 		},
-		[chapterId, mangaId, selectedProfileId, targetLanguage, startPollingJob],
+		[
+			chapterId,
+			mangaId,
+			selectedProfileId,
+			targetLanguage,
+			startPollingJob,
+			engineReady,
+			engineMessage,
+		],
 	);
 
 	// Trigger translation for the whole chapter
 	const translateChapter = useCallback(async () => {
+		if (!engineReady) {
+			setErrorMessage(engineMessage);
+			return;
+		}
 		if (!chapterId || !mangaId || pages.length === 0) return;
+		const generation = scopeGeneration.current;
 		setErrorMessage("");
+		setIsTranslating(true);
 		const pageUids = pages.map((p) => p.page_uid).filter(Boolean) as string[];
 		try {
 			const res = await translationApi.createJob({
@@ -160,10 +248,12 @@ export function useTranslation({
 				},
 				profile_id: selectedProfileId || undefined,
 				target_language: targetLanguage,
-				reuse_policy: "regenerate",
+				reuse_policy: "reuse_existing",
 			});
-			startPollingJob(res.job_id);
+			if (generation === scopeGeneration.current) startPollingJob(res.job_id);
 		} catch (err: unknown) {
+			if (generation !== scopeGeneration.current) return;
+			setIsTranslating(false);
 			setErrorMessage(
 				apiErrorMessage(err, "Không thể khởi động dịch chapter."),
 			);
@@ -175,6 +265,8 @@ export function useTranslation({
 		selectedProfileId,
 		targetLanguage,
 		startPollingJob,
+		engineReady,
+		engineMessage,
 	]);
 
 	// Helper to resolve display image for a page
@@ -203,6 +295,8 @@ export function useTranslation({
 	);
 
 	return {
+		engineReady,
+		engineMessage,
 		targetLanguage,
 		setTargetLanguage,
 		displayMode,

@@ -28,8 +28,12 @@ SERVER_PATH_KEYS = {"local_model_path", "server_workdir", "workdir", "model_dir"
 
 class TranslationProfileService:
     @staticmethod
-    def sanitize_config_for_export(config: Dict[str, Any]) -> Dict[str, Any]:
+    def sanitize_config_for_export(config: Any) -> Any:
         """Redacts sensitive credentials and strips internal server filesystem paths."""
+        if isinstance(config, list):
+            return [TranslationProfileService.sanitize_config_for_export(item) for item in config]
+        if not isinstance(config, dict):
+            return config
         sanitized = {}
         for k, v in config.items():
             lower_k = k.lower()
@@ -43,30 +47,31 @@ class TranslationProfileService:
                 or any(lower_k.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
                 or any(lower_k.startswith(prefix) for prefix in ("key_", "secret_", "token_"))
             )
-            if is_sensitive and isinstance(v, (str, bytes)):
+            if is_sensitive:
                 sanitized[k] = "[REDACTED]"
-            elif isinstance(v, dict):
+            elif isinstance(v, (dict, list)):
                 sanitized[k] = TranslationProfileService.sanitize_config_for_export(v)
             else:
                 sanitized[k] = v
         return sanitized
+
+    def _public_document(self, document: Dict[str, Any]) -> Dict[str, Any]:
+        result = {key: value for key, value in document.items() if key != "_id"}
+        result["effective_config"] = self.sanitize_config_for_export(result.get("effective_config", {}))
+        return result
 
     async def list_profiles(self) -> List[Dict[str, Any]]:
         """Lists all translation profiles."""
         db = db_conn.get_db()
         cursor = db["translation_profiles"].find({})
         profiles = await cursor.to_list(length=100)
-        for p in profiles:
-            p.pop("_id", None)
-        return profiles
+        return [self._public_document(p) for p in profiles]
 
     async def get_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a single profile by ID."""
         db = db_conn.get_db()
         doc = await db["translation_profiles"].find_one({"profile_id": profile_id})
-        if doc:
-            doc.pop("_id", None)
-        return doc
+        return self._public_document(doc) if doc else None
 
     async def create_profile(self, req: TranslationProfileCreate) -> Dict[str, Any]:
         """Creates a new profile and its immutable revision 1 record."""
@@ -106,7 +111,7 @@ class TranslationProfileService:
         await db["translation_profiles"].insert_one(doc_dict)
 
         doc_dict.pop("_id", None)
-        return doc_dict
+        return self._public_document(doc_dict)
 
     async def update_profile(
         self,
@@ -158,16 +163,14 @@ class TranslationProfileService:
 
         existing.update(set_fields)
         existing.pop("_id", None)
-        return existing
+        return self._public_document(existing)
 
     async def get_revisions(self, profile_id: str) -> List[Dict[str, Any]]:
         """Returns the revision history for a profile."""
         db = db_conn.get_db()
         cursor = db["translation_profile_revisions"].find({"profile_id": profile_id}).sort("revision", 1)
         revs = await cursor.to_list(length=100)
-        for r in revs:
-            r.pop("_id", None)
-        return revs
+        return [self._public_document(r) for r in revs]
 
     async def get_revision(self, profile_id: str, revision_number: int) -> Optional[Dict[str, Any]]:
         """Returns a specific revision of a profile."""
@@ -175,9 +178,7 @@ class TranslationProfileService:
         doc = await db["translation_profile_revisions"].find_one(
             {"profile_id": profile_id, "revision": revision_number}
         )
-        if doc:
-            doc.pop("_id", None)
-        return doc
+        return self._public_document(doc) if doc else None
 
     async def diff_revisions(self, profile_id: str, rev1_number: int, rev2_number: int) -> Dict[str, Any]:
         """Calculates added, removed, and modified keys between two revisions."""
@@ -214,7 +215,7 @@ class TranslationProfileService:
         existing = await db["translation_profiles"].find_one({"is_default": True})
         if existing:
             existing.pop("_id", None)
-            return existing
+            return self._public_document(existing)
 
         default_req = TranslationProfileCreate(
             name="Default Manga Studio Profile",

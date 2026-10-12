@@ -7,6 +7,8 @@ Tests verify:
 - CAS lease claiming increments fencing token and prevents duplicate worker execution.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from backend.models.translation import (
@@ -36,6 +38,8 @@ def test_translation_job_create_schema_validation():
 @pytest.mark.anyio
 async def test_enqueue_translation_job_creates_durable_records(monkeypatch):
     """Verify enqueueing creates a durable parent job document and individual page documents."""
+    # This is an orchestration unit test with a fake engine/queue, not an engine readiness test.
+    monkeypatch.setattr("backend.services.translation.job_service.require_translation_engine", lambda: None)
     fake_jobs_col = {}
     fake_pages_col = {}
     fake_chapters_col = {
@@ -203,6 +207,7 @@ async def test_cancel_job_sets_cancellation_and_aborts_queued_pages(monkeypatch)
 
 @pytest.mark.anyio
 async def test_retry_job_only_requeues_failed_or_cancelled_pages(monkeypatch):
+    monkeypatch.setattr("backend.services.translation.job_service.require_translation_engine", lambda: None)
     """Verify retry_job only processes failed or cancelled slots and skips completed slots."""
     job_id = "job_retry_test"
     fake_job = {
@@ -244,7 +249,7 @@ async def test_retry_job_only_requeues_failed_or_cancelled_pages(monkeypatch):
             async def update_one(query, update):
                 if "$set" in update:
                     fake_job.update(update["$set"])
-                return True
+                return SimpleNamespace(matched_count=1)
 
         class translation_job_pages:
             @staticmethod
@@ -262,7 +267,7 @@ async def test_retry_job_only_requeues_failed_or_cancelled_pages(monkeypatch):
                     if "$inc" in update:
                         for f, v in update["$inc"].items():
                             fake_pages[key][f] = fake_pages[key].get(f, 0) + v
-                return True
+                return SimpleNamespace(matched_count=1)
 
     enqueued_slots = []
 

@@ -1341,7 +1341,7 @@ export const SyncManagerPage: React.FC = () => {
 													<span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">
 														Type:{" "}
 														{pool.schedule.type === "interval"
-															? `Every ${pool.schedule.interval_hours}h`
+															? "Định kỳ chưa được hỗ trợ"
 															: "Manual"}
 													</span>
 												</div>
@@ -1446,7 +1446,7 @@ export const SyncManagerPage: React.FC = () => {
 												</h4>
 												<span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">
 													{selectedPool.schedule.type === "interval"
-														? `Interval: ${selectedPool.schedule.interval_hours}h`
+														? "Định kỳ chưa được hỗ trợ; hãy chạy thủ công"
 														: "Manual Run"}
 												</span>
 											</div>
@@ -2630,13 +2630,18 @@ export const SyncManagerPage: React.FC = () => {
 												type="radio"
 												name="scheduleType"
 												checked={scheduleType === "interval"}
+												disabled
 												onChange={() => setScheduleType("interval")}
 												className="accent-[var(--brand-orange)]"
 											/>
-											<span>Interval (hours)</span>
+											<span>Định kỳ (chưa hỗ trợ)</span>
 										</label>
 									</div>
 
+									<p role="status" className="text-xs text-muted-foreground">
+										Hiện chỉ hỗ trợ chạy thủ công. Lịch định kỳ đã lưu trước đây
+										không tự chạy.
+									</p>
 									{scheduleType === "interval" && (
 										<input
 											type="number"

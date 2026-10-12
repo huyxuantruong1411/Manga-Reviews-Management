@@ -38,6 +38,7 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - 'services/translator-runtime/**'
               - 'ruff.toml'
               - 'pyrightconfig.json'
               - '*.py'
@@ -196,7 +197,7 @@ jobs:
         run: uv sync --project backend --locked --group test --no-install-project
 
       - name: Run Backend Pytest Suite
-        run: uv run --project backend --no-sync python -m pytest backend/tests
+        run: uv run --project backend --no-sync python -m pytest backend/tests services/translator-runtime/tests
 
   frontend:
     name: Frontend Quality & Build
