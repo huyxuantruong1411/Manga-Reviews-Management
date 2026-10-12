@@ -131,6 +131,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedLanguage, setSelectedLanguage] = useState<string>("all");
 	const [selectedGroup, setSelectedGroup] = useState<string>("all");
+	const [selectedSource, setSelectedSource] = useState<string>("all");
 
 	// Selection states (for Ctrl+click, Shift+click)
 	const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
@@ -333,6 +334,14 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 		return Array.from(set);
 	}, [chapters]);
 
+	const availableSources = useMemo(() => {
+		const set = new Set<string>();
+		chapters.forEach((c) => {
+			if (c.source) set.add(c.source);
+		});
+		return Array.from(set);
+	}, [chapters]);
+
 	const parseChapterNum = (ch: any): number => {
 		const s = String(ch ?? "")
 			.trim()
@@ -362,6 +371,12 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 			if (selectedGroup !== "all" && c.scanlation_group !== selectedGroup) {
 				return false;
 			}
+			if (
+				selectedSource !== "all" &&
+				(c.source || "local_import") !== selectedSource
+			) {
+				return false;
+			}
 			if (searchQuery.trim()) {
 				const query = searchQuery.toLowerCase();
 				const matchNum = c.chapter_number.toLowerCase().includes(query);
@@ -386,7 +401,23 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 				numeric: true,
 			});
 		});
-	}, [chapters, selectedLanguage, selectedGroup, searchQuery, groupByVolume]);
+	}, [
+		chapters,
+		selectedLanguage,
+		selectedGroup,
+		selectedSource,
+		searchQuery,
+		groupByVolume,
+	]);
+
+	// Distinct logical chapters count vs total release count
+	const distinctLogicalCount = useMemo(() => {
+		const set = new Set<string>();
+		filteredChapters.forEach((c) => {
+			set.add(`${c.chapter_number}-${c.language || "en"}`);
+		});
+		return set.size;
+	}, [filteredChapters]);
 
 	// Pagination metrics & slices
 	const totalFilteredCount = filteredChapters.length;
@@ -1241,6 +1272,28 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									))}
 								</select>
 							)}
+
+							{availableSources.length > 1 && (
+								<select
+									value={selectedSource}
+									onChange={(e) => setSelectedSource(e.target.value)}
+									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)]"
+									title="Lọc theo nguồn dữ liệu"
+								>
+									<option value="all">Tất cả nguồn ({chapters.length})</option>
+									{availableSources.map((s) => (
+										<option key={s} value={s}>
+											{s === "mangafire"
+												? "MangaFire"
+												: s === "mangadex"
+													? "MangaDex"
+													: s === "local_import"
+														? "Local Import"
+														: s}
+										</option>
+									))}
+								</select>
+							)}
 						</div>
 
 						{/* Selection actions & View Switcher */}
@@ -1402,9 +1455,9 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									</strong>{" "}
 									/{" "}
 									<strong className="text-[var(--text-primary)] font-bold">
-										{totalFilteredCount}
+										{distinctLogicalCount}
 									</strong>{" "}
-									chapter
+									chương logic ({totalFilteredCount} bản)
 								</span>
 								{filteredChapters.length !== chapters.length && (
 									<span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-400">
@@ -1600,9 +1653,21 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 															{new Date(chap.publish_at).toLocaleDateString()}
 														</span>
 													)}
-													{chap.source === "local_import" && (
-														<span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-															Imported
+													{chap.source && (
+														<span
+															className={`px-2 py-0.5 rounded-md whitespace-nowrap font-mono text-[10px] ${
+																chap.source === "mangafire"
+																	? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+																	: chap.source === "mangadex"
+																		? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+																		: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+															}`}
+														>
+															{chap.source === "mangafire"
+																? "MangaFire"
+																: chap.source === "mangadex"
+																	? "MangaDex"
+																	: "Import"}
 														</span>
 													)}
 												</div>

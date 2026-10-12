@@ -10,11 +10,16 @@ from backend.models.chapter import DeletePagesRequest, FolderImportRequest, Fold
 from backend.models.chapter_export import ChapterExportOpenFolderRequest, ChapterExportRequest
 from backend.services.chapter_export_service import chapter_export_service
 from backend.services.chapter_service import chapter_service
+from backend.services.chapter_slot_service import chapter_slot_service
 from backend.services.content_deletion_service import DeletionBusyError, DeletionStorageError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chapters & Reader"])
+
+
+class SetPreferredReleasePayload(BaseModel):
+    chapter_id: str = Field(..., description="Target stored chapter ID to set as preferred")
 
 
 class ScanFolderPayload(BaseModel):
@@ -45,6 +50,51 @@ async def get_manga_chapters(
         return {"chapters": chapters, "total": len(chapters)}
     except Exception as e:
         logger.error(f"Error fetching chapters for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manga/{manga_id}/chapter-slots")
+async def get_manga_chapter_slots(manga_id: str = Path(...), lang: str = Query("en")):
+    """
+    Retrieve all logical chapter slots with attached stored releases and ready states.
+    """
+    try:
+        slots = await chapter_slot_service.get_manga_slots(manga_id, language=lang)
+        return {"slots": slots, "total": len(slots)}
+    except Exception as e:
+        logger.error(f"Error fetching chapter slots for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/manga/{manga_id}/chapter-slots/coverage")
+async def get_manga_chapter_slots_coverage(manga_id: str = Path(...), lang: str = Query("en")):
+    """
+    Calculate library coverage summary across logical chapter slots.
+    """
+    try:
+        return await chapter_slot_service.get_coverage_summary(manga_id, language=lang)
+    except Exception as e:
+        logger.error(f"Error calculating slot coverage for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/chapter-slots/{slot_id}/preferred")
+async def set_preferred_slot_release(
+    slot_id: str = Path(...),
+    payload: SetPreferredReleasePayload = Body(...),
+):
+    """
+    Update the preferred release pointer for a logical chapter slot.
+    """
+    try:
+        success = await chapter_slot_service.set_preferred_chapter(slot_id, payload.chapter_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Slot not found or unchanged")
+        return {"success": True, "slot_id": slot_id, "preferred_chapter_id": payload.chapter_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting preferred release for slot {slot_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -316,18 +316,42 @@ export const MangaReaderPage: React.FC = () => {
 		return { firstPageNum: first, secondPageNum: second };
 	}, []);
 
-	// Current chapter index in the active language sequence
-	const currentChapterIndex = activeLanguageChapters.findIndex(
-		(c) => c.id === currentChapter?.id,
+	// Alternative releases of the current chapter number in the same language
+	const alternativeReleases = useMemo(() => {
+		if (!currentChapter) return [];
+		const currLang = (currentChapter.language || "en").toLowerCase();
+		return chapters.filter(
+			(c) =>
+				c.id !== currentChapter.id &&
+				c.chapter_number === currentChapter.chapter_number &&
+				(c.language || "en").toLowerCase() === currLang,
+		);
+	}, [chapters, currentChapter]);
+
+	// Logical deduplicated sequence across chapter numbers (never loops same chapter number)
+	const logicalSequence = useMemo(() => {
+		const map = new Map<string, Chapter>();
+		activeLanguageChapters.forEach((chap) => {
+			const key = chap.chapter_number;
+			if (chap.id === currentChapter?.id) {
+				map.set(key, chap);
+			} else if (!map.has(key)) {
+				map.set(key, chap);
+			}
+		});
+		return Array.from(map.values()).sort(
+			(a, b) => a.chapter_numeric - b.chapter_numeric,
+		);
+	}, [activeLanguageChapters, currentChapter]);
+
+	const currentLogicalIndex = logicalSequence.findIndex(
+		(c) => c.chapter_number === currentChapter?.chapter_number,
 	);
 	const prevChapter =
-		currentChapterIndex > 0
-			? activeLanguageChapters[currentChapterIndex - 1]
-			: null;
+		currentLogicalIndex > 0 ? logicalSequence[currentLogicalIndex - 1] : null;
 	const nextChapter =
-		currentChapterIndex >= 0 &&
-		currentChapterIndex < activeLanguageChapters.length - 1
-			? activeLanguageChapters[currentChapterIndex + 1]
+		currentLogicalIndex >= 0 && currentLogicalIndex < logicalSequence.length - 1
+			? logicalSequence[currentLogicalIndex + 1]
 			: null;
 
 	// Chapters in other languages that continue after current chapter (MangaDex-style switch)
@@ -664,10 +688,25 @@ export const MangaReaderPage: React.FC = () => {
 							{manga?.title || "Đang tải..."}
 						</h1>
 						{currentChapter && (
-							<p className="text-[11px] text-[var(--brand-orange)] font-semibold truncate">
-								Ch. {currentChapter.chapter_number}{" "}
-								{currentChapter.title ? `- ${currentChapter.title}` : ""}
-							</p>
+							<div className="flex items-center gap-1.5 min-w-0">
+								<p className="text-[11px] text-[var(--brand-orange)] font-semibold truncate">
+									Ch. {currentChapter.chapter_number}{" "}
+									{currentChapter.title ? `- ${currentChapter.title}` : ""}
+								</p>
+								{currentChapter.source && (
+									<span
+										className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 uppercase ${
+											currentChapter.source === "mangafire"
+												? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+												: currentChapter.source === "mangadex"
+													? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+													: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+										}`}
+									>
+										{currentChapter.source}
+									</span>
+								)}
+							</div>
 						)}
 					</div>
 
@@ -695,6 +734,47 @@ export const MangaReaderPage: React.FC = () => {
 
 				{/* Center: Chapter & Page Selectors */}
 				<div className="hidden md:flex items-center space-x-2">
+					{/* Release Switcher if multiple versions of current chapter exist */}
+					{alternativeReleases.length > 0 && (
+						<div className="flex items-center space-x-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-xs">
+							<span className="text-[11px] text-zinc-400 font-semibold">
+								Bản:
+							</span>
+							<select
+								value={currentChapter?.id || ""}
+								onChange={(e) => {
+									const target = [currentChapter, ...alternativeReleases].find(
+										(c) => c?.id === e.target.value,
+									);
+									if (target) handleSafeGoToChapter(target);
+								}}
+								className="bg-transparent text-[11px] font-bold text-zinc-200 focus:outline-none cursor-pointer max-w-[130px] truncate"
+								title="Chuyển đổi giữa các bản phát hành của cùng chapter này"
+							>
+								<option
+									value={currentChapter?.id}
+									className="bg-zinc-900 text-white"
+								>
+									{currentChapter?.source
+										? currentChapter.source.toUpperCase()
+										: "Hiện tại"}{" "}
+									({pages.length}p)
+								</option>
+								{alternativeReleases.map((alt) => (
+									<option
+										key={alt.id}
+										value={alt.id}
+										className="bg-zinc-900 text-zinc-300"
+									>
+										{alt.source ? alt.source.toUpperCase() : "Bản khác"}{" "}
+										{alt.scanlation_group ? `[${alt.scanlation_group}]` : ""} (
+										{alt.page_count}p)
+									</option>
+								))}
+							</select>
+						</div>
+					)}
+
 					{/* Prev Chapter */}
 					<button
 						onClick={() => prevChapter && handleSafeGoToChapter(prevChapter)}
