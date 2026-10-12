@@ -19,6 +19,7 @@ from backend.routers import (
     image_tools,
     manga,
     mangadex,
+    metadata,
     recommendations,
     reviews,
     sync_manager,
@@ -105,6 +106,7 @@ app.include_router(vision.router)
 app.include_router(tasks.router)
 app.include_router(translation.router)
 app.include_router(datasources.router)
+app.include_router(metadata.router)
 
 
 @app.get("/health")

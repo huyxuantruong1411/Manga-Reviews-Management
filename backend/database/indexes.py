@@ -270,6 +270,11 @@ async def init_db_indexes():
             [("scope", 1), ("chapter_id", 1), ("page_uid", 1), ("target_language", 1)], unique=True
         )
 
+        # source_metadata_snapshots
+        await db.source_metadata_snapshots.create_index([("manga_id", 1), ("source", 1), ("fetched_at", -1)])
+        await db.source_metadata_snapshots.create_index([("source", 1), ("source_work_id", 1)])
+        await db.source_metadata_snapshots.create_index([("manga_id", 1), ("snapshot_hash", 1)])
+
         await ensure_deletion_reference_indexes(db)
 
         logger.info("Database indexes initialized successfully.")

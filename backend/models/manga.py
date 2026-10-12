@@ -44,6 +44,9 @@ class MangaBase(BaseModel):
     volumes: Optional[int] = None
     chapters: Optional[int] = None
     tracker_metadata: Optional[Dict[str, Any]] = None
+    metadata_locks: Dict[str, bool] = Field(default_factory=dict)
+    metadata_provenance: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    metadata_revision: int = 1
 
     @field_validator("personal_rating")
     @classmethod
@@ -109,6 +112,9 @@ class MangaUpdate(BaseModel):
     volumes: Optional[int] = None
     chapters: Optional[int] = None
     tracker_metadata: Optional[Dict[str, Any]] = None
+    metadata_locks: Optional[Dict[str, bool]] = None
+    metadata_provenance: Optional[Dict[str, Dict[str, Any]]] = None
+    metadata_revision: Optional[int] = None
 
     @field_validator("personal_rating")
     @classmethod

@@ -38,6 +38,7 @@ import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
 import { SourceDownloadDialog } from "../components/manga/download/SourceDownloadDialog";
+import { MetadataComparisonDrawer } from "../components/manga/MetadataComparisonDrawer";
 import { PanelLexisTab } from "../components/manga/PanelLexisTab";
 import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
 import { BlurredCover } from "../components/ui/BlurredCover";
@@ -1101,6 +1102,8 @@ export const MangaDetailPage: React.FC = () => {
 
 	// Download Modal States
 	const [isSourceDownloadOpen, setIsSourceDownloadOpen] = useState(false);
+	const [isMetadataComparisonOpen, setIsMetadataComparisonOpen] =
+		useState(false);
 	const [isDownloadOpen, setIsDownloadOpen] = useState(false);
 	const [saveToDisk, setSaveToDisk] = useState(false);
 	const [languages, setLanguages] = useState<string[]>([]);
@@ -3044,6 +3047,16 @@ export const MangaDetailPage: React.FC = () => {
 									<span>Sync MangaDex</span>
 								</button>
 							)}
+
+							<button
+								type="button"
+								onClick={() => setIsMetadataComparisonOpen(true)}
+								className="flex items-center space-x-1.5 px-3 py-2 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/15 rounded-xl font-bold text-xs transition whitespace-nowrap shadow-sm cursor-pointer"
+								title="So sánh và làm giàu metadata từ nguồn dữ liệu (MangaDex hoặc MangaFire)"
+							>
+								<Sparkles size={13} className="shrink-0" />
+								<span>So sánh Metadata</span>
+							</button>
 
 							<button
 								type="button"
@@ -5837,6 +5850,19 @@ export const MangaDetailPage: React.FC = () => {
 					mangadexId={manga.mangadex_id}
 					defaultSource={manga.mangadex_id ? "mangadex" : "mangafire"}
 					onDownloadStarted={() => {
+						fetchMangaDetails();
+					}}
+				/>
+			)}
+			{manga && (
+				<MetadataComparisonDrawer
+					isOpen={isMetadataComparisonOpen}
+					onClose={() => setIsMetadataComparisonOpen(false)}
+					mangaId={manga._id}
+					mangaTitle={manga.title}
+					source={manga.mangadex_id ? "mangadex" : "mangafire"}
+					sourceWorkId={manga.mangadex_id || manga._id}
+					onApplied={() => {
 						fetchMangaDetails();
 					}}
 				/>

@@ -115,3 +115,39 @@ export interface MangaSourceBinding {
 	linked_at: string;
 	last_synced_at?: string | null;
 }
+
+export interface MetadataFieldDiff {
+	field_path: string;
+	current_value?: any;
+	candidate_value?: any;
+	source: string;
+	decision_state: "identical" | "new" | "conflict" | "locked";
+	is_locked: boolean;
+	recommended_action: "keep" | "accept" | "manual_review";
+}
+
+export interface MetadataPreviewResponse {
+	manga_id: string;
+	source: string;
+	source_work_id: string;
+	current_metadata_revision: number;
+	diffs: MetadataFieldDiff[];
+	has_conflicts: boolean;
+	protected_user_fields: string[];
+}
+
+export interface MetadataApplyRequest {
+	source: string;
+	source_work_id: string;
+	expected_metadata_revision: number;
+	accepted_fields: string[];
+	field_locks?: Record<string, boolean>;
+}
+
+export interface MetadataApplyResponse {
+	success: boolean;
+	manga_id: string;
+	applied_fields: string[];
+	new_metadata_revision: number;
+	updated_at: string;
+}

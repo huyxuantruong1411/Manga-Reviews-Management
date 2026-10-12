@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **168**
+Total Endpoints Discovered: **172**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -76,6 +76,10 @@ Total Endpoints Discovered: **168**
 | `GET` | `/api/manga/{manga_id}/history` | `get_manga_history` | Manga | [`manga.py:240`](../../backend/routers/manga.py#L240) | Yes |
 | `POST` | `/api/manga/{manga_id}/import-folder` | `import_local_folder` | Chapters & Reader | [`chapters.py:121`](../../backend/routers/chapters.py#L121) | Yes |
 | `POST` | `/api/manga/{manga_id}/import-folder-stream` | `import_local_folder_stream` | Chapters & Reader | [`chapters.py:141`](../../backend/routers/chapters.py#L141) | Yes |
+| `POST` | `/api/manga/{manga_id}/metadata/apply` | `apply_metadata_merge` | Metadata | [`metadata.py:61`](../../backend/routers/metadata.py#L61) | Yes |
+| `GET` | `/api/manga/{manga_id}/metadata/locks` | `get_metadata_locks` | Metadata | [`metadata.py:93`](../../backend/routers/metadata.py#L93) | Yes |
+| `PUT` | `/api/manga/{manga_id}/metadata/locks` | `update_metadata_locks` | Metadata | [`metadata.py:114`](../../backend/routers/metadata.py#L114) | Yes |
+| `POST` | `/api/manga/{manga_id}/metadata/preview` | `preview_metadata_merge` | Metadata | [`metadata.py:33`](../../backend/routers/metadata.py#L33) | Yes |
 | `DELETE` | `/api/manga/{manga_id}/panels` | `delete_manga_panels` | vision | [`vision.py:237`](../../backend/routers/vision.py#L237) | Yes |
 | `GET` | `/api/manga/{manga_id}/panels/report` | `generate_manga_panels_report` | vision | [`vision.py:330`](../../backend/routers/vision.py#L330) | Yes |
 | `GET` | `/api/manga/{manga_id}/panels/search` | `search_manga_panels` | vision | [`vision.py:289`](../../backend/routers/vision.py#L289) | Yes |
@@ -172,6 +176,6 @@ Total Endpoints Discovered: **168**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:111`](../../backend/main.py#L111) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:113`](../../backend/main.py#L113) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

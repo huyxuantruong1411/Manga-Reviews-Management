@@ -1009,7 +1009,11 @@ class MangaService:
             if alt not in merged_alts:
                 merged_alts.append(alt)
 
-        update_fields = {
+        locks = manga.get("metadata_locks") or {}
+        provenance = dict(manga.get("metadata_provenance") or {})
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        candidate_updates = {
             "title": details["title"],
             "alt_titles": merged_alts,
             "description": details["description"],
@@ -1029,8 +1033,26 @@ class MangaService:
             "chapters": safe_int(details.get("last_chapter"))
             if safe_int(details.get("last_chapter")) is not None
             else manga.get("chapters"),
-            "updated_at": datetime.utcnow(),
         }
+
+        update_fields: Dict[str, Any] = {
+            "updated_at": datetime.utcnow(),
+            "metadata_revision": manga.get("metadata_revision", 1) + 1,
+        }
+
+        for k, v in candidate_updates.items():
+            if locks.get(k, False):
+                # Field is locked by user: keep existing value
+                update_fields[k] = manga.get(k)
+            else:
+                update_fields[k] = v
+                provenance[k] = {
+                    "source": "mangadex",
+                    "source_work_id": manga["mangadex_id"],
+                    "updated_at": now_iso,
+                }
+
+        update_fields["metadata_provenance"] = provenance
 
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_fields})
         await self.log_action(manga_id, "sync_metadata", note="Synced metadata from MangaDex")

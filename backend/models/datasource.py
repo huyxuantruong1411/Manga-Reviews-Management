@@ -169,3 +169,57 @@ class IdentityConflictError(DatasourceError):
 class SSRFSecurityError(DatasourceError):
     def __init__(self, message: str = "URL target rejected for security / SSRF boundaries"):
         super().__init__(message, code="SSRF_SECURITY_REJECTED")
+
+
+class MetadataConflictError(DatasourceError):
+    def __init__(self, message: str = "Metadata conflict detected or revision mismatch"):
+        super().__init__(message, code="METADATA_CONFLICT")
+
+
+# --- Metadata Merge DTOs ---
+
+
+class MetadataFieldDiff(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    field_path: str
+    current_value: Any = None
+    candidate_value: Any = None
+    source: str
+    decision_state: str = "identical"  # "identical" | "new" | "conflict" | "locked"
+    is_locked: bool = False
+    recommended_action: str = "keep"  # "keep" | "accept" | "manual_review"
+
+
+class MetadataPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    manga_id: str
+    source: str
+    source_work_id: str
+    current_metadata_revision: int = 1
+    diffs: List[MetadataFieldDiff] = Field(default_factory=list)
+    has_conflicts: bool = False
+    protected_user_fields: List[str] = Field(
+        default_factory=lambda: ["read_status", "personal_rating", "reviews", "notes", "download_path"]
+    )
+
+
+class MetadataApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    source: str
+    source_work_id: str
+    expected_metadata_revision: int
+    accepted_fields: List[str] = Field(default_factory=list)
+    field_locks: Optional[Dict[str, bool]] = None
+
+
+class MetadataApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    success: bool = True
+    manga_id: str
+    applied_fields: List[str] = Field(default_factory=list)
+    new_metadata_revision: int
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
