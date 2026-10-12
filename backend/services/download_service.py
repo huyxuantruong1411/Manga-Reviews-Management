@@ -70,6 +70,8 @@ class DownloadService:
                     "readable_at": c.get("readable_at"),
                     "uploader": c.get("uploader"),
                     "pages": c.get("pages"),
+                    "source": c.get("source", "mangadex"),
+                    "source_work_id": c.get("source_work_id"),
                     "status": "pending",
                     "error": None,
                 }
@@ -302,10 +304,26 @@ class DownloadService:
                             {"_id": task_id}, {"$set": {"active_workers": list(active_workers.values())}}
                         )
 
+                    source = chap.get("source", "mangadex")
+                    source_work_id = chap.get("source_work_id")
+                    provider = None
                     try:
-                        img_urls = await mangadex_service.get_chapter_images(chap_id)
-                        if not img_urls:
-                            raise ValueError("No images found for this chapter.")
+                        from backend.services.datasources.registry import get_datasource_provider
+
+                        provider = get_datasource_provider(source)
+                    except Exception as pe:
+                        logger.debug(f"Could not load provider for source '{source}': {pe}")
+
+                    try:
+                        if provider:
+                            manifest = await provider.resolve_pages(chap_id)
+                            if not manifest or not manifest.pages:
+                                raise ValueError("No images found for this chapter.")
+                            img_urls = [p.url for p in manifest.pages]
+                        else:
+                            img_urls = await mangadex_service.get_chapter_images(chap_id)
+                            if not img_urls:
+                                raise ValueError("No images found for this chapter.")
 
                         success, page_items = await self._download_images_concurrently(
                             urls=img_urls,
@@ -315,6 +333,7 @@ class DownloadService:
                             manga_id=manga_id,
                             chap_id=chap_id,
                             shared_stats=shared_stats,
+                            provider=provider,
                         )
 
                         if success:
@@ -329,8 +348,9 @@ class DownloadService:
                                     "uploader": chap.get("uploader"),
                                     "publish_at": chap.get("publish_at"),
                                     "readable_at": chap.get("readable_at"),
-                                    "source": "mangadex",
+                                    "source": source,
                                     "source_id": chap_id,
+                                    "source_work_id": source_work_id,
                                     "local_path": chap_path,
                                     "pages": page_items,
                                     "page_count": len(page_items),
@@ -538,6 +558,7 @@ class DownloadService:
         chap_id: str,
         shared_stats: Optional[Dict[str, Any]] = None,
         max_sem: int = 4,
+        provider: Optional[Any] = None,
     ) -> Tuple[bool, List[Dict[str, Any]]]:
         sem = asyncio.Semaphore(max_sem)
         page_results: List[Optional[Dict[str, Any]]] = [None] * len(urls)
@@ -565,7 +586,26 @@ class DownloadService:
                         logger.error(f"Error reading cached image for preview: {e}")
 
                 if not bytes_data:
-                    bytes_data = await mangadex_service.download_image_bytes(url)
+                    if provider and hasattr(provider, "fetch_page"):
+                        from backend.models.datasource import SourcePage
+
+                        headers = (
+                            {"Referer": "https://mangafire.to/"} if getattr(provider, "name", "") == "mangafire" else {}
+                        )
+                        page_obj = SourcePage(
+                            page_number=idx + 1,
+                            url=url,
+                            headers=headers,
+                            content_type="image/jpeg",
+                        )
+                        try:
+                            bytes_data = await provider.fetch_page(page_obj)
+                        except Exception as p_err:
+                            logger.error(f"Provider fetch_page failed for {url}: {p_err}")
+                            bytes_data = None
+                    else:
+                        bytes_data = await mangadex_service.download_image_bytes(url)
+
                     if not bytes_data:
                         return False
 

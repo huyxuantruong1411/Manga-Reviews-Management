@@ -37,6 +37,7 @@ import client from "../api/client";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
+import { SourceDownloadDialog } from "../components/manga/download/SourceDownloadDialog";
 import { PanelLexisTab } from "../components/manga/PanelLexisTab";
 import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
 import { BlurredCover } from "../components/ui/BlurredCover";
@@ -1099,6 +1100,7 @@ export const MangaDetailPage: React.FC = () => {
 	};
 
 	// Download Modal States
+	const [isSourceDownloadOpen, setIsSourceDownloadOpen] = useState(false);
 	const [isDownloadOpen, setIsDownloadOpen] = useState(false);
 	const [saveToDisk, setSaveToDisk] = useState(false);
 	const [languages, setLanguages] = useState<string[]>([]);
@@ -2257,8 +2259,8 @@ export const MangaDetailPage: React.FC = () => {
 
 	// Start Downloading
 	const openDownloadModal = async () => {
+		setIsSourceDownloadOpen(true);
 		if (!manga?.mangadex_id) return;
-		setIsDownloadOpen(true);
 		setCustomPath("");
 		setVerifyResult(null);
 		setChapterSearch("");
@@ -3008,16 +3010,15 @@ export const MangaDetailPage: React.FC = () => {
 								</button>
 							)}
 
-							{manga.mangadex_id && (
-								<button
-									type="button"
-									onClick={openDownloadModal}
-									className="flex items-center space-x-2 px-4 py-2 border border-[var(--brand-orange)]/40 text-[var(--brand-orange)] bg-[var(--brand-orange)]/5 hover:bg-[var(--brand-orange)]/15 rounded-xl font-bold text-xs transition shadow-sm whitespace-nowrap cursor-pointer"
-								>
-									<Download size={14} className="shrink-0" />
-									<span>Download Chapters</span>
-								</button>
-							)}
+							<button
+								type="button"
+								onClick={openDownloadModal}
+								className="flex items-center space-x-2 px-4 py-2 border border-[var(--brand-orange)]/40 text-[var(--brand-orange)] bg-[var(--brand-orange)]/5 hover:bg-[var(--brand-orange)]/15 rounded-xl font-bold text-xs transition shadow-sm whitespace-nowrap cursor-pointer"
+								title="Tải chương từ MangaDex hoặc MangaFire"
+							>
+								<Download size={14} className="shrink-0" />
+								<span>Download Chapters</span>
+							</button>
 
 							<button
 								type="button"
@@ -5826,6 +5827,19 @@ export const MangaDetailPage: React.FC = () => {
 						</div>
 					</div>
 				</div>
+			)}
+			{manga && (
+				<SourceDownloadDialog
+					isOpen={isSourceDownloadOpen}
+					onClose={() => setIsSourceDownloadOpen(false)}
+					mangaId={manga._id}
+					mangaTitle={manga.title}
+					mangadexId={manga.mangadex_id}
+					defaultSource={manga.mangadex_id ? "mangadex" : "mangafire"}
+					onDownloadStarted={() => {
+						fetchMangaDetails();
+					}}
+				/>
 			)}
 		</div>
 	);
