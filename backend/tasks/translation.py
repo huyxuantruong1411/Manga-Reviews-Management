@@ -5,6 +5,7 @@ subprocess runner, and coordinates MinIO artifacts and MongoDB results.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -180,6 +181,15 @@ async def execute_translation_job_page(
 
             Image.new("RGB", (600, 900), color=(255, 255, 255)).save(input_file)
 
+        # Compute actual input source sha256
+        actual_source_sha256 = "placeholder_sha"
+        if os.path.exists(input_file):
+            try:
+                with open(input_file, "rb") as f_in:
+                    actual_source_sha256 = hashlib.sha256(f_in.read()).hexdigest()
+            except Exception as se:
+                logger.warning(f"Could not compute sha256 for {input_file}: {se}")
+
         # 3. Construct input envelope
         envelope = {
             "protocol_version": 1,
@@ -187,7 +197,7 @@ async def execute_translation_job_page(
             "page_identity": page_identity,
             "attempt_id": f"att_{attempt}",
             "fencing_token": fence_token,
-            "input": {"local_path": input_file, "sha256": "placeholder_sha"},
+            "input": {"local_path": input_file, "sha256": actual_source_sha256},
             "workdir": workdir,
             "profile_snapshot": {
                 "schema_version": 1,
@@ -275,7 +285,7 @@ async def execute_translation_job_page(
                 result_id=result_id,
                 scope="local",
                 fingerprint=manifest.get("output_sha256", "sha_placeholder"),
-                source_sha256="src_sha_placeholder",
+                source_sha256=actual_source_sha256,
                 chapter_id=chapter_id,
                 page_uid=page_identity,
                 target_language=target_language,

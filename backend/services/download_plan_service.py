@@ -3,8 +3,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from bson import ObjectId
-
 from backend.database.connection import get_db
 from backend.models.datasource import (
     IdentityConflictError,

@@ -1,6 +1,4 @@
 import io
-import uuid
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -15,7 +13,6 @@ from backend.models.datasource import (
     SourceWork,
 )
 from backend.models.download_plan import (
-    DownloadPlanItem,
     DownloadSelectionPolicy,
 )
 from backend.services.chapter_media_service import ChapterMediaService

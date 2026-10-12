@@ -7,7 +7,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
@@ -142,6 +142,9 @@ class ChapterService:
 
     def _get_reading_col(self):
         return get_db().reading_progress
+
+    def _get_slots_col(self):
+        return get_db().chapter_slots
 
     async def get_manga_chapters(
         self, manga_id: str, language: Optional[str] = None, group: Optional[str] = None
@@ -389,7 +392,7 @@ class ChapterService:
         }
 
     async def delete_chapter(self, chapter_id: str) -> bool:
-        """Delete an entire chapter and remove all its pages from MinIO storage."""
+        """Delete an entire chapter and remove all its pages from MinIO storage safely."""
         filter_query = {"_id": ObjectId(chapter_id)} if ObjectId.is_valid(chapter_id) else {"_id": chapter_id}
         chapter = await self._get_chapters_col().find_one(filter_query)
         if not chapter:
@@ -398,18 +401,62 @@ class ChapterService:
         manga_id = chapter["manga_id"]
         c_id_str = str(chapter["_id"])
         db = get_db()
+
+        # 1. Cancel dependent jobs before beginning removal
         await cancel_source_jobs(db, {"chapter_id": c_id_str})
 
-        # Downloaded MangaDex pages use source UUIDs, not the Mongo chapter ID.
-        # Delete the recorded objects and keep metadata if storage reports a failure.
+        # 2. Mark state 'deleting' and bump lifecycle epoch to fence off concurrent workers
+        await self._get_chapters_col().update_one(
+            filter_query,
+            {
+                "$set": {"state": "deleting", "updated_at": datetime.now(timezone.utc)},
+                "$inc": {"lifecycle_epoch": 1},
+            },
+        )
+
+        # 3. Reconcile slot preferred release pointer if chapter belongs to a slot
+        logical_slot_id = chapter.get("logical_chapter_id")
+        if logical_slot_id:
+            try:
+                db_slot_id = ObjectId(logical_slot_id) if ObjectId.is_valid(logical_slot_id) else logical_slot_id
+                slot = await self._get_slots_col().find_one({"_id": db_slot_id})
+                if slot and slot.get("preferred_chapter_id") == c_id_str:
+                    other_chap = await self._get_chapters_col().find_one(
+                        {
+                            "logical_chapter_id": logical_slot_id,
+                            "state": "ready",
+                            "_id": {"$ne": chapter["_id"]},
+                        }
+                    )
+                    new_pref = str(other_chap["_id"]) if other_chap else None
+                    await self._get_slots_col().update_one(
+                        {"_id": db_slot_id},
+                        {
+                            "$set": {
+                                "preferred_chapter_id": new_pref,
+                                "updated_at": datetime.now(timezone.utc),
+                            }
+                        },
+                    )
+            except Exception as slot_e:
+                logger.debug(f"Slot reconciliation skipped: {slot_e}")
+
+        # 4. Delete recorded objects from storage. If storage reports a failure, retain chapter.
         for page in chapter.get("pages", []):
-            key = page.get("object_key")
+            key = page.get("object_key") if isinstance(page, dict) else getattr(page, "object_key", None)
             if key and await source_object_is_shared(db, key, chapter_id=chapter["_id"]):
                 continue
             if key and not await asyncio.to_thread(minio_service.delete_chapter_page, key):
+                await self._get_chapters_col().update_one(filter_query, {"$set": {"state": "cleanup_failed"}})
                 raise DeletionStorageError("Không xóa được ảnh chương trong kho lưu trữ; hãy thử lại.")
 
-        # Propagate cleanup failures and retain the parent so a retry can discover dependencies.
+        # Clean up revision manifest if present
+        media_rev_id = chapter.get("media_revision_id")
+        if media_rev_id:
+            manifest_key = f"chapters/{manga_id}/{c_id_str}/revisions/{media_rev_id}/manifest.json"
+            await asyncio.to_thread(minio_service.delete_chapter_page, manifest_key)
+
+        # 5. Propagate cleanup failures and retain parent so retry can discover dependencies.
         await delete_chapter_dependencies(db, c_id_str)
         await self._get_reading_col().update_many({"manga_id": manga_id}, {"$pull": {"read_chapter_ids": c_id_str}})
         await self._get_reading_col().update_many(
@@ -419,14 +466,15 @@ class ChapterService:
                     "last_read_chapter_id": None,
                     "last_read_chapter_number": None,
                     "last_read_page": 1,
-                    "updated_at": datetime.utcnow(),
+                    "updated_at": datetime.now(timezone.utc),
                 }
             },
         )
 
+        # 6. Delete chapter document from MongoDB
         await self._get_chapters_col().delete_one(filter_query)
 
-        # Log audit event
+        # 7. Log audit event
         try:
             manga_doc = await self._get_mangas_col().find_one({"_id": ObjectId(manga_id)})
             manga_title = manga_doc.get("title") if manga_doc else None

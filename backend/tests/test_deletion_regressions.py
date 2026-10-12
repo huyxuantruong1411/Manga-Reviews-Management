@@ -32,6 +32,7 @@ def collection(documents=()):
         find_one=AsyncMock(return_value=None),
         delete_one=AsyncMock(),
         delete_many=AsyncMock(),
+        update_one=AsyncMock(),
         update_many=AsyncMock(),
     )
 
