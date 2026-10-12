@@ -14,6 +14,7 @@
 - A rich WYSIWYG review editor (TipTap) with interactive manga cards and Gemini AI writing assistance.
 - A **Panel Words Detector**: comic panel dialogue extraction and lexical search via OpenCV contour segmentation, RapidOCR (PP-OCRv4), dictionary lemmatization (spaCy), and MangaOCR cleanups.
 - An asynchronous task worker (ARQ + Redis) for background OCR and a Redis caching layer.
+- A **Multi-Source Ingestion & Chapter Slot Architecture**: Unified downloading and reading from MangaDex and MangaFire with source-scoped identity, logical slot coverage, and safe metadata merging with user field locks.
 - A **Translation Studio & Reader Translation Subsystem** (UI/orchestration present; real inference unavailable): In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
 
 ---
