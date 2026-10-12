@@ -178,10 +178,28 @@ async def init_db_indexes():
         # sync_runs
         await db.sync_runs.create_index([("started_at", -1)])
 
+        # manga_sources
+        await db.manga_sources.create_index([("source", 1), ("source_work_id", 1)], unique=True)
+        await db.manga_sources.create_index([("manga_id", 1), ("source", 1)])
+
+        # chapter_slots
+        await db.chapter_slots.create_index(
+            [("manga_id", 1), ("language", 1), ("numbering_scope_id", 1), ("unit_kind", 1), ("chapter_key", 1)],
+            unique=True,
+        )
+        await db.chapter_slots.create_index([("manga_id", 1), ("preferred_chapter_id", 1)])
+
         # chapters
         await db.chapters.create_index([("manga_id", 1), ("chapter_numeric", 1)])
         await db.chapters.create_index([("manga_id", 1), ("chapter_number", 1)])
         await db.chapters.create_index([("manga_id", 1), ("language", 1)])
+        await db.chapters.create_index([("logical_chapter_id", 1), ("state", 1)])
+        await db.chapters.create_index([("manga_id", 1), ("language", 1), ("state", 1)])
+        await db.chapters.create_index(
+            [("manga_id", 1), ("source", 1), ("source_id", 1), ("language", 1)],
+            unique=True,
+            partialFilterExpression={"source_id": {"$type": "string"}},
+        )
         await db.chapters.create_index("created_at")
 
         # reading_progress

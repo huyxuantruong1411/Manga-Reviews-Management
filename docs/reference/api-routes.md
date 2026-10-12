@@ -31,9 +31,9 @@ Total Endpoints Discovered: **165**
 | `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:97`](../../backend/routers/chapters.py#L97) | Yes |
 | `GET` | `/api/creators/suggestions` | `get_suggestions` | Creators | [`creators.py:12`](../../backend/routers/creators.py#L12) | Yes |
 | `GET` | `/api/creators/{name}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
-| `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:28`](../../backend/routers/datasources.py#L28) | Yes |
-| `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:37`](../../backend/routers/datasources.py#L37) | Yes |
-| `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:71`](../../backend/routers/datasources.py#L71) | Yes |
+| `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:29`](../../backend/routers/datasources.py#L29) | Yes |
+| `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:38`](../../backend/routers/datasources.py#L38) | Yes |
+| `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:72`](../../backend/routers/datasources.py#L72) | Yes |
 | `GET` | `/api/dictionary/define/{word}` | `define_word` | vision | [`vision.py:512`](../../backend/routers/vision.py#L512) | Yes |
 | `GET` | `/api/downloads/base-path` | `get_base_path` | Downloads | [`downloads.py:21`](../../backend/routers/downloads.py#L21) | Yes |
 | `PUT` | `/api/downloads/base-path` | `update_base_path` | Downloads | [`downloads.py:34`](../../backend/routers/downloads.py#L34) | Yes |

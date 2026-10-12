@@ -75,7 +75,7 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
         )
         with patch.object(service, "_get_chapters_col", return_value=col):
             await service.create_or_update_chapter({"manga_id": "m", "chapter_number": "1", "source_id": "source-2"})
-        col.find_one.assert_awaited_once_with({"manga_id": "m", "source_id": "source-2"})
+        col.find_one.assert_awaited_once_with({"manga_id": "m", "source": "mangadex", "source_id": "source-2"})
         col.update_one.assert_not_awaited()
 
     async def test_audit_lookup_uses_document_id(self):

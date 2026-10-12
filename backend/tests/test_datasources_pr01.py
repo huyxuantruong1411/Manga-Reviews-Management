@@ -181,6 +181,7 @@ async def test_datasources_router_endpoints():
 
     # 3. Test GET /api/datasources/{provider_name}/releases/{work_id}
     from backend.models.datasource import ReleasePage, SourceRelease
+
     mock_page = ReleasePage(
         items=[
             SourceRelease(
@@ -205,4 +206,3 @@ async def test_datasources_router_endpoints():
         )
         assert len(res_page.items) == 1
         assert res_page.items[0].id == "rel-uuid-001"
-

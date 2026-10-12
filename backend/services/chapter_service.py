@@ -235,22 +235,29 @@ class ChapterService:
             "external_url": chapter_data.get("external_url"),
             "source": chapter_data.get("source", "mangadex"),
             "source_id": chapter_data.get("source_id"),
+            "source_work_id": chapter_data.get("source_work_id"),
+            "source_release_type": chapter_data.get("source_release_type"),
+            "state": chapter_data.get("state", "ready"),
+            "schema_version": chapter_data.get("schema_version", 2),
+            "media_revision_id": chapter_data.get("media_revision_id") or str(uuid.uuid4()),
+            "manifest_sha256": chapter_data.get("manifest_sha256"),
             "local_path": chapter_data.get("local_path"),
             "pages": pages,
             "page_count": page_count,
             "updated_at": now,
         }
 
-        # Check if existing chapter matches (manga_id, source_id) or (manga_id, chapter_number, language, scanlation_group)
+        # Check if existing chapter matches (manga_id, source, source_id) or (manga_id, source, chapter_number, language, scanlation_group)
         existing = None
         if doc.get("source_id"):
             existing = await self._get_chapters_col().find_one(
-                {"manga_id": doc["manga_id"], "source_id": doc["source_id"]}
+                {"manga_id": doc["manga_id"], "source": doc["source"], "source_id": doc["source_id"]}
             )
         if not existing and not doc.get("source_id"):
             existing = await self._get_chapters_col().find_one(
                 {
                     "manga_id": doc["manga_id"],
+                    "source": doc["source"],
                     "chapter_number": doc["chapter_number"],
                     "language": doc["language"],
                     "scanlation_group": doc["scanlation_group"],
@@ -259,6 +266,7 @@ class ChapterService:
                 }
             )
 
+        chapter_id_str = None
         if existing:
             old_pages = existing.get("pages", [])
             old_uid_map = {
@@ -269,7 +277,7 @@ class ChapterService:
                     p["page_uid"] = old_uid_map.get(p.get("page_number")) or str(uuid.uuid4())
             doc["pages_revision"] = existing.get("pages_revision", 1) + (1 if pages != old_pages else 0)
             await self._get_chapters_col().update_one({"_id": existing["_id"]}, {"$set": doc})
-            return str(existing["_id"])
+            chapter_id_str = str(existing["_id"])
         else:
             for p in pages:
                 if isinstance(p, dict) and not p.get("page_uid"):
@@ -277,7 +285,17 @@ class ChapterService:
             doc["pages_revision"] = 1
             doc["created_at"] = now
             result = await self._get_chapters_col().insert_one(doc)
-            return str(result.inserted_id)
+            chapter_id_str = str(result.inserted_id)
+
+        # Ensure bound to logical chapter slot
+        try:
+            from backend.services.chapter_slot_service import chapter_slot_service
+
+            await chapter_slot_service.bind_chapter_to_slot(chapter_id_str, doc)
+        except Exception as slot_err:
+            logger.warning(f"Failed to bind chapter {chapter_id_str} to slot: {slot_err}")
+
+        return chapter_id_str
 
     async def sync_chapters_metadata_from_mangadex(self, manga_id: str) -> Dict[str, Any]:
         """
