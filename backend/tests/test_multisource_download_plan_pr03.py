@@ -507,3 +507,71 @@ async def test_slot_preference_update_on_commit():
         success = await slot_service.set_preferred_chapter("60c72b2f9b1d8b2bad000010", "chap_new")
         assert success is True
         assert slots_in_db[0]["preferred_chapter_id"] == "chap_new"
+
+
+@pytest.mark.anyio
+async def test_download_plan_serialization_and_execution_id():
+    """
+    Verifies that DownloadPlan serializes both 'id' and '_id' so clients never encounter 'undefined' plan ID,
+    and that execute_plan properly handles plan execution.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from backend.models.download_plan import DownloadPlan, DownloadPlanItem
+
+    plan = DownloadPlan(
+        _id="plan_abc_123",
+        manga_id="manga_test",
+        source="mangafire",
+        source_work_id="work_xyz",
+        items=[
+            DownloadPlanItem(
+                item_id="item_1",
+                source_release_id="rel_1",
+                chapter_number="1",
+                language="en",
+                unit_kind="chapter",
+                action="download",
+                status="pending",
+            )
+        ],
+        total_items=1,
+        download_count=1,
+        skip_count=0,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+
+    # 1. Check dictionary serialization outputs
+    dump_default = plan.model_dump()
+    dump_alias = plan.model_dump(by_alias=True)
+
+    assert dump_default.get("id") == "plan_abc_123"
+    assert dump_default.get("_id") == "plan_abc_123"
+    assert dump_alias.get("id") == "plan_abc_123"
+    assert dump_alias.get("_id") == "plan_abc_123"
+    assert dump_alias.get("plan_id") == "plan_abc_123"
+
+    # 2. Test execution of plan
+    plan_service = DownloadPlanService()
+    plans_store = {"plan_abc_123": plan.model_dump(by_alias=True)}
+
+    class MockPlansCol:
+        async def find_one(self, query):
+            return plans_store.get(query.get("_id"))
+
+    class MockDownloadService:
+        async def create_task(self, **kwargs):
+            return "task_dl_999"
+
+        async def start_download_background(self, **kwargs):
+            pass
+
+    mock_dl = MockDownloadService()
+    with (
+        patch.object(plan_service, "_get_plans_col", return_value=MockPlansCol()),
+        patch("backend.services.download_service.download_service", mock_dl),
+    ):
+        result = await plan_service.execute_plan(plan_id="plan_abc_123")
+        assert result["task_id"] == "task_dl_999"
+        assert result["plan_id"] == "plan_abc_123"
+        assert result["download_count"] == 1

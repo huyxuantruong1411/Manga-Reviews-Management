@@ -303,7 +303,7 @@ async def delete_download_task(task_id: str = Path(...)):
 # --- Download Plan Endpoints (PR03 Multi-Source) ---
 
 
-@router.post("/manga/{manga_id}/download-plans", response_model=DownloadPlan)
+@router.post("/manga/{manga_id}/download-plans", response_model=DownloadPlan, response_model_by_alias=False)
 async def create_manga_download_plan(
     manga_id: str = Path(..., description="Target manga ID"),
     payload: CreateDownloadPlanRequest = Body(...),
@@ -333,7 +333,7 @@ async def create_manga_download_plan(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/download-plans/{plan_id}", response_model=DownloadPlan)
+@router.get("/download-plans/{plan_id}", response_model=DownloadPlan, response_model_by_alias=False)
 async def get_download_plan(plan_id: str = Path(..., description="Plan ID")):
     """
     Retrieves the status, preview items, and decisions for a download plan.
@@ -346,6 +346,7 @@ async def get_download_plan(plan_id: str = Path(..., description="Plan ID")):
 
 @router.post("/download-plans/{plan_id}/execute", response_model=ExecuteDownloadPlanResponse)
 async def execute_download_plan(
+    background_tasks: BackgroundTasks,
     plan_id: str = Path(..., description="Plan ID"),
     payload: ExecuteDownloadPlanRequest = Body(default_factory=ExecuteDownloadPlanRequest),
 ):
@@ -353,7 +354,11 @@ async def execute_download_plan(
     Executes a verified download plan and starts background downloading.
     """
     try:
-        result = await download_plan_service.execute_plan(plan_id=plan_id, idempotency_key=payload.idempotency_key)
+        result = await download_plan_service.execute_plan(
+            plan_id=plan_id,
+            idempotency_key=payload.idempotency_key,
+            background_tasks=background_tasks,
+        )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

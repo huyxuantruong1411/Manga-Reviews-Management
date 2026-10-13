@@ -797,9 +797,15 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				},
 			);
 
-			const planId = createPlanRes.data.id;
+			const planData = createPlanRes.data as DownloadPlan & { _id?: string };
+			const planId = planData?.id || planData?._id || planData?.plan_id;
+			if (!planId || planId === "undefined") {
+				throw new Error(
+					"Không nhận được mã định danh kế hoạch tải (Download Plan ID).",
+				);
+			}
 
-			// 2. Execute Download Plan
+			// 3. Execute Download Plan
 			const execRes = await client.post(
 				`/api/download-plans/${planId}/execute`,
 				{},

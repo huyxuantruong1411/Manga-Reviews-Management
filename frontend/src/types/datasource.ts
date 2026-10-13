@@ -88,6 +88,8 @@ export interface DownloadPlanItem {
 
 export interface DownloadPlan {
 	id: string;
+	_id?: string;
+	plan_id?: string;
 	manga_id: string;
 	source: string;
 	source_work_id: string;

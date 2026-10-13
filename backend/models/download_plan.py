@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_serializer
 
 
 class DownloadSelectionPolicy(str, Enum):
@@ -51,6 +51,19 @@ class DownloadPlan(BaseModel):
     expires_at: datetime = Field(..., description="Plan expiration timestamp (TTL)")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @computed_field
+    @property
+    def plan_id(self) -> str:
+        return self.id
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler, info):
+        data = handler(self)
+        data["id"] = self.id
+        data["_id"] = self.id
+        data["plan_id"] = self.id
+        return data
 
 
 # --- API Request & Response DTOs ---

@@ -218,7 +218,12 @@ class DownloadPlanService:
             return None
         return DownloadPlan(**doc)
 
-    async def execute_plan(self, plan_id: str, idempotency_key: Optional[str] = None) -> Dict[str, Any]:
+    async def execute_plan(
+        self,
+        plan_id: str,
+        idempotency_key: Optional[str] = None,
+        background_tasks: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         """
         Executes a planned download. Integrates with DownloadService to run background tasks.
         """
@@ -261,14 +266,46 @@ class DownloadPlanService:
 
         from backend.services.download_service import download_service
 
+        manga_title = f"Manga {plan.manga_id}"
+        try:
+            from bson import ObjectId
+
+            manga_query = (
+                {"_id": ObjectId(plan.manga_id)} if ObjectId.is_valid(plan.manga_id) else {"_id": plan.manga_id}
+            )
+            manga_doc = await get_db().mangas.find_one(manga_query)
+            if manga_doc and manga_doc.get("title"):
+                manga_title = manga_doc["title"]
+        except Exception:
+            pass
+
+        download_target_path = plan.download_path if plan.save_to_disk else None
+
         task_id = await download_service.create_task(
             manga_id=plan.manga_id,
-            manga_title=f"Manga {plan.manga_id}",
+            manga_title=manga_title,
             chapters=chapters_list,
             save_to_disk=plan.save_to_disk,
             lang=items_to_download[0].language if items_to_download else "en",
-            download_path=plan.download_path,
+            download_path=download_target_path,
         )
+
+        # Trigger background download execution
+        if background_tasks and hasattr(background_tasks, "add_task"):
+            background_tasks.add_task(
+                download_service.start_download_background,
+                task_id=task_id,
+                download_path=download_target_path,
+            )
+        else:
+            import asyncio
+
+            asyncio.create_task(
+                download_service.start_download_background(
+                    task_id=task_id,
+                    download_path=download_target_path,
+                )
+            )
 
         return {
             "task_id": task_id,
