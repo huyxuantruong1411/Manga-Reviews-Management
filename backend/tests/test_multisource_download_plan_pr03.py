@@ -47,8 +47,112 @@ async def test_create_download_plan_unlinked_source_rejected():
                 source_work_id="unlinked_work",
                 release_ids=["rel_1"],
                 selection_policy=DownloadSelectionPolicy.SKIP_EXISTING,
+                auto_link=False,
             )
         assert "not linked" in str(exc_info.value).lower()
+
+
+@pytest.mark.anyio
+async def test_create_download_plan_auto_link_success():
+    """
+    DL-01b: Verifies that when auto_link=True, an unlinked source work is automatically
+    linked to the target manga without raising 409 Conflict.
+    """
+    plan_service = DownloadPlanService()
+    sources_db = []
+
+    class MockMangaSourcesCol:
+        async def find_one(self, query):
+            for s in sources_db:
+                if s["source"] == query["source"] and s["source_work_id"] == query["source_work_id"]:
+                    return s
+            return None
+
+        async def insert_one(self, doc):
+            doc["_id"] = ObjectId()
+            sources_db.append(doc)
+            return type("Result", (), {"inserted_id": doc["_id"]})()
+
+    class MockChaptersCol:
+        async def find_one(self, query):
+            return None
+
+    class MockSlotsCol:
+        async def find_one(self, query):
+            return None
+
+    class MockPlansCol:
+        async def insert_one(self, doc):
+            return type("Result", (), {"inserted_id": ObjectId()})()
+
+    with (
+        patch.object(plan_service, "_get_manga_sources_col", return_value=MockMangaSourcesCol()),
+        patch.object(plan_service, "_get_chapters_col", return_value=MockChaptersCol()),
+        patch.object(plan_service, "_get_chapter_slots_col", return_value=MockSlotsCol()),
+        patch.object(plan_service, "_get_plans_col", return_value=MockPlansCol()),
+        patch(
+            "backend.services.source_binding_service.source_binding_service._get_sources_col",
+            return_value=MockMangaSourcesCol(),
+        ),
+    ):
+        plan = await plan_service.create_plan(
+            manga_id="manga_1",
+            source="mangafire",
+            source_work_id="new_mangafire_work",
+            release_ids=["rel_1"],
+            selection_policy=DownloadSelectionPolicy.SKIP_EXISTING,
+            auto_link=True,
+        )
+        assert plan is not None
+        assert plan.source == "mangafire"
+        assert plan.source_work_id == "new_mangafire_work"
+        assert len(sources_db) == 1
+        assert sources_db[0]["manga_id"] == "manga_1"
+        assert sources_db[0]["source_work_id"] == "new_mangafire_work"
+
+
+@pytest.mark.anyio
+async def test_create_download_plan_auto_link_conflict_with_another_manga():
+    """
+    DL-01c: Verifies that when auto_link=True, if the remote source work is already bound
+    to a DIFFERENT manga, IdentityConflictError is still raised.
+    """
+    plan_service = DownloadPlanService()
+    sources_db = [
+        {
+            "_id": ObjectId(),
+            "manga_id": "manga_DIFFERENT",
+            "source": "mangafire",
+            "source_work_id": "shared_work",
+        }
+    ]
+
+    class MockMangaSourcesCol:
+        async def find_one(self, query):
+            for s in sources_db:
+                # Query with manga_id filter
+                if "manga_id" in query and s["manga_id"] != query["manga_id"]:
+                    continue
+                if s["source"] == query["source"] and s["source_work_id"] == query["source_work_id"]:
+                    return s
+            return None
+
+    with (
+        patch.object(plan_service, "_get_manga_sources_col", return_value=MockMangaSourcesCol()),
+        patch(
+            "backend.services.source_binding_service.source_binding_service._get_sources_col",
+            return_value=MockMangaSourcesCol(),
+        ),
+    ):
+        with pytest.raises(IdentityConflictError) as exc_info:
+            await plan_service.create_plan(
+                manga_id="manga_1",
+                source="mangafire",
+                source_work_id="shared_work",
+                release_ids=["rel_1"],
+                auto_link=True,
+            )
+        assert "already linked to manga 'manga_different'" in str(exc_info.value).lower()
 
 
 @pytest.mark.anyio

@@ -79,6 +79,16 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 	const [resolvingWork, setResolvingWork] = useState<boolean>(false);
 	const [activeWork, setActiveWork] = useState<SourceWork | null>(null);
 
+	// Linked datasource works
+	const [mangaSources, setMangaSources] = useState<
+		Array<{
+			source: string;
+			source_work_id: string;
+			canonical_url: string;
+			title?: string;
+		}>
+	>([]);
+
 	// Releases catalogue state
 	const [selectedLang, setSelectedLang] = useState<string>("en");
 	const [availableLangs, setAvailableLangs] = useState<string[]>(["en"]);
@@ -134,6 +144,15 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 			}
 		};
 
+		const fetchMangaSources = async () => {
+			try {
+				const res = await client.get(`/api/manga/${mangaId}/sources`);
+				setMangaSources(res.data || []);
+			} catch (e) {
+				console.error("Failed to load manga sources:", e);
+			}
+		};
+
 		const fetchStorageChapters = async () => {
 			setLoadingStorage(true);
 			try {
@@ -177,6 +196,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		};
 
 		fetchProviders();
+		fetchMangaSources();
 		fetchStorageChapters();
 		fetchBasePath();
 	}, [isOpen, mangaId]);
@@ -218,11 +238,37 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				} finally {
 					setResolvingWork(false);
 				}
+			} else {
+				// Check if there is already a linked work for this provider
+				const linked = mangaSources.find((s) => s.source === selectedProvider);
+				if (linked?.source_work_id || linked?.canonical_url) {
+					setResolvingWork(true);
+					try {
+						const res = await client.post<SourceWork>(
+							"/api/datasources/resolve",
+							{
+								url_or_id: linked.canonical_url || linked.source_work_id,
+								provider_hint: selectedProvider,
+							},
+						);
+						setActiveWork(res.data);
+						setAvailableLangs(res.data.available_languages || ["en"]);
+						if (res.data.available_languages?.includes("en")) {
+							setSelectedLang("en");
+						} else if (res.data.available_languages?.[0]) {
+							setSelectedLang(res.data.available_languages[0]);
+						}
+					} catch (err: unknown) {
+						console.error("Failed to auto-resolve linked source:", err);
+					} finally {
+						setResolvingWork(false);
+					}
+				}
 			}
 		};
 
 		initWork();
-	}, [isOpen, selectedProvider, mangadexId]);
+	}, [isOpen, selectedProvider, mangadexId, mangaSources]);
 
 	// Resolve work from custom URL (e.g. MangaFire)
 	const handleResolveUrl = async () => {
@@ -241,8 +287,40 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 			} else if (res.data.available_languages?.[0]) {
 				setSelectedLang(res.data.available_languages[0]);
 			}
+
+			// Automatically link resolved work to this manga
+			try {
+				await client.post(`/api/manga/${mangaId}/sources`, {
+					source: res.data.source,
+					source_work_id: res.data.source_work_id,
+					canonical_url: res.data.url,
+					title: res.data.title,
+				});
+				setMangaSources((prev) => [
+					...prev.filter((s) => s.source !== res.data.source),
+					{
+						source: res.data.source,
+						source_work_id: res.data.source_work_id,
+						canonical_url: res.data.url,
+						title: res.data.title,
+					},
+				]);
+			} catch (linkErr: unknown) {
+				const linkError = linkErr as {
+					response?: { status?: number; data?: { detail?: string } };
+				};
+				if (linkError.response?.status === 409) {
+					const msg =
+						linkError.response?.data?.detail ||
+						"Nguồn này đã được liên kết với một manga khác trong hệ thống!";
+					setReleaseError(msg);
+					showToast(msg, "error");
+					return;
+				}
+			}
+
 			showToast(
-				`Đã nhận diện: "${res.data.title}" từ ${selectedProvider}`,
+				`Đã nhận diện & liên kết: "${res.data.title}" từ ${selectedProvider}`,
 				"success",
 			);
 		} catch (err: unknown) {
@@ -553,7 +631,19 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 
 		setExecuting(true);
 		try {
-			// 1. Create server-side Download Plan
+			// 1. Ensure linkage exists
+			try {
+				await client.post(`/api/manga/${mangaId}/sources`, {
+					source: activeWork.source,
+					source_work_id: activeWork.source_work_id,
+					canonical_url: activeWork.url,
+					title: activeWork.title,
+				});
+			} catch {
+				// Ignored if already linked
+			}
+
+			// 2. Create server-side Download Plan
 			const createPlanRes = await client.post<DownloadPlan>(
 				`/api/manga/${mangaId}/download-plans`,
 				{
@@ -563,6 +653,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 					selection_policy: selectionPolicy,
 					save_to_disk: saveToDisk,
 					download_path: customPath.trim() || undefined,
+					auto_link: true,
 				},
 			);
 

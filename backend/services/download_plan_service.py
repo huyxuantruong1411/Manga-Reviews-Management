@@ -42,6 +42,7 @@ class DownloadPlanService:
         save_to_disk: bool = False,
         download_path: Optional[str] = None,
         ttl_hours: int = 24,
+        auto_link: bool = False,
     ) -> DownloadPlan:
         """
         Creates a validated, server-side download plan.
@@ -56,7 +57,32 @@ class DownloadPlanService:
             }
         )
         if not binding:
-            raise IdentityConflictError(f"Source work '{source}:{source_work_id}' is not linked to manga '{manga_id}'")
+            if auto_link:
+                from backend.services.source_binding_service import source_binding_service
+
+                provider_obj = provider_registry.get_provider(source)
+                canonical_url = f"https://{source}.example/work/{source_work_id}"
+                work_title = ""
+                if provider_obj:
+                    try:
+                        resolved_work = await provider_obj.resolve_work(source_work_id)
+                        if resolved_work:
+                            canonical_url = resolved_work.url or canonical_url
+                            work_title = resolved_work.title or ""
+                    except Exception as e:
+                        logger.warning(f"Could not resolve metadata during auto_link {source}:{source_work_id}: {e}")
+
+                binding = await source_binding_service.link_source_to_manga(
+                    manga_id=manga_id,
+                    source=source,
+                    source_work_id=source_work_id,
+                    canonical_url=canonical_url,
+                    title=work_title,
+                )
+            else:
+                raise IdentityConflictError(
+                    f"Source work '{source}:{source_work_id}' is not linked to manga '{manga_id}'"
+                )
 
         # 2. Get provider and resolve work & releases
         provider = provider_registry.get_provider(source)

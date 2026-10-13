@@ -68,6 +68,7 @@ class CreateDownloadPlanRequest(BaseModel):
     )
     save_to_disk: bool = Field(False, description="Whether to also mirror downloaded images to local filesystem")
     download_path: Optional[str] = Field(None, description="Optional custom root folder for local disk mirror")
+    auto_link: bool = Field(True, description="Whether to auto-link unlinked source work if not bound elsewhere")
 
 
 class ExecuteDownloadPlanRequest(BaseModel):

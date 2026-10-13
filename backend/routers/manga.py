@@ -1,10 +1,11 @@
 import json
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, Body, File, Form, HTTPException, Path, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 
+from backend.models.datasource import IdentityConflictError, LinkSourceRequest
 from backend.models.manga import (
     MangaCreate,
     MangaCreateDex,
@@ -14,6 +15,7 @@ from backend.models.manga import (
 )
 from backend.services.content_deletion_service import DeletionBusyError, DeletionStorageError
 from backend.services.manga_service import DuplicateMangaException, manga_service
+from backend.services.source_binding_service import source_binding_service
 
 router = APIRouter(prefix="/api/manga", tags=["Manga"])
 
@@ -241,3 +243,41 @@ async def get_manga_history(manga_id: str = Path(...)):
     """Get the audit log change history of a manga."""
     history = await manga_service.get_manga_history(manga_id)
     return history
+
+
+@router.get("/{manga_id}/sources")
+async def get_manga_sources(manga_id: str = Path(...)):
+    """Get all linked external datasource works for a manga."""
+    return await source_binding_service.get_manga_sources(manga_id)
+
+
+@router.post("/{manga_id}/sources")
+async def link_manga_source(
+    manga_id: str = Path(...),
+    payload: LinkSourceRequest = Body(...),
+):
+    """Link an external datasource work to a manga. Returns 409 if already linked to another manga."""
+    try:
+        return await source_binding_service.link_source_to_manga(
+            manga_id=manga_id,
+            source=payload.source,
+            source_work_id=payload.source_work_id,
+            canonical_url=payload.canonical_url,
+            title=payload.title,
+            link_state=payload.link_state,
+            numbering_scope_id=payload.numbering_scope_id,
+        )
+    except IdentityConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/{manga_id}/sources/{source}")
+async def unlink_manga_source(
+    manga_id: str = Path(...),
+    source: str = Path(..., description="Datasource name to unlink, e.g. 'mangafire'"),
+):
+    """Unlink or disable an external datasource from a manga."""
+    success = await source_binding_service.unlink_source(manga_id, source)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Source '{source}' is not linked to manga '{manga_id}'")
+    return {"message": f"Source '{source}' unlinked successfully"}

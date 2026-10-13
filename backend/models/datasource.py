@@ -223,3 +223,14 @@ class MetadataApplyResponse(BaseModel):
     applied_fields: List[str] = Field(default_factory=list)
     new_metadata_revision: int
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class LinkSourceRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    source: str = Field(..., description="Provider name e.g. 'mangafire', 'mangadex'")
+    source_work_id: str = Field(..., description="Remote work ID or slug")
+    canonical_url: str = Field(..., description="Canonical URL to remote work")
+    title: Optional[str] = Field(None, description="Title of remote work")
+    link_state: str = Field("verified", description="Link state: 'verified' | 'unverified' | 'candidate'")
+    numbering_scope_id: str = Field("scope_default", description="Numbering scope ID")
