@@ -40,6 +40,25 @@ class ReadingProgressPayload(BaseModel):
     language: Optional[str] = None
 
 
+class UpdateChapterMetadataPayload(BaseModel):
+    chapter_number: Optional[str] = Field(None, description="Chapter number e.g. '14', '1.5', 'oneshot'")
+    volume: Optional[str] = Field(None, description="Volume number/label or None for 'No Volume'")
+    title: Optional[str] = Field(None, description="Chapter title")
+    scanlation_group: Optional[str] = Field(None, description="Scanlation group name")
+    language: Optional[str] = Field(None, description="Language code e.g. en, vi")
+
+
+class BatchUpdateChaptersMetadataPayload(BaseModel):
+    chapter_ids: List[str] = Field(..., description="List of internal chapter IDs to update")
+    volume: Optional[str] = Field(None, description="Volume identifier to assign to all selected chapters")
+    clear_volume: bool = Field(False, description="Whether to explicitly clear volume to No Volume (null)")
+    scanlation_group: Optional[str] = Field(None, description="Scanlation group name to assign")
+    language: Optional[str] = Field(None, description="Language code to assign")
+    title: Optional[str] = Field(None, description="Title to assign")
+    renumber_start: Optional[float] = Field(None, description="Starting chapter number for sequential renumbering")
+    renumber_step: Optional[float] = Field(1.0, description="Step size for sequential renumbering")
+
+
 @router.get("/manga/{manga_id}/chapters")
 async def get_manga_chapters(
     manga_id: str = Path(...), lang: Optional[str] = Query(None), group: Optional[str] = Query(None)
@@ -132,11 +151,47 @@ async def delete_chapter(chapter_id: str = Path(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.patch("/chapters/{chapter_id}")
+async def update_single_chapter_metadata(
+    chapter_id: str = Path(...),
+    payload: UpdateChapterMetadataPayload = Body(...),
+):
+    """Update metadata for an individual chapter."""
+    try:
+        updates = payload.model_dump(exclude_unset=True)
+        return await chapter_service.update_chapter_metadata(chapter_id, updates)
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error updating chapter metadata for {chapter_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/manga/{manga_id}/chapters/batch-metadata")
+async def batch_update_chapters_metadata(
+    manga_id: str = Path(...),
+    payload: BatchUpdateChaptersMetadataPayload = Body(...),
+):
+    """Batch update metadata (volume, group, language, renumber) across multiple chapters."""
+    try:
+        updates = payload.model_dump(exclude_unset=True)
+        if payload.clear_volume:
+            updates["volume"] = None
+        return await chapter_service.batch_update_chapter_metadata(
+            manga_id=manga_id,
+            chapter_ids=payload.chapter_ids,
+            updates=updates,
+        )
+    except Exception as e:
+        logger.error(f"Error batch updating chapter metadata for manga {manga_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/manga/{manga_id}/chapters/sync-metadata")
 async def sync_manga_chapters_metadata(manga_id: str = Path(...)):
-    """Synchronize missing metadata (volume, group_name, uploader, publish_at) from MangaDex for all stored chapters."""
+    """Synchronize missing metadata (volume, group_name, uploader, publish_at) from datasources (MangaDex and MangaFire)."""
     try:
-        res = await chapter_service.sync_chapters_metadata_from_mangadex(manga_id)
+        res = await chapter_service.sync_chapters_metadata(manga_id)
         return res
     except Exception as e:
         logger.error(f"Error syncing chapter metadata for manga {manga_id}: {e}")

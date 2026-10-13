@@ -22,6 +22,7 @@ import {
 	Loader2,
 	Maximize2,
 	Minus,
+	Pencil,
 	Plus,
 	RefreshCw,
 	Search,
@@ -84,6 +85,41 @@ interface ImportStreamProgress {
 		errors: Array<{ folder: string; error: string }>;
 	};
 }
+
+const LANGUAGE_META: Record<string, { name: string; flag: string }> = {
+	en: { name: "English", flag: "🇬🇧" },
+	vi: { name: "Tiếng Việt", flag: "🇻🇳" },
+	ja: { name: "Japanese", flag: "🇯🇵" },
+	ko: { name: "Korean", flag: "🇰🇷" },
+	zh: { name: "Chinese (Simp)", flag: "🇨🇳" },
+	"zh-hk": { name: "Chinese (Trad)", flag: "🇭🇰" },
+	fr: { name: "French", flag: "🇫🇷" },
+	de: { name: "German", flag: "🇩🇪" },
+	es: { name: "Spanish", flag: "🇪🇸" },
+	"es-la": { name: "Spanish (LATAM)", flag: "🇲🇽" },
+	pt: { name: "Portuguese", flag: "🇵🇹" },
+	"pt-br": { name: "Portuguese (BR)", flag: "🇧🇷" },
+	ru: { name: "Russian", flag: "🇷🇺" },
+	id: { name: "Indonesian", flag: "🇮🇩" },
+	th: { name: "Thai", flag: "🇹🇭" },
+	it: { name: "Italian", flag: "🇮🇹" },
+	pl: { name: "Polish", flag: "🇵🇱" },
+	tr: { name: "Turkish", flag: "🇹🇷" },
+	ar: { name: "Arabic", flag: "🇸🇦" },
+	uk: { name: "Ukrainian", flag: "🇺🇦" },
+	ms: { name: "Malay", flag: "🇲🇾" },
+	hi: { name: "Hindi", flag: "🇮🇳" },
+	tl: { name: "Tagalog", flag: "🇵🇭" },
+};
+
+const formatLanguageLabel = (code: string): string => {
+	const lower = code.toLowerCase();
+	const meta = LANGUAGE_META[lower];
+	if (meta) {
+		return `${meta.flag} ${meta.name} (${lower.toUpperCase()})`;
+	}
+	return `🌐 ${code.toUpperCase()}`;
+};
 
 const formatBytes = (bytes: number, decimals = 1) => {
 	if (!bytes || bytes === 0) return "0 B";
@@ -211,6 +247,13 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 	// Delete Confirm Modal
 	const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
+	const [deleteProgress, setDeleteProgress] = useState<{
+		current: number;
+		total: number;
+		currentChapterNumber: string;
+		percent: number;
+		statusText: string;
+	} | null>(null);
 
 	// Manga Export Modal
 	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -247,6 +290,134 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 			logsEndRef.current.scrollIntoView({ behavior: "smooth" });
 		}
 	}, [importProgress?.logs]);
+
+	// Single Chapter Edit Modal
+	const [isSingleEditModalOpen, setIsSingleEditModalOpen] = useState(false);
+	const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
+	const [singleEditChapNum, setSingleEditChapNum] = useState("");
+	const [singleEditTitle, setSingleEditTitle] = useState("");
+	const [singleEditVol, setSingleEditVol] = useState("");
+	const [singleEditGroup, setSingleEditGroup] = useState("");
+	const [singleEditLang, setSingleEditLang] = useState("en");
+	const [singleEditSaving, setSingleEditSaving] = useState(false);
+
+	// Batch Metadata Edit Modal
+	const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
+	const [batchVolume, setBatchVolume] = useState("");
+	const [batchClearVolume, setBatchClearVolume] = useState(false);
+	const [batchEnableRenumber, setBatchEnableRenumber] = useState(false);
+	const [batchRenumberStart, setBatchRenumberStart] = useState<number>(1);
+	const [batchRenumberStep, setBatchRenumberStep] = useState<number>(1);
+	const [batchGroup, setBatchGroup] = useState("");
+	const [batchLanguage, setBatchLanguage] = useState("");
+	const [batchTitle, setBatchTitle] = useState("");
+	const [batchSaving, setBatchSaving] = useState(false);
+
+	const handleOpenSingleEditModal = (chap: Chapter) => {
+		setEditingChapter(chap);
+		setSingleEditChapNum(chap.chapter_number || "");
+		setSingleEditTitle(chap.title || "");
+		setSingleEditVol(chap.volume || "");
+		setSingleEditGroup(chap.scanlation_group || "");
+		setSingleEditLang(chap.language || "en");
+		setIsSingleEditModalOpen(true);
+	};
+
+	const handleSaveSingleEdit = async () => {
+		if (!editingChapter) return;
+		setSingleEditSaving(true);
+		try {
+			const payload: any = {
+				chapter_number: singleEditChapNum.trim() || "1",
+				title: singleEditTitle.trim(),
+				volume: singleEditVol.trim() ? singleEditVol.trim() : null,
+				scanlation_group: singleEditGroup.trim()
+					? singleEditGroup.trim()
+					: null,
+				language: singleEditLang.trim().toLowerCase() || "en",
+			};
+			await client.patch(`/api/chapters/${editingChapter.id}`, payload);
+			showAlert({
+				title: "Cập nhật thành công",
+				message: `Đã lưu metadata cho Chapter ${payload.chapter_number}.`,
+				type: "success",
+			});
+			setIsSingleEditModalOpen(false);
+			setEditingChapter(null);
+			await fetchChapters();
+			if (onRefreshChapters) onRefreshChapters();
+		} catch (e: any) {
+			showAlert({
+				title: "Lỗi lưu metadata",
+				message:
+					e.response?.data?.detail || "Không thể cập nhật metadata chapter.",
+				type: "error",
+			});
+		} finally {
+			setSingleEditSaving(false);
+		}
+	};
+
+	const handleSaveBatchEdit = async () => {
+		if (selectedChapterIds.length === 0) return;
+		setBatchSaving(true);
+		try {
+			const payload: any = {
+				chapter_ids: selectedChapterIds,
+			};
+
+			if (batchClearVolume) {
+				payload.clear_volume = true;
+			} else if (batchVolume.trim()) {
+				payload.volume = batchVolume.trim();
+			}
+
+			if (batchEnableRenumber) {
+				payload.renumber_start = Number(batchRenumberStart) || 1;
+				payload.renumber_step = Number(batchRenumberStep) || 1;
+			}
+
+			if (batchGroup.trim()) {
+				payload.scanlation_group = batchGroup.trim();
+			}
+
+			if (batchLanguage.trim()) {
+				payload.language = batchLanguage.trim().toLowerCase();
+			}
+
+			if (batchTitle.trim()) {
+				payload.title = batchTitle.trim();
+			}
+
+			const res = await client.post(
+				`/api/manga/${mangaId}/chapters/batch-metadata`,
+				payload,
+			);
+			showAlert({
+				title: "Cập nhật hàng loạt thành công",
+				message: `Đã cập nhật metadata cho ${res.data?.updated_count || selectedChapterIds.length} chapters.`,
+				type: "success",
+			});
+			setIsBatchEditModalOpen(false);
+			setBatchVolume("");
+			setBatchClearVolume(false);
+			setBatchEnableRenumber(false);
+			setBatchGroup("");
+			setBatchLanguage("");
+			setBatchTitle("");
+			setSelectedChapterIds([]);
+			await fetchChapters();
+			if (onRefreshChapters) onRefreshChapters();
+		} catch (e: any) {
+			showAlert({
+				title: "Lỗi cập nhật hàng loạt",
+				message: e.response?.data?.detail || "Không thể cập nhật metadata.",
+				type: "error",
+			});
+		} finally {
+			setBatchSaving(false);
+		}
+	};
 
 	// Fetch chapters
 	const fetchChapters = async () => {
@@ -695,19 +866,33 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 		setLastSelectedPageNumber(null);
 	};
 
-	// Deletion execution
+	// Deletion execution with granular live progress
 	const handleDeleteConfirm = async () => {
 		setDeleting(true);
 		try {
 			if (activeChapter) {
 				// Delete selected pages from active chapter
 				if (selectedPageNumbers.length > 0) {
+					setDeleteProgress({
+						current: 0,
+						total: selectedPageNumbers.length,
+						currentChapterNumber: activeChapter.chapter_number,
+						percent: 30,
+						statusText: `Đang xóa ${selectedPageNumbers.length} trang ảnh khỏi kho lưu trữ MinIO...`,
+					});
 					const deletion = await client.post(
 						`/api/chapters/${activeChapter.id}/delete-pages`,
 						{
 							page_numbers: selectedPageNumbers,
 						},
 					);
+					setDeleteProgress({
+						current: selectedPageNumbers.length,
+						total: selectedPageNumbers.length,
+						currentChapterNumber: activeChapter.chapter_number,
+						percent: 100,
+						statusText: "Đã xóa xong ảnh và cập nhật lại số thứ tự trang.",
+					});
 					// Refresh active chapter
 					const res = await client.get(`/api/chapters/${activeChapter.id}`);
 					setActiveChapterPages(res.data.pages || []);
@@ -722,19 +907,81 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 					fetchChapters();
 				}
 			} else {
-				// Delete selected chapters
-				for (const chapId of selectedChapterIds) {
-					await client.delete(`/api/chapters/${chapId}`);
+				// Delete selected chapters with real-time per-chapter progress
+				const total = selectedChapterIds.length;
+				let completed = 0;
+				const failedChaps: string[] = [];
+
+				setDeleteProgress({
+					current: 0,
+					total,
+					currentChapterNumber: "",
+					percent: 0,
+					statusText: `Chuẩn bị xóa ${total} chapter...`,
+				});
+
+				for (let i = 0; i < total; i++) {
+					const chapId = selectedChapterIds[i];
+					const chap = chapters.find((c) => c.id === chapId);
+					const chapNum = chap ? chap.chapter_number : `#${i + 1}`;
+
+					setDeleteProgress({
+						current: i + 1,
+						total,
+						currentChapterNumber: chapNum,
+						percent: Math.round((i / total) * 100),
+						statusText: `Đang xóa Chapter ${chapNum} (${i + 1}/${total}) và các trang ảnh trong MinIO...`,
+					});
+
+					try {
+						await client.delete(`/api/chapters/${chapId}`);
+						completed++;
+					} catch (delErr) {
+						console.error(`Failed to delete chapter ${chapId}:`, delErr);
+						failedChaps.push(chapNum);
+					}
+
+					setDeleteProgress({
+						current: i + 1,
+						total,
+						currentChapterNumber: chapNum,
+						percent: Math.round(((i + 1) / total) * 100),
+						statusText: `Đã xóa xong Chapter ${chapNum} (${i + 1}/${total})`,
+					});
 				}
+
+				// Small delay so user sees 100% completion
+				await new Promise((r) => setTimeout(r, 350));
+
 				setSelectedChapterIds([]);
 				fetchChapters();
+
+				if (failedChaps.length > 0) {
+					showAlert({
+						title: "Xóa hoàn tất với một số lỗi",
+						message: `Đã xóa ${completed}/${total} chapter. Lỗi khi xóa: ${failedChaps.join(", ")}.`,
+						type: "warning",
+					});
+				} else {
+					showAlert({
+						title: "Xóa thành công",
+						message: `Đã xóa vĩnh viễn toàn bộ ${completed} chapter và dữ liệu ảnh trong MinIO.`,
+						type: "success",
+					});
+				}
 			}
 			setIsDeleteModalOpen(false);
 		} catch (err) {
 			console.error("Error during deletion:", err);
-			alert("Error occurred while deleting items. Check server logs.");
+			showAlert({
+				title: "Lỗi trong quá trình xóa",
+				message:
+					"Có lỗi xảy ra khi xóa dữ liệu. Vui lòng kiểm tra lại server log.",
+				type: "error",
+			});
 		} finally {
 			setDeleting(false);
+			setDeleteProgress(null);
 		}
 	};
 
@@ -1179,13 +1426,37 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 			{/* Chapter Overview View */}
 			{!activeChapter ? (
 				<div className="space-y-4">
-					{/* Controls: Search, Filters, Selection status */}
-					<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-						{/* Search & Filters */}
-						<div className="flex flex-wrap items-center gap-2.5 flex-1">
-							<div className="relative flex-1 min-w-[180px] max-w-sm">
+					{/* Active Sync Progress Banner */}
+					{syncingMetadata && (
+						<div className="p-3 px-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
+							<div className="flex items-center gap-3">
+								<RefreshCw
+									size={18}
+									className="animate-spin text-blue-500 shrink-0"
+								/>
+								<div>
+									<h4 className="text-xs font-bold text-[var(--text-primary)]">
+										Đang đồng bộ Metadata từ MangaDex & MangaFire...
+									</h4>
+									<p className="text-[11px] text-[var(--text-secondary)]">
+										Hệ thống đang đối chiếu Volume, tiêu đề và số thứ tự của{" "}
+										{chapters.length} chapter trong thư viện.
+									</p>
+								</div>
+							</div>
+							<div className="w-36 bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner shrink-0">
+								<div className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full w-3/4 animate-pulse rounded-full" />
+							</div>
+						</div>
+					)}
+
+					{/* Toolbar: Search & Filters (Row 1) */}
+					<div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-zinc-50/50 dark:bg-zinc-900/40 rounded-2xl border border-[var(--border-primary)]">
+						{/* Left: Search & Filter Selectors */}
+						<div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+							<div className="relative flex-1 min-w-[180px] max-w-xs">
 								<Search
-									size={15}
+									size={14}
 									className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
 								/>
 								<input
@@ -1193,190 +1464,111 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									placeholder="Tìm theo số chap, title..."
 									value={searchQuery}
 									onChange={(e) => setSearchQuery(e.target.value)}
-									className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-orange)] transition"
+									className="w-full pl-9 pr-7 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-orange)] transition"
 								/>
 								{searchQuery && (
 									<button
 										onClick={() => setSearchQuery("")}
-										className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+										className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
 									>
 										<X size={13} />
 									</button>
 								)}
 							</div>
 
-							{/* Language Filter */}
+							{/* Language Filter Dropdown (Scalable to dozens of languages) */}
 							{availableLanguages.length > 0 && (
-								<div className="flex items-center gap-1 p-1 bg-zinc-500/10 rounded-xl border border-[var(--border-primary)] shrink-0 flex-wrap">
-									<button
-										type="button"
-										onClick={() => setSelectedLanguage("all")}
-										className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-											selectedLanguage === "all"
-												? "bg-[var(--brand-orange)] text-white shadow-xs"
-												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-										}`}
+								<div className="relative inline-flex items-center shrink-0">
+									<Globe
+										size={13}
+										className="absolute left-3 text-zinc-400 pointer-events-none"
+									/>
+									<select
+										value={selectedLanguage}
+										onChange={(e) => setSelectedLanguage(e.target.value)}
+										className="pl-8 pr-8 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand-orange)] transition appearance-none cursor-pointer hover:border-zinc-400"
+										title="Lọc theo ngôn ngữ"
 									>
-										<Globe size={12} />
-										<span>Tất cả</span>
-										<span className="text-[10px] opacity-80">
-											({chapters.length})
-										</span>
-									</button>
-									{availableLanguages.map((l) => {
-										const count = chapters.filter(
-											(c) =>
-												(c.language || "en").toLowerCase() === l.toLowerCase(),
-										).length;
-										const isSelected = selectedLanguage === l.toLowerCase();
-										const label =
-											l.toLowerCase() === "vi"
-												? "VI (Tiếng Việt)"
-												: l.toLowerCase() === "en"
-													? "EN (English)"
-													: l.toUpperCase();
-										return (
-											<button
-												key={l}
-												type="button"
-												onClick={() => setSelectedLanguage(l.toLowerCase())}
-												className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-													isSelected
-														? "bg-blue-600 text-white shadow-xs"
-														: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-500/10"
-												}`}
-											>
-												<span>{label}</span>
-												<span
-													className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/25 text-white" : "bg-zinc-500/20 text-zinc-400"}`}
-												>
-													{count}
-												</span>
-											</button>
-										);
-									})}
+										<option value="all">
+											🌐 Tất cả ngôn ngữ ({chapters.length})
+										</option>
+										{availableLanguages.map((l) => {
+											const count = chapters.filter(
+												(c) =>
+													(c.language || "en").toLowerCase() ===
+													l.toLowerCase(),
+											).length;
+											return (
+												<option key={l} value={l.toLowerCase()}>
+													{formatLanguageLabel(l)} ({count})
+												</option>
+											);
+										})}
+									</select>
+									<ChevronDown
+										size={12}
+										className="absolute right-2.5 text-zinc-400 pointer-events-none"
+									/>
 								</div>
 							)}
 
+							{/* Scanlation Group Dropdown */}
 							{availableGroups.length > 1 && (
-								<select
-									value={selectedGroup}
-									onChange={(e) => setSelectedGroup(e.target.value)}
-									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)]"
-								>
-									<option value="all">Tất cả nhóm dịch</option>
-									{availableGroups.map((g) => (
-										<option key={g} value={g}>
-											{g}
-										</option>
-									))}
-								</select>
+								<div className="relative inline-flex items-center shrink-0">
+									<select
+										value={selectedGroup}
+										onChange={(e) => setSelectedGroup(e.target.value)}
+										className="px-3 pr-7 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)] transition appearance-none cursor-pointer hover:border-zinc-400"
+									>
+										<option value="all">Tất cả nhóm dịch</option>
+										{availableGroups.map((g) => (
+											<option key={g} value={g}>
+												{g}
+											</option>
+										))}
+									</select>
+									<ChevronDown
+										size={12}
+										className="absolute right-2 text-zinc-400 pointer-events-none"
+									/>
+								</div>
 							)}
 
+							{/* Source Dropdown */}
 							{availableSources.length > 1 && (
-								<select
-									value={selectedSource}
-									onChange={(e) => setSelectedSource(e.target.value)}
-									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)]"
-									title="Lọc theo nguồn dữ liệu"
-								>
-									<option value="all">Tất cả nguồn ({chapters.length})</option>
-									{availableSources.map((s) => (
-										<option key={s} value={s}>
-											{s === "mangafire"
-												? "MangaFire"
-												: s === "mangadex"
-													? "MangaDex"
-													: s === "local_import"
-														? "Local Import"
-														: s}
+								<div className="relative inline-flex items-center shrink-0">
+									<select
+										value={selectedSource}
+										onChange={(e) => setSelectedSource(e.target.value)}
+										className="px-3 pr-7 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-semibold text-[var(--text-secondary)] focus:outline-none focus:border-[var(--brand-orange)] transition appearance-none cursor-pointer hover:border-zinc-400"
+										title="Lọc theo nguồn dữ liệu"
+									>
+										<option value="all">
+											Tất cả nguồn ({chapters.length})
 										</option>
-									))}
-								</select>
+										{availableSources.map((s) => (
+											<option key={s} value={s}>
+												{s === "mangafire"
+													? "MangaFire"
+													: s === "mangadex"
+														? "MangaDex"
+														: s === "local_import"
+															? "Local Import"
+															: s}
+											</option>
+										))}
+									</select>
+									<ChevronDown
+										size={12}
+										className="absolute right-2 text-zinc-400 pointer-events-none"
+									/>
+								</div>
 							)}
 						</div>
 
-						{/* Selection actions & View Switcher */}
-						<div className="flex items-center flex-wrap gap-2">
-							{/* Select Current Page Chapters */}
-							<button
-								type="button"
-								onClick={handleToggleCurrentPageChapters}
-								className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5 transition cursor-pointer"
-								title="Chọn / Bỏ chọn toàn bộ các chapter hiển thị trên trang này"
-							>
-								{isCurrentPageAllSelected ? (
-									<CheckSquare
-										size={14}
-										className="text-[var(--brand-orange)]"
-									/>
-								) : isCurrentPageSomeSelected ? (
-									<CheckSquare size={14} className="text-zinc-400" />
-								) : (
-									<Square size={14} />
-								)}
-								<span>
-									Chọn trang này (
-									{
-										paginatedChapters.filter((c) =>
-											selectedChapterIds.includes(c.id),
-										).length
-									}
-									/{paginatedChapters.length})
-								</span>
-							</button>
-
-							{/* Select All Filtered Chapters across all pages */}
-							{totalFilteredCount > paginatedChapters.length && (
-								<button
-									type="button"
-									onClick={handleSelectAllChapters}
-									className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
-										selectedChapterIds.length === totalFilteredCount
-											? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)]"
-											: "border-[var(--border-primary)] hover:border-zinc-400 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-									}`}
-									title="Chọn toàn bộ chapters trong danh sách đã lọc"
-								>
-									<CheckSquare size={14} />
-									<span>
-										Chọn toàn bộ ({selectedChapterIds.length}/
-										{totalFilteredCount})
-									</span>
-								</button>
-							)}
-
-							{selectedChapterIds.length > 0 && (
-								<>
-									<button
-										onClick={handleDeselectAllChapters}
-										className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 flex items-center space-x-1.5 transition cursor-pointer"
-										title="Bỏ chọn toàn bộ chapters đang chọn"
-									>
-										<X size={14} />
-										<span>Bỏ chọn ({selectedChapterIds.length})</span>
-									</button>
-
-									<button
-										onClick={() => setIsDeleteModalOpen(true)}
-										className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center space-x-1.5 transition shadow-sm animate-in fade-in cursor-pointer"
-									>
-										<Trash2 size={14} />
-										<span>Xóa đã chọn ({selectedChapterIds.length})</span>
-									</button>
-
-									<button
-										type="button"
-										onClick={() => setIsExportModalOpen(true)}
-										className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center space-x-1.5 transition shadow-sm animate-in fade-in cursor-pointer"
-										title="Xuất các chapters đã được chọn"
-									>
-										<Download size={14} />
-										<span>Xuất đã chọn ({selectedChapterIds.length})</span>
-									</button>
-								</>
-							)}
-
+						{/* Right: View & Utility Controls */}
+						<div className="flex items-center gap-2 shrink-0 flex-wrap">
+							{/* Volume Grouping Toggle */}
 							{hasAnyVolume && (
 								<button
 									type="button"
@@ -1384,7 +1576,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
 										groupByVolume
 											? "bg-[var(--brand-orange)]/15 border-[var(--brand-orange)] text-[var(--brand-orange)]"
-											: "border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+											: "border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-400"
 									}`}
 									title="Bật/Tắt phân nhóm theo Volume như MangaDex"
 								>
@@ -1393,12 +1585,13 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 								</button>
 							)}
 
+							{/* Metadata Sync */}
 							<button
 								type="button"
 								disabled={syncingMetadata}
 								onClick={handleSyncMetadata}
 								className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
-								title="Đồng bộ lại thông tin metadata (Volume, Scanlation Group, Uploader, Ngày đăng) từ MangaDex cho các chương đã tải"
+								title="Đồng bộ lại thông tin metadata (Volume, Tiêu đề, Số chapter, Nhóm dịch) từ MangaDex và MangaFire cho các chương đã tải"
 							>
 								<RefreshCw
 									size={13}
@@ -1409,12 +1602,14 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									}
 								/>
 								<span>
-									{syncingMetadata ? "Đang đồng bộ..." : "Đồng bộ MangaDex"}
+									{syncingMetadata ? "Đang đồng bộ..." : "Đồng bộ Metadata"}
 								</span>
 							</button>
 
+							{/* Grid / List Switcher */}
 							<div className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden p-0.5 bg-[var(--bg-primary)]">
 								<button
+									type="button"
 									onClick={() => setViewMode("grid")}
 									className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
 										viewMode === "grid"
@@ -1425,6 +1620,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 									Grid
 								</button>
 								<button
+									type="button"
 									onClick={() => setViewMode("list")}
 									className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
 										viewMode === "list"
@@ -1437,6 +1633,120 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 							</div>
 						</div>
 					</div>
+
+					{/* Selection & Batch Actions Bar (Row 2) */}
+					{selectedChapterIds.length > 0 ? (
+						<div className="p-2.5 px-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 flex-wrap animate-in fade-in slide-in-from-top-1 duration-150">
+							<div className="flex items-center gap-2 flex-wrap">
+								<span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+									<CheckSquare size={15} />
+									<span>
+										Đã chọn {selectedChapterIds.length} / {totalFilteredCount}{" "}
+										chương
+									</span>
+								</span>
+
+								<button
+									type="button"
+									onClick={handleToggleCurrentPageChapters}
+									className="px-2.5 py-1 rounded-lg border border-amber-500/30 hover:bg-amber-500/20 text-xs font-medium text-[var(--text-primary)] transition cursor-pointer inline-flex items-center gap-1.5"
+								>
+									{isCurrentPageAllSelected ? (
+										<CheckSquare
+											size={13}
+											className="text-[var(--brand-orange)]"
+										/>
+									) : isCurrentPageSomeSelected ? (
+										<CheckSquare size={13} className="text-zinc-400" />
+									) : (
+										<Square size={13} />
+									)}
+									<span>
+										{isCurrentPageAllSelected
+											? "Bỏ chọn trang này"
+											: "Chọn hết trang này"}
+									</span>
+								</button>
+
+								{totalFilteredCount > paginatedChapters.length &&
+									selectedChapterIds.length < totalFilteredCount && (
+										<button
+											type="button"
+											onClick={handleSelectAllChapters}
+											className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] text-white text-xs font-bold shadow-xs transition cursor-pointer"
+										>
+											Chọn toàn bộ ({totalFilteredCount})
+										</button>
+									)}
+
+								<button
+									type="button"
+									onClick={handleDeselectAllChapters}
+									className="px-2.5 py-1 rounded-lg hover:bg-zinc-500/20 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition cursor-pointer inline-flex items-center gap-1"
+									title="Bỏ chọn toàn bộ"
+								>
+									<X size={13} />
+									<span>Bỏ chọn</span>
+								</button>
+							</div>
+
+							<div className="flex items-center gap-2 flex-wrap">
+								<button
+									type="button"
+									onClick={() => setIsBatchEditModalOpen(true)}
+									className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+									title="Gán Volume và sửa metadata hàng loạt cho các chapters đã chọn"
+								>
+									<Layers size={14} />
+									<span>Gán Vol / Sửa ({selectedChapterIds.length})</span>
+								</button>
+
+								<button
+									type="button"
+									onClick={() => setIsExportModalOpen(true)}
+									className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+									title="Xuất các chapters đã được chọn"
+								>
+									<Download size={14} />
+									<span>Xuất đã chọn ({selectedChapterIds.length})</span>
+								</button>
+
+								<button
+									type="button"
+									onClick={() => setIsDeleteModalOpen(true)}
+									className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+									title="Xóa các chapters đã được chọn"
+								>
+									<Trash2 size={14} />
+									<span>Xóa đã chọn ({selectedChapterIds.length})</span>
+								</button>
+							</div>
+						</div>
+					) : (
+						<div className="flex items-center gap-2 text-xs">
+							<button
+								type="button"
+								onClick={handleToggleCurrentPageChapters}
+								className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center space-x-1.5 transition cursor-pointer"
+								title="Chọn / Bỏ chọn toàn bộ các chapter hiển thị trên trang này"
+							>
+								<Square size={14} />
+								<span>Chọn trang này (0/{paginatedChapters.length})</span>
+							</button>
+
+							{totalFilteredCount > paginatedChapters.length && (
+								<button
+									type="button"
+									onClick={handleSelectAllChapters}
+									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center space-x-1.5 transition cursor-pointer"
+									title="Chọn toàn bộ chapters trong danh sách đã lọc"
+								>
+									<CheckSquare size={14} />
+									<span>Chọn toàn bộ ({totalFilteredCount})</span>
+								</button>
+							)}
+						</div>
+					)}
 
 					{/* Sub-bar: Status and Top Pagination Controls */}
 					{totalFilteredCount > 0 && (
@@ -1595,11 +1905,16 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 													{/* Selection Checkbox */}
 													<div
 														onClick={(e) => handleChapterSelect(chap.id, e)}
-														className={`p-1 rounded-md transition shrink-0 ${
+														className={`p-1.5 rounded-lg transition cursor-pointer shrink-0 ${
 															isSelected
 																? "text-[var(--brand-orange)]"
-																: "text-zinc-300 dark:text-zinc-600 hover:text-zinc-500"
+																: "text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 														}`}
+														title={
+															isSelected
+																? "Bỏ chọn chapter này"
+																: "Chọn chapter này"
+														}
 													>
 														{isSelected ? (
 															<CheckSquare size={18} />
@@ -1674,21 +1989,33 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 											</div>
 
 											{/* Bottom Actions */}
-											<div className="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-[var(--border-primary)]/40">
+											<div className="flex items-center gap-1.5 pt-3 mt-3 border-t border-[var(--border-primary)]/40">
+												<button
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														handleOpenSingleEditModal(chap);
+													}}
+													className="p-1.5 rounded-xl border border-[var(--border-primary)] hover:border-amber-500 hover:bg-amber-500/10 text-zinc-400 hover:text-amber-500 dark:text-zinc-500 dark:hover:text-amber-400 transition cursor-pointer shrink-0 flex items-center justify-center"
+													title="Sửa metadata chương (Số chương, Volume, Tiêu đề, Nhóm dịch)"
+												>
+													<Pencil size={14} className="text-amber-500" />
+												</button>
+
 												<button
 													type="button"
 													onClick={(e) => {
 														e.stopPropagation();
 														handleOpenChapter(chap);
 													}}
-													className="py-1.5 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition flex items-center justify-center space-x-1.5 whitespace-nowrap overflow-hidden"
+													className="py-1.5 px-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold transition flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
 													title="Xem và quản lý các trang ảnh bên trong chapter"
 												>
 													<FolderOpen
 														size={13}
-														className="shrink-0 text-zinc-400 group-hover:text-[var(--brand-orange)]"
+														className="shrink-0 text-zinc-400"
 													/>
-													<span className="truncate">Xem ảnh</span>
+													<span>Xem ảnh</span>
 												</button>
 
 												<button
@@ -1697,11 +2024,11 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 														e.stopPropagation();
 														onOpenReader(chap.id, 1);
 													}}
-													className="py-1.5 px-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-1.5 whitespace-nowrap"
+													className="flex-1 py-1.5 px-3 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap min-w-0"
 													title="Đọc chapter này trong trình đọc toàn màn hình"
 												>
 													<Eye size={13} className="shrink-0" />
-													<span>Đọc ngay</span>
+													<span className="truncate">Đọc ngay</span>
 												</button>
 											</div>
 										</div>
@@ -1738,7 +2065,9 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 											<th className="p-3">Người đăng</th>
 											<th className="p-3">Ngày đăng</th>
 											<th className="p-3">Trang</th>
-											<th className="p-3 text-right">Hành động</th>
+											<th className="p-3 text-right whitespace-nowrap w-[240px]">
+												Hành động
+											</th>
 										</tr>
 									</thead>
 									<tbody className="divide-y divide-[var(--border-primary)]">
@@ -1813,26 +2142,47 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 														)}
 													</td>
 													<td className="p-3 font-bold">{chap.page_count}</td>
-													<td className="p-3 text-right space-x-2">
-														<button
-															onClick={(e) => {
-																e.stopPropagation();
-																handleOpenChapter(chap);
-															}}
-															className="px-2.5 py-1 rounded-lg border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-primary)] transition"
-														>
-															Xem ảnh
-														</button>
-														<button
-															onClick={(e) => {
-																e.stopPropagation();
-																onOpenReader(chap.id, 1);
-															}}
-															className="px-2.5 py-1 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition inline-flex items-center space-x-1"
-														>
-															<Eye size={12} />
-															<span>Đọc ngay</span>
-														</button>
+													<td className="p-3 text-right whitespace-nowrap">
+														<div className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
+															<button
+																type="button"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleOpenSingleEditModal(chap);
+																}}
+																className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:border-amber-500 hover:bg-amber-500/10 text-zinc-400 hover:text-amber-500 transition cursor-pointer shrink-0 inline-flex items-center justify-center"
+																title="Sửa metadata chương (Số chapter, Volume, Tiêu đề, Nhóm dịch)"
+															>
+																<Pencil size={13} className="text-amber-500" />
+															</button>
+															<button
+																type="button"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleOpenChapter(chap);
+																}}
+																className="px-2.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-semibold text-[var(--text-primary)] transition shrink-0 inline-flex items-center gap-1.5"
+																title="Xem và quản lý các trang ảnh bên trong"
+															>
+																<FolderOpen
+																	size={12}
+																	className="text-zinc-400"
+																/>
+																<span>Xem ảnh</span>
+															</button>
+															<button
+																type="button"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	onOpenReader(chap.id, 1);
+																}}
+																className="px-3 py-1.5 rounded-lg bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-sm transition shrink-0 inline-flex items-center gap-1.5"
+																title="Đọc chương này ngay"
+															>
+																<Eye size={12} />
+																<span>Đọc ngay</span>
+															</button>
+														</div>
 													</td>
 												</tr>
 											);
@@ -2295,53 +2645,132 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 				</div>
 			)}
 
-			{/* Delete Confirmation Modal */}
+			{/* Delete Confirmation & Live Progress Modal */}
 			{isDeleteModalOpen && (
 				<div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
 					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-						<div className="flex items-center space-x-3 text-rose-500">
-							<div className="p-2 rounded-2xl bg-rose-500/10">
-								<AlertTriangle size={24} />
+						{deleting && deleteProgress ? (
+							<div className="space-y-4">
+								<div className="flex items-center space-x-3 text-rose-500">
+									<div className="p-2.5 rounded-2xl bg-rose-500/10">
+										<Loader2 size={24} className="animate-spin text-rose-500" />
+									</div>
+									<div>
+										<h3 className="text-base font-black text-[var(--text-primary)]">
+											Đang xóa dữ liệu Storage ({deleteProgress.current}/
+											{deleteProgress.total})
+										</h3>
+										<p className="text-[11px] text-[var(--text-secondary)]">
+											Tiến trình dọn dẹp các tệp ảnh trong MinIO & Database
+										</p>
+									</div>
+								</div>
+
+								<div className="space-y-2 py-1">
+									<div className="flex items-center justify-between text-xs font-bold">
+										<span className="text-[var(--text-secondary)] truncate max-w-[280px]">
+											{deleteProgress.statusText}
+										</span>
+										<span className="font-mono text-rose-500 font-black shrink-0">
+											{deleteProgress.percent}%
+										</span>
+									</div>
+									{/* Progress Bar */}
+									<div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner relative">
+										<div
+											className="bg-gradient-to-r from-rose-500 to-amber-500 h-full rounded-full transition-all duration-300 ease-out"
+											style={{
+												width: `${Math.max(deleteProgress.percent, 3)}%`,
+											}}
+										/>
+									</div>
+								</div>
+
+								<div className="p-3 rounded-2xl bg-zinc-500/10 border border-[var(--border-primary)]/60 text-[11px] text-[var(--text-secondary)] space-y-1">
+									<div className="flex items-center justify-between">
+										<span>Đã hoàn thành:</span>
+										<strong className="text-[var(--text-primary)] font-mono">
+											{deleteProgress.current} / {deleteProgress.total}
+										</strong>
+									</div>
+									{deleteProgress.currentChapterNumber && (
+										<div className="flex items-center justify-between">
+											<span>Chương đang xử lý:</span>
+											<strong className="text-amber-500 font-mono">
+												Chapter {deleteProgress.currentChapterNumber}
+											</strong>
+										</div>
+									)}
+									<p className="text-[10px] text-zinc-400 italic pt-1 border-t border-[var(--border-primary)]/40">
+										⚠️ Vui lòng không đóng cửa sổ hoặc tải lại trang trong khi hệ
+										thống đang xóa dữ liệu.
+									</p>
+								</div>
+
+								<div className="flex items-center justify-end pt-2">
+									<button
+										type="button"
+										disabled
+										className="px-4 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-400 text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed opacity-75"
+									>
+										<Loader2 size={13} className="animate-spin" />
+										<span>Đang xóa ({deleteProgress.percent}%)...</span>
+									</button>
+								</div>
 							</div>
-							<h3 className="text-lg font-black text-[var(--text-primary)]">
-								Xác nhận xóa dữ liệu Storage
-							</h3>
-						</div>
+						) : (
+							<div className="space-y-4">
+								<div className="flex items-center space-x-3 text-rose-500">
+									<div className="p-2 rounded-2xl bg-rose-500/10">
+										<AlertTriangle size={24} />
+									</div>
+									<h3 className="text-lg font-black text-[var(--text-primary)]">
+										Xác nhận xóa dữ liệu Storage
+									</h3>
+								</div>
 
-						<p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-							{activeChapter ? (
-								<>
-									Bạn có chắc chắn muốn xóa{" "}
-									<strong>{selectedPageNumbers.length} trang</strong> khỏi
-									Chapter {activeChapter.chapter_number}? Các trang còn lại sẽ
-									được tự động đánh lại số thứ tự.
-								</>
-							) : (
-								<>
-									Bạn có chắc chắn muốn xóa{" "}
-									<strong>{selectedChapterIds.length} chapter</strong> đã chọn?
-									Toàn bộ các trang ảnh lưu trong MinIO của các chương này sẽ bị
-									xóa vĩnh viễn.
-								</>
-							)}
-						</p>
+								<p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+									{activeChapter ? (
+										<>
+											Bạn có chắc chắn muốn xóa{" "}
+											<strong className="text-rose-500">
+												{selectedPageNumbers.length} trang
+											</strong>{" "}
+											khỏi Chapter {activeChapter.chapter_number}? Toàn bộ tệp
+											ảnh tương ứng trong MinIO sẽ bị xóa vĩnh viễn và các trang
+											còn lại sẽ được tự động đánh lại số.
+										</>
+									) : (
+										<>
+											Bạn có chắc chắn muốn xóa{" "}
+											<strong className="text-rose-500">
+												{selectedChapterIds.length} chapter
+											</strong>{" "}
+											đã chọn? Toàn bộ các trang ảnh lưu trong MinIO của các
+											chương này sẽ bị xóa vĩnh viễn.
+										</>
+									)}
+								</p>
 
-						<div className="flex items-center justify-end space-x-3 pt-3 border-t border-[var(--border-primary)]">
-							<button
-								onClick={() => setIsDeleteModalOpen(false)}
-								className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-							>
-								Hủy
-							</button>
-							<button
-								onClick={handleDeleteConfirm}
-								disabled={deleting}
-								className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition shadow disabled:opacity-50 flex items-center space-x-1.5"
-							>
-								{deleting && <Loader2 size={14} className="animate-spin" />}
-								<span>Xác nhận xóa</span>
-							</button>
-						</div>
+								<div className="flex items-center justify-end space-x-3 pt-3 border-t border-[var(--border-primary)]">
+									<button
+										type="button"
+										onClick={() => setIsDeleteModalOpen(false)}
+										className="px-4 py-2 rounded-xl border border-[var(--border-primary)] text-xs font-bold text-[var(--text-secondary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+									>
+										Hủy
+									</button>
+									<button
+										type="button"
+										onClick={handleDeleteConfirm}
+										className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer"
+									>
+										<Trash2 size={14} />
+										<span>Xác nhận xóa</span>
+									</button>
+								</div>
+							</div>
+						)}
 					</div>
 				</div>
 			)}
@@ -3187,6 +3616,385 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 					selectedLanguage !== "all" ? selectedLanguage : undefined
 				}
 			/>
+
+			{/* SINGLE CHAPTER EDIT MODAL */}
+			{isSingleEditModalOpen && editingChapter && (
+				<div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+						{/* Header */}
+						<div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/40">
+							<div className="flex items-center space-x-2.5">
+								<div className="p-2 rounded-xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
+									<Pencil size={18} />
+								</div>
+								<div>
+									<h3 className="font-bold text-base text-[var(--text-primary)]">
+										Chỉnh sửa thông tin Chapter
+									</h3>
+									<p className="text-[11px] text-[var(--text-secondary)]">
+										Nguồn: {editingChapter.source?.toUpperCase() || "MANUAL"} •
+										ID: {editingChapter.id}
+									</p>
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={() => setIsSingleEditModalOpen(false)}
+								className="p-1.5 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition cursor-pointer"
+							>
+								<X size={18} />
+							</button>
+						</div>
+
+						{/* Form Body */}
+						<div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+									Số / Tên Chapter <span className="text-rose-500">*</span>
+								</label>
+								<input
+									type="text"
+									value={singleEditChapNum}
+									onChange={(e) => setSingleEditChapNum(e.target.value)}
+									placeholder="Ví dụ: 14, 2.5, Oneshot"
+									className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-sm font-semibold text-[var(--text-primary)]"
+								/>
+							</div>
+
+							<div>
+								<label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+									Tiêu đề Chapter
+								</label>
+								<input
+									type="text"
+									value={singleEditTitle}
+									onChange={(e) => setSingleEditTitle(e.target.value)}
+									placeholder="Ví dụ: SAWADA'S HORNS"
+									className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-sm text-[var(--text-primary)]"
+								/>
+							</div>
+
+							<div>
+								<div className="flex items-center justify-between mb-1.5">
+									<label className="text-xs font-bold text-[var(--text-secondary)]">
+										Volume
+									</label>
+									{singleEditVol && (
+										<button
+											type="button"
+											onClick={() => setSingleEditVol("")}
+											className="text-[11px] text-amber-500 hover:underline cursor-pointer"
+										>
+											Xóa Volume (đặt No Volume)
+										</button>
+									)}
+								</div>
+								<input
+									type="text"
+									value={singleEditVol}
+									onChange={(e) => setSingleEditVol(e.target.value)}
+									placeholder="Ví dụ: 1 hoặc để trống cho 'No Volume'"
+									className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-sm text-[var(--text-primary)]"
+								/>
+							</div>
+
+							<div className="grid grid-cols-2 gap-3">
+								<div>
+									<label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+										Nhóm dịch
+									</label>
+									<input
+										type="text"
+										value={singleEditGroup}
+										onChange={(e) => setSingleEditGroup(e.target.value)}
+										placeholder="Ví dụ: MangaFire"
+										className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)]"
+									/>
+								</div>
+								<div>
+									<label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+										Ngôn ngữ
+									</label>
+									<input
+										type="text"
+										value={singleEditLang}
+										onChange={(e) => setSingleEditLang(e.target.value)}
+										placeholder="en / vi"
+										className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)] uppercase"
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Footer Actions */}
+						<div className="p-4 border-t border-[var(--border-primary)] bg-zinc-50/50 dark:bg-zinc-900/40 flex items-center justify-end space-x-2.5">
+							<button
+								type="button"
+								onClick={() => setIsSingleEditModalOpen(false)}
+								className="px-4 py-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+							>
+								Hủy
+							</button>
+							<button
+								type="button"
+								disabled={singleEditSaving}
+								onClick={handleSaveSingleEdit}
+								className="px-5 py-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+							>
+								{singleEditSaving ? (
+									<Loader2 size={14} className="animate-spin" />
+								) : (
+									<Check size={14} />
+								)}
+								<span>{singleEditSaving ? "Đang lưu..." : "Lưu thay đổi"}</span>
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* BATCH CHAPTER METADATA EDIT MODAL */}
+			{isBatchEditModalOpen && (
+				<div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+						{/* Header */}
+						<div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/40 shrink-0">
+							<div className="flex items-center space-x-2.5">
+								<div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+									<Layers size={18} />
+								</div>
+								<div>
+									<h3 className="font-bold text-base text-[var(--text-primary)]">
+										Gán Volume & Sửa Metadata hàng loạt
+									</h3>
+									<p className="text-[11px] text-[var(--text-secondary)]">
+										Áp dụng cho{" "}
+										<strong className="text-[var(--brand-orange)]">
+											{selectedChapterIds.length}
+										</strong>{" "}
+										chương đã chọn
+									</p>
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={() => setIsBatchEditModalOpen(false)}
+								className="p-1.5 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition cursor-pointer"
+							>
+								<X size={18} />
+							</button>
+						</div>
+
+						{/* Form Body */}
+						<div className="p-5 space-y-5 overflow-y-auto">
+							{/* Section 1: Assign Volume */}
+							<div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-[var(--border-primary)] space-y-3">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+										<Layers size={14} className="text-amber-500" />
+										<span>Định nghĩa Volume</span>
+									</label>
+									<label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+										<input
+											type="checkbox"
+											checked={batchClearVolume}
+											onChange={(e) => {
+												setBatchClearVolume(e.target.checked);
+												if (e.target.checked) setBatchVolume("");
+											}}
+											className="rounded border-zinc-600 text-amber-500 focus:ring-0"
+										/>
+										<span>Đặt thành "No Volume" (Xóa Vol)</span>
+									</label>
+								</div>
+
+								{!batchClearVolume && (
+									<>
+										<input
+											type="text"
+											value={batchVolume}
+											onChange={(e) => setBatchVolume(e.target.value)}
+											placeholder="Nhập số Volume (Ví dụ: 1, 2, 3...)"
+											className="w-full px-3.5 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-sm font-semibold text-[var(--text-primary)]"
+										/>
+										<div className="flex items-center gap-1.5 flex-wrap">
+											<span className="text-[10px] text-[var(--text-secondary)] font-medium mr-1">
+												Gán nhanh:
+											</span>
+											{[1, 2, 3, 4, 5, 6, 7, 8].map((v) => (
+												<button
+													key={v}
+													type="button"
+													onClick={() => setBatchVolume(String(v))}
+													className={`px-2 py-0.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+														batchVolume === String(v)
+															? "bg-amber-500 text-white border-amber-500"
+															: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-amber-400"
+													}`}
+												>
+													Vol {v}
+												</button>
+											))}
+										</div>
+									</>
+								)}
+							</div>
+
+							{/* Section 2: Sequential Renumbering */}
+							<div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-[var(--border-primary)] space-y-3">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+										<span className="text-base font-mono text-[var(--brand-orange)]">
+											#
+										</span>
+										<span>Đánh số lại Chapter liên tiếp (Tùy chọn)</span>
+									</label>
+									<label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+										<input
+											type="checkbox"
+											checked={batchEnableRenumber}
+											onChange={(e) => setBatchEnableRenumber(e.target.checked)}
+											className="rounded border-zinc-600 text-[var(--brand-orange)] focus:ring-0"
+										/>
+										<span>Bật đánh số lại</span>
+									</label>
+								</div>
+
+								{batchEnableRenumber && (
+									<div className="space-y-2 pt-1 animate-in fade-in duration-150">
+										<div className="grid grid-cols-2 gap-3">
+											<div>
+												<label className="block text-[11px] font-bold text-[var(--text-secondary)] mb-1">
+													Bắt đầu từ số:
+												</label>
+												<input
+													type="number"
+													value={batchRenumberStart}
+													onChange={(e) =>
+														setBatchRenumberStart(Number(e.target.value) || 1)
+													}
+													className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)] font-bold"
+												/>
+											</div>
+											<div>
+												<label className="block text-[11px] font-bold text-[var(--text-secondary)] mb-1">
+													Bước nhảy (Mặc định 1):
+												</label>
+												<input
+													type="number"
+													value={batchRenumberStep}
+													onChange={(e) =>
+														setBatchRenumberStep(Number(e.target.value) || 1)
+													}
+													className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)] font-bold"
+												/>
+											</div>
+										</div>
+										<p className="text-[10px] text-zinc-400 italic">
+											Đánh số lại lần lượt: Ch. {batchRenumberStart}, Ch.{" "}
+											{batchRenumberStart + batchRenumberStep}, Ch.{" "}
+											{batchRenumberStart + batchRenumberStep * 2}... Hữu ích
+											khi các chương bị lỗi 'Chapter 1' hàng loạt!
+										</p>
+									</div>
+								)}
+							</div>
+
+							{/* Section 3: Extra Metadata */}
+							<div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-[var(--border-primary)] space-y-3">
+								<label className="text-xs font-bold text-[var(--text-primary)] block">
+									Nhóm dịch & Ngôn ngữ (Tùy chọn)
+								</label>
+								<div className="grid grid-cols-2 gap-3">
+									<div>
+										<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
+											Gán Nhóm dịch:
+										</label>
+										<input
+											type="text"
+											value={batchGroup}
+											onChange={(e) => setBatchGroup(e.target.value)}
+											placeholder="Để trống nếu giữ nguyên"
+											className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)]"
+										/>
+									</div>
+									<div>
+										<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
+											Gán Ngôn ngữ:
+										</label>
+										<input
+											type="text"
+											value={batchLanguage}
+											onChange={(e) => setBatchLanguage(e.target.value)}
+											placeholder="Để trống nếu giữ nguyên"
+											className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)] uppercase"
+										/>
+									</div>
+								</div>
+								<div>
+									<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
+										Gán Tiêu đề chung:
+									</label>
+									<input
+										type="text"
+										value={batchTitle}
+										onChange={(e) => setBatchTitle(e.target.value)}
+										placeholder="Để trống nếu không thay đổi tiêu đề"
+										className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:border-[var(--brand-orange)] focus:outline-none text-xs text-[var(--text-primary)]"
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Footer Actions */}
+						{batchSaving && (
+							<div className="mx-6 mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-in fade-in">
+								<div className="flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-400">
+									<span className="flex items-center gap-1.5">
+										<Loader2 size={13} className="animate-spin" />
+										<span>
+											Đang cập nhật metadata cho {selectedChapterIds.length}{" "}
+											chương...
+										</span>
+									</span>
+								</div>
+								<div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden shadow-inner">
+									<div className="bg-gradient-to-r from-amber-500 to-orange-500 h-full w-4/5 animate-pulse rounded-full" />
+								</div>
+								<p className="text-[10px] text-zinc-400 italic">
+									Đang đồng bộ Volume, nhóm dịch và đánh số lại trong MongoDB...
+								</p>
+							</div>
+						)}
+						<div className="p-4 border-t border-[var(--border-primary)] bg-zinc-50/50 dark:bg-zinc-900/40 flex items-center justify-end space-x-2.5 shrink-0">
+							<button
+								type="button"
+								onClick={() => setIsBatchEditModalOpen(false)}
+								className="px-4 py-2 rounded-xl border border-[var(--border-primary)] hover:border-zinc-400 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer"
+							>
+								Hủy
+							</button>
+							<button
+								type="button"
+								disabled={batchSaving}
+								onClick={handleSaveBatchEdit}
+								className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+							>
+								{batchSaving ? (
+									<Loader2 size={14} className="animate-spin" />
+								) : (
+									<Check size={14} />
+								)}
+								<span>
+									{batchSaving
+										? "Đang áp dụng..."
+										: `Áp dụng cho ${selectedChapterIds.length} chương`}
+								</span>
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Lightbox Preview Modal for Chapter Pages (Issue 4) */}
 			{previewPageIndex !== null && activeChapterPages[previewPageIndex] && (

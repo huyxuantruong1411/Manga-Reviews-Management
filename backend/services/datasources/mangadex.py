@@ -224,6 +224,67 @@ class MangaDexSourceProvider(MangaSourceProvider):
             observed_at=datetime.now(timezone.utc),
         )
 
+    async def get_release(self, work: Any, release_id: str) -> Optional[SourceRelease]:
+        """
+        Retrieves a single release metadata item by release ID from MangaDex.
+        """
+        work_id = getattr(work, "source_work_id", None) or str(work)
+        try:
+            chap_data = await self._service._request(
+                f"/chapter/{release_id}",
+                {"includes[]": ["scanlation_group", "user"]},
+            )
+            if not chap_data or "data" not in chap_data:
+                return None
+            chap = chap_data["data"]
+            attr = chap.get("attributes", {})
+            group_ids = []
+            group_names = []
+            uploader_name = None
+            uploader_id = None
+            for rel in chap.get("relationships", []):
+                rel_type = rel.get("type")
+                if rel_type == "scanlation_group":
+                    group_ids.append(rel.get("id"))
+                    name = rel.get("attributes", {}).get("name")
+                    if name:
+                        group_names.append(name)
+                elif rel_type == "user":
+                    uploader_id = rel.get("id")
+                    uploader_name = rel.get("attributes", {}).get("username")
+
+            c_num = attr.get("chapter") or "1"
+            title = attr.get("title") or ""
+            raw_vol = attr.get("volume")
+            vol_clean = None
+            if raw_vol is not None:
+                s_vol = str(raw_vol).strip()
+                if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
+                    vol_clean = s_vol
+
+            lang = attr.get("translatedLanguage") or "en"
+            pages_count = attr.get("pages", 0)
+
+            return SourceRelease(
+                id=chap["id"],
+                source="mangadex",
+                source_work_id=work_id,
+                chapter_number=str(c_num),
+                title=title,
+                volume=vol_clean,
+                language=lang,
+                unit_kind="oneshot" if str(c_num).lower() == "oneshot" else "chapter",
+                group_id=",".join(group_ids) if group_ids else None,
+                group_name=",".join(group_names) if group_names else None,
+                uploader=uploader_name,
+                uploader_id=uploader_id,
+                pages_count=pages_count,
+                version=attr.get("version", 1),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to fetch MangaDex chapter {release_id}: {e}")
+            return None
+
     async def resolve_pages(self, release_id: str) -> SourcePageManifest:
         """
         Resolves the ordered image pages for a MangaDex release.

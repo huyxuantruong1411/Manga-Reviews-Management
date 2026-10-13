@@ -67,3 +67,15 @@ Mandatory indexes:
 ### Scenario C: Redis Cache Invalidation
 - Manga detail updates trigger `manga:detail:{manga_id}` eviction.
 - Chapter updates trigger `chapters:manga:{manga_id}` eviction.
+
+### Scenario D: Chapter Metadata Operations & Re-sync
+- To re-sync missing chapter titles or volumes across an entire manga library from upstream providers:
+  ```bash
+  curl -X POST http://127.0.0.1:8000/api/manga/{manga_id}/chapters/sync-metadata
+  ```
+- For manual batch volume assignments or sequential renumbering, invoke `/api/manga/{manga_id}/chapters/batch-metadata` with selected `chapter_ids`.
+
+### Scenario E: Live Progress Monitoring for Storage Operations
+- All long-running asynchronous and bulk mutation operations (bulk chapter deletion, metadata synchronization, batch editing) provide real-time visual progress feedback in the UI:
+  - Deletion Tracker: calculates completion percentages per chapter and surfaces exact chapter identifiers and MinIO cleanup states.
+  - Sync Banner: displays active provider polling progress and library reconciliation summaries.

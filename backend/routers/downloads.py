@@ -322,6 +322,7 @@ async def create_manga_download_plan(
             save_to_disk=payload.save_to_disk,
             download_path=payload.download_path,
             auto_link=payload.auto_link,
+            releases_metadata=payload.releases_metadata,
         )
         return plan
     except IdentityConflictError as e:

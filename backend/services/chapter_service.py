@@ -391,6 +391,188 @@ class ChapterService:
             "message": f"Đã đồng bộ và cập nhật metadata cho {updated_count} chapter(s) từ MangaDex.",
         }
 
+    async def update_chapter_metadata(self, chapter_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Updates metadata fields (chapter_number, volume, title, scanlation_group, language)
+        for a specific chapter, recalculates natural sort numeric value, and re-binds chapter slot.
+        """
+        db_id = ObjectId(chapter_id) if ObjectId.is_valid(chapter_id) else chapter_id
+        chapter = await self._get_chapters_col().find_one({"_id": db_id})
+        if not chapter:
+            raise ValueError(f"Chapter '{chapter_id}' not found")
+
+        set_fields: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+
+        if "chapter_number" in updates and updates["chapter_number"] is not None:
+            c_num = str(updates["chapter_number"]).strip()
+            set_fields["chapter_number"] = c_num
+            set_fields["chapter_numeric"] = parse_chapter_numeric(c_num)
+
+        if "volume" in updates:
+            raw_vol = updates["volume"]
+            vol_clean = None
+            if raw_vol is not None:
+                s_vol = str(raw_vol).strip()
+                if s_vol and s_vol.lower() not in ("none", "null", "no volume", ""):
+                    vol_clean = s_vol
+            set_fields["volume"] = vol_clean
+
+        if "title" in updates:
+            set_fields["title"] = str(updates["title"]).strip() if updates["title"] is not None else ""
+
+        if "scanlation_group" in updates:
+            raw_grp = updates["scanlation_group"]
+            set_fields["scanlation_group"] = str(raw_grp).strip() if raw_grp else None
+
+        if "language" in updates and updates["language"]:
+            set_fields["language"] = str(updates["language"]).strip().lower()
+
+        await self._get_chapters_col().update_one({"_id": db_id}, {"$set": set_fields})
+        updated_doc = await self._get_chapters_col().find_one({"_id": db_id})
+        if not updated_doc:
+            updated_doc = {**chapter, **set_fields}
+
+        # Re-bind chapter slot
+        try:
+            from backend.services.chapter_slot_service import chapter_slot_service
+
+            await chapter_slot_service.bind_chapter_to_slot(str(db_id), updated_doc)
+        except Exception as slot_err:
+            logger.warning(f"Failed to re-bind chapter {db_id} to slot after metadata update: {slot_err}")
+
+        # Return updated document with string ID and sanitize ObjectIds for FastAPI JSON serialization
+        updated_doc["id"] = str(updated_doc.get("_id", db_id))
+        updated_doc.pop("_id", None)
+        for k, v in list(updated_doc.items()):
+            if isinstance(v, ObjectId):
+                updated_doc[k] = str(v)
+        return updated_doc
+
+    async def batch_update_chapter_metadata(
+        self, manga_id: str, chapter_ids: List[str], updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Batch updates metadata across multiple chapters:
+          - volume: assign Volume e.g. "1" or clear volume
+          - scanlation_group: assign group name
+          - language: update language code
+          - title: set title prefix or common title
+          - renumber_start, renumber_step: sequentially renumber chapters
+        """
+        updated_count = 0
+        renumber_start = updates.get("renumber_start")
+        renumber_step = updates.get("renumber_step", 1)
+
+        curr_num = float(renumber_start) if renumber_start is not None else None
+
+        for idx, cid in enumerate(chapter_ids):
+            item_updates = dict(updates)
+            if curr_num is not None:
+                num_val = curr_num + idx * float(renumber_step)
+                item_updates["chapter_number"] = str(int(num_val)) if num_val.is_integer() else str(num_val)
+
+            try:
+                await self.update_chapter_metadata(cid, item_updates)
+                updated_count += 1
+            except Exception as e:
+                logger.error(f"Error updating metadata for chapter {cid}: {e}")
+
+        return {"success": True, "updated_count": updated_count, "manga_id": manga_id}
+
+    async def sync_chapters_metadata_from_mangafire(self, manga_id: str) -> Dict[str, Any]:
+        """
+        Synchronizes / backfills missing chapter metadata (chapter_number, title, volume)
+        from MangaFire for all stored chapters of this manga.
+        """
+        from backend.models.datasource import ReleaseQuery
+        from backend.services.datasources.registry import provider_registry
+
+        # Find linked MangaFire work ID
+        mf_source = await get_db().manga_sources.find_one({"manga_id": manga_id, "source": "mangafire"})
+        work_id = None
+        if mf_source:
+            work_id = mf_source.get("source_work_id")
+
+        if not work_id:
+            # Check if any chapter has source_work_id
+            mf_chap = await self._get_chapters_col().find_one(
+                {"manga_id": manga_id, "source": "mangafire", "source_work_id": {"$exists": True, "$ne": None}}
+            )
+            if mf_chap:
+                work_id = mf_chap.get("source_work_id")
+
+        if not work_id:
+            return {"updated_count": 0, "message": "Không tìm thấy liên kết MangaFire cho manga này."}
+
+        provider = provider_registry.get_provider("mangafire")
+        if not provider:
+            return {"updated_count": 0, "message": "Provider mangafire không sẵn sàng."}
+
+        try:
+            rel_page = await provider.list_releases(work_id, ReleaseQuery(limit=500, language="en"))
+        except Exception as e:
+            logger.error(f"Error listing MangaFire releases for {work_id}: {e}")
+            return {"updated_count": 0, "message": f"Không thể lấy danh sách chương từ MangaFire: {e}"}
+
+        if not rel_page or not rel_page.items:
+            return {"updated_count": 0, "message": "Không có chương nào từ MangaFire."}
+
+        by_source_id = {str(r.id): r for r in rel_page.items}
+
+        updated_count = 0
+        now = datetime.utcnow()
+        cursor = self._get_chapters_col().find({"manga_id": manga_id, "source": "mangafire"})
+        async for doc in cursor:
+            sid = str(doc.get("source_id") or "")
+            if sid in by_source_id:
+                rel = by_source_id[sid]
+                updates = {
+                    "chapter_number": rel.chapter_number,
+                    "chapter_numeric": parse_chapter_numeric(rel.chapter_number),
+                    "title": rel.title or "",
+                    "updated_at": now,
+                }
+                if rel.volume is not None:
+                    updates["volume"] = rel.volume
+
+                await self._get_chapters_col().update_one({"_id": doc["_id"]}, {"$set": updates})
+                updated_doc = {**doc, **updates}
+                try:
+                    from backend.services.chapter_slot_service import chapter_slot_service
+
+                    await chapter_slot_service.bind_chapter_to_slot(str(doc["_id"]), updated_doc)
+                except Exception as err:
+                    logger.warning(f"Error rebinding slot during MangaFire sync: {err}")
+                updated_count += 1
+
+        return {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Đã đồng bộ và cập nhật metadata cho {updated_count} chapter(s) từ MangaFire.",
+        }
+
+    async def sync_chapters_metadata(self, manga_id: str) -> Dict[str, Any]:
+        """
+        Unified metadata synchronizer: syncs stored chapters against their respective
+        datasources (MangaDex and MangaFire).
+        """
+        md_res = await self.sync_chapters_metadata_from_mangadex(manga_id)
+        mf_res = await self.sync_chapters_metadata_from_mangafire(manga_id)
+
+        total_updated = md_res.get("updated_count", 0) + mf_res.get("updated_count", 0)
+        messages = []
+        if md_res.get("updated_count", 0) > 0:
+            messages.append(f"MangaDex: {md_res['updated_count']}")
+        if mf_res.get("updated_count", 0) > 0:
+            messages.append(f"MangaFire: {mf_res['updated_count']}")
+
+        detail_msg = f" ({', '.join(messages)})" if messages else ""
+        return {
+            "success": True,
+            "updated_count": total_updated,
+            "message": f"Đã đồng bộ metadata cho {total_updated} chapter(s){detail_msg}.",
+        }
+
     async def delete_chapter(self, chapter_id: str) -> bool:
         """Delete an entire chapter and remove all its pages from MinIO storage safely."""
         filter_query = {"_id": ObjectId(chapter_id)} if ObjectId.is_valid(chapter_id) else {"_id": chapter_id}

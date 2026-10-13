@@ -794,6 +794,20 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 					save_to_disk: saveToDisk,
 					download_path: customPath.trim() || undefined,
 					auto_link: true,
+					releases_metadata: Array.from(selectedReleaseIds).map((id) => {
+						const r = releases.find((item) => String(item.id) === String(id));
+						return r
+							? {
+									id: String(r.id),
+									chapter_number: r.chapter_number,
+									volume: r.volume,
+									title: r.title,
+									language: r.language,
+									unit_kind: r.unit_kind,
+									group_name: r.group_name,
+								}
+							: { id: String(id) };
+					}),
 				},
 			);
 

@@ -42,6 +42,7 @@ class MangaFireSourceProvider(MangaSourceProvider):
         self._transport = transport
         self._release_to_work_id: Dict[str, str] = {}
         self._work_cache: Dict[str, Dict[str, Any]] = {}
+        self._releases_cache: Dict[str, Dict[str, SourceRelease]] = {}
 
     @property
     def name(self) -> str:
@@ -108,8 +109,11 @@ class MangaFireSourceProvider(MangaSourceProvider):
             query.order,
         )
 
+        if work_id not in self._releases_cache:
+            self._releases_cache[work_id] = {}
         for rel in releases:
             self._release_to_work_id[rel.id] = work_id
+            self._releases_cache[work_id][rel.id] = rel
 
         # Language filtering
         target_lang = query.language.lower()
@@ -137,6 +141,21 @@ class MangaFireSourceProvider(MangaSourceProvider):
             catalogue_complete=True,
             observed_at=datetime.now(timezone.utc),
         )
+
+    async def get_release(self, work: Any, release_id: str) -> Optional[SourceRelease]:
+        """
+        Retrieves a single release metadata item by release ID from cache if available.
+        """
+        work_id = getattr(work, "source_work_id", None) or str(work)
+        rel_id_str = str(release_id).strip()
+        if work_id in self._releases_cache and rel_id_str in self._releases_cache[work_id]:
+            return self._releases_cache[work_id][rel_id_str]
+
+        for _w_id, rels in self._releases_cache.items():
+            if rel_id_str in rels:
+                return rels[rel_id_str]
+
+        return None
 
     async def resolve_pages(self, release_id: str) -> SourcePageManifest:
         """

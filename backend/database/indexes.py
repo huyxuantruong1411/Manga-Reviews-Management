@@ -203,6 +203,7 @@ async def init_db_indexes():
             unique=True,
             partialFilterExpression={"source_id": {"$type": "string"}},
         )
+        await db.chapters.create_index([("manga_id", 1), ("volume", 1)])
         await db.chapters.create_index("created_at")
 
         # reading_progress

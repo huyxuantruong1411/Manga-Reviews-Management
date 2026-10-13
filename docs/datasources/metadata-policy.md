@@ -70,3 +70,30 @@ Each updated field records its source provenance and timestamp:
 }
 ```
 Raw source responses are archived into `source_metadata_snapshots` with SHA-256 payload hashes for complete auditability.
+
+---
+
+## 4. Chapter-Level Metadata Policy & User Overrides
+
+In addition to work-level metadata, stored chapters support user-managed metadata overrides and automated source reconciliations:
+
+### 1. Editable Chapter Fields
+Users can edit metadata on any stored chapter via `PATCH /api/chapters/{chapter_id}`:
+- `chapter_number`: String representation (e.g. `"14"`, `"1.5"`, `"oneshot"`). Updates automatically trigger recalculation of `chapter_numeric` (`float`) for natural library sorting.
+- `volume`: Logical volume label (e.g. `"1"`, `"2"`) or `null` for explicitly unassigned ("No Volume").
+- `title`: Chapter title string.
+- `scanlation_group`: Translation group attribution.
+- `language`: Target language code (e.g. `"en"`, `"vi"`).
+
+### 2. Slot Re-binding Guarantee
+Whenever chapter metadata is edited, [`ChapterSlotService`](../../backend/services/chapter_slot_service.py) automatically re-binds the chapter to its corresponding logical chapter slot (`chapter_slots`), updating library coverage metrics and preferred release pointers in real time.
+
+### 3. Batch Metadata Editing (`/api/manga/{manga_id}/chapters/batch-metadata`)
+Supports atomic bulk modifications across selected chapter lists:
+- Bulk volume assignment (e.g., assign Volume 1 to chapters 1–7).
+- Bulk volume clearing (`clear_volume: true`).
+- Sequential renumbering (`renumber_start`, `renumber_step`) for recovering chapters with missing or defaulted numbers.
+- Bulk group, language, and title prefix assignment.
+
+### 4. Source Metadata Synchronization (`/api/manga/{manga_id}/chapters/sync-metadata`)
+A unified endpoint that queries remote upstream datasources (MangaDex feeds and MangaFire releases) to backfill missing volumes, official chapter titles, uploaders, and publication timestamps across all stored chapters of a manga.

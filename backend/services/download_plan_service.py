@@ -43,6 +43,7 @@ class DownloadPlanService:
         download_path: Optional[str] = None,
         ttl_hours: int = 24,
         auto_link: bool = False,
+        releases_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> DownloadPlan:
         """
         Creates a validated, server-side download plan.
@@ -98,20 +99,66 @@ class DownloadPlanService:
                 url=f"https://{source}.example/work/{source_work_id}",
             )
 
+        # Build client hints lookup
+        client_hints: Dict[str, Dict[str, Any]] = {}
+        if releases_metadata:
+            for rm in releases_metadata:
+                if isinstance(rm, dict) and rm.get("id"):
+                    client_hints[str(rm["id"])] = rm
+
+        # Build catalog map lookup if provider supports listing
+        catalog_map: Dict[str, SourceRelease] = {}
+        if not client_hints and hasattr(provider, "list_releases") and source != "mangafire":
+            try:
+                from backend.models.datasource import ReleaseQuery
+
+                cat_page = await provider.list_releases(source_work_id, ReleaseQuery(limit=500, language="en"))
+                if cat_page and cat_page.items:
+                    for item in cat_page.items:
+                        catalog_map[str(item.id)] = item
+            except Exception as cat_err:
+                logger.warning(f"Failed to fetch catalog releases in create_plan: {cat_err}")
+
         items: List[DownloadPlanItem] = []
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=ttl_hours)
 
         for rid in release_ids:
+            rid_str = str(rid)
             # Resolve release metadata via provider
             release: Optional[SourceRelease] = None
             if hasattr(provider, "get_release"):
-                release = await provider.get_release(work, rid)
+                release = await provider.get_release(work, rid_str)
+
+            if not release and rid_str in catalog_map:
+                release = catalog_map[rid_str]
+
+            if not release and rid_str in client_hints:
+                hint = client_hints[rid_str]
+                c_num = str(hint.get("chapter_number") or hint.get("chapter") or "1")
+                raw_vol = hint.get("volume")
+                vol_clean = None
+                if raw_vol is not None:
+                    s_vol = str(raw_vol).strip()
+                    if s_vol and s_vol.lower() not in ("none", "null", "no volume"):
+                        vol_clean = s_vol
+
+                release = SourceRelease(
+                    id=rid_str,
+                    source=source,
+                    source_work_id=source_work_id,
+                    chapter_number=c_num,
+                    volume=vol_clean,
+                    title=hint.get("title") or "",
+                    language=hint.get("language") or "en",
+                    unit_kind=hint.get("unit_kind") or ("oneshot" if c_num.lower() == "oneshot" else "chapter"),
+                    group_name=hint.get("group_name") or hint.get("scanlation_group"),
+                )
 
             if not release:
                 # Fallback placeholder if provider only has batch listing
                 release = SourceRelease(
-                    id=rid,
+                    id=rid_str,
                     source=source,
                     source_work_id=source_work_id,
                     chapter_number="1",
