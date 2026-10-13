@@ -3,6 +3,7 @@ import {
 	AlertTriangle,
 	BookOpen,
 	Check,
+	CheckCheck,
 	CheckCircle2,
 	Database,
 	Download,
@@ -21,7 +22,7 @@ import {
 	Zap,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import client from "../../../api/client";
 import { useAlert } from "../../../hooks/useAlert";
 import { useDownload } from "../../../hooks/useDownload";
@@ -33,6 +34,45 @@ import type {
 	SourceRelease,
 	SourceWork,
 } from "../../../types/datasource";
+
+export interface ResolveStepInfo {
+	id: number;
+	title: string;
+	description: string;
+}
+
+export const RESOLVE_STEPS: ResolveStepInfo[] = [
+	{
+		id: 1,
+		title: "Xác thực & Chuẩn hóa URL",
+		description:
+			"Kiểm tra định dạng đường dẫn, phân tích domain và quét an toàn",
+	},
+	{
+		id: 2,
+		title: "Khởi tạo kết nối nguồn dữ liệu",
+		description: "Khởi chạy headless browser session để kết nối máy chủ nguồn",
+	},
+	{
+		id: 3,
+		title: "Trích xuất Metadata & Ngôn ngữ",
+		description:
+			"Bóc tách tiêu đề, ảnh bìa, tác giả và danh sách ngôn ngữ dịch",
+	},
+	{
+		id: 4,
+		title: "Liên kết Manga & Nạp chương",
+		description: "Lưu nguồn vào cơ sở dữ liệu và nạp toàn bộ danh sách chương",
+	},
+];
+
+export interface ResolveProgressState {
+	step: number;
+	percent: number;
+	status: "idle" | "running" | "success" | "error";
+	message: string;
+	errorDetail?: string;
+}
 
 interface SourceDownloadDialogProps {
 	isOpen: boolean;
@@ -74,10 +114,30 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		defaultSource || "mangadex",
 	);
 
-	// Work resolution state
+	// Work resolution state & detailed progress tracking
 	const [sourceUrlInput, setSourceUrlInput] = useState<string>("");
 	const [resolvingWork, setResolvingWork] = useState<boolean>(false);
 	const [activeWork, setActiveWork] = useState<SourceWork | null>(null);
+	const [resolveProgress, setResolveProgress] = useState<ResolveProgressState>({
+		step: 0,
+		percent: 0,
+		status: "idle",
+		message: "",
+	});
+	const progressTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+	const clearProgressTimers = useCallback(() => {
+		for (const timer of progressTimersRef.current) {
+			clearTimeout(timer);
+		}
+		progressTimersRef.current = [];
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			clearProgressTimers();
+		};
+	}, [clearProgressTimers]);
 
 	// Linked datasource works
 	const [mangaSources, setMangaSources] = useState<
@@ -205,6 +265,13 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 	useEffect(() => {
 		if (!isOpen) return;
 
+		clearProgressTimers();
+		setResolveProgress({
+			step: 0,
+			percent: 0,
+			status: "idle",
+			message: "",
+		});
 		setActiveWork(null);
 		setReleases([]);
 		setSelectedReleaseIds(new Set());
@@ -268,18 +335,69 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 		};
 
 		initWork();
-	}, [isOpen, selectedProvider, mangadexId, mangaSources]);
+	}, [isOpen, selectedProvider, mangadexId, mangaSources, clearProgressTimers]);
 
-	// Resolve work from custom URL (e.g. MangaFire)
+	// Resolve work from custom URL (e.g. MangaFire) with detailed progress tracking
 	const handleResolveUrl = async () => {
-		if (!sourceUrlInput.trim()) return;
+		const trimmedUrl = sourceUrlInput.trim();
+		if (!trimmedUrl) return;
+
+		clearProgressTimers();
 		setResolvingWork(true);
 		setReleaseError(null);
+
+		// Bước 1: Xác thực định dạng & An toàn URL
+		setResolveProgress({
+			step: 1,
+			percent: 20,
+			status: "running",
+			message: "Đang kiểm tra định dạng URL và ranh giới an toàn...",
+		});
+
+		// Giả lập trực quan chuyển tiếp các bước trong khi chờ máy chủ xử lý
+		const timer1 = setTimeout(() => {
+			setResolveProgress((prev) => {
+				if (prev.status !== "running") return prev;
+				return {
+					step: 2,
+					percent: 45,
+					status: "running",
+					message: `Đang kết nối phiên làm việc với ${selectedProvider.toUpperCase()}...`,
+				};
+			});
+		}, 700);
+
+		const timer2 = setTimeout(() => {
+			setResolveProgress((prev) => {
+				if (prev.status !== "running") return prev;
+				return {
+					step: 3,
+					percent: 75,
+					status: "running",
+					message:
+						"Đang phân tích cây DOM, trích xuất metadata và danh sách ngôn ngữ dịch...",
+				};
+			});
+		}, 2000);
+
+		progressTimersRef.current = [timer1, timer2];
+
 		try {
 			const res = await client.post<SourceWork>("/api/datasources/resolve", {
-				url_or_id: sourceUrlInput.trim(),
+				url_or_id: trimmedUrl,
 				provider_hint: selectedProvider,
 			});
+
+			clearProgressTimers();
+
+			// Bước 4: Liên kết Manga & Nạp danh mục chương
+			setResolveProgress({
+				step: 4,
+				percent: 90,
+				status: "running",
+				message: `Đang liên kết "${res.data.title}" vào manga và nạp danh sách chương...`,
+			});
+
 			setActiveWork(res.data);
 			setAvailableLangs(res.data.available_languages || ["en"]);
 			if (res.data.available_languages?.includes("en")) {
@@ -314,20 +432,42 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 						linkError.response?.data?.detail ||
 						"Nguồn này đã được liên kết với một manga khác trong hệ thống!";
 					setReleaseError(msg);
+					setResolveProgress({
+						step: 4,
+						percent: 90,
+						status: "error",
+						message: "Lỗi xung đột liên kết nguồn",
+						errorDetail: msg,
+					});
 					showToast(msg, "error");
 					return;
 				}
 			}
+
+			setResolveProgress({
+				step: 5,
+				percent: 100,
+				status: "success",
+				message: `Đã nhận diện thành công: "${res.data.title}"`,
+			});
 
 			showToast(
 				`Đã nhận diện & liên kết: "${res.data.title}" từ ${selectedProvider}`,
 				"success",
 			);
 		} catch (err: unknown) {
+			clearProgressTimers();
 			const error = err as { response?: { data?: { detail?: string } } };
 			const msg =
 				error.response?.data?.detail || "Không thể phân tích URL của nguồn này";
 			setReleaseError(msg);
+			setResolveProgress((prev) => ({
+				step: prev.step || 1,
+				percent: prev.percent || 25,
+				status: "error",
+				message: "Phân tích URL thất bại",
+				errorDetail: msg,
+			}));
 			showToast(msg, "error");
 		} finally {
 			setResolvingWork(false);
@@ -780,91 +920,273 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 
 						{/* MangaFire URL Input & Linking Banner */}
 						{selectedProvider === "mangafire" && (
-							<div className="mt-3 p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-								{activeWork ? (
-									<div className="flex items-center space-x-3 min-w-0 flex-1">
-										{activeWork.cover_url ? (
-											<img
-												src={activeWork.cover_url}
-												alt={activeWork.title}
-												className="w-10 h-14 object-cover rounded-lg shadow-sm border border-[var(--border-primary)] shrink-0"
-											/>
-										) : (
-											<div className="w-10 h-14 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center shrink-0 border border-[var(--border-primary)]">
-												<Layers className="w-4 h-4 text-[var(--text-secondary)]" />
+							<div className="mt-3 space-y-3">
+								<div className="p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+									{activeWork ? (
+										<div className="flex items-center space-x-3 min-w-0 flex-1">
+											{activeWork.cover_url ? (
+												<img
+													src={activeWork.cover_url}
+													alt={activeWork.title}
+													className="w-10 h-14 object-cover rounded-lg shadow-sm border border-[var(--border-primary)] shrink-0"
+												/>
+											) : (
+												<div className="w-10 h-14 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center shrink-0 border border-[var(--border-primary)]">
+													<Layers className="w-4 h-4 text-[var(--text-secondary)]" />
+												</div>
+											)}
+											<div className="min-w-0">
+												<div className="flex items-center gap-2">
+													<h4 className="text-xs font-bold text-[var(--text-primary)] truncate max-w-sm">
+														{activeWork.title}
+													</h4>
+													<span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+														Đã kết nối
+													</span>
+												</div>
+												<p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+													ID:{" "}
+													<span className="font-mono text-zinc-400">
+														{activeWork.source_work_id}
+													</span>
+												</p>
+												<a
+													href={activeWork.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="text-[11px] text-[var(--brand-orange)] hover:underline flex items-center gap-1 mt-0.5"
+												>
+													<span>Mở link gốc</span>
+													<ExternalLink size={10} />
+												</a>
 											</div>
-										)}
-										<div className="min-w-0">
-											<div className="flex items-center gap-2">
-												<h4 className="text-xs font-bold text-[var(--text-primary)] truncate max-w-sm">
-													{activeWork.title}
-												</h4>
-												<span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-													Đã kết nối
-												</span>
-											</div>
-											<p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-												ID:{" "}
-												<span className="font-mono text-zinc-400">
-													{activeWork.source_work_id}
-												</span>
+										</div>
+									) : (
+										<div className="w-full space-y-2">
+											<p className="text-xs text-[var(--text-secondary)]">
+												Nhập đường dẫn truyện trên MangaFire để tải chương (Ví
+												dụ:{" "}
+												<code className="text-zinc-400">
+													https://mangafire.to/manga/sheeply-horned-witch-romi.48y2
+												</code>
+												):
 											</p>
-											<a
-												href={activeWork.url}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="text-[11px] text-[var(--brand-orange)] hover:underline flex items-center gap-1 mt-0.5"
-											>
-												<span>Mở link gốc</span>
-												<ExternalLink size={10} />
-											</a>
+											<div className="flex gap-2">
+												<input
+													type="text"
+													value={sourceUrlInput}
+													onChange={(e) => setSourceUrlInput(e.target.value)}
+													onKeyDown={(e) => {
+														if (
+															e.key === "Enter" &&
+															!resolvingWork &&
+															sourceUrlInput.trim()
+														) {
+															e.preventDefault();
+															handleResolveUrl();
+														}
+													}}
+													placeholder="https://mangafire.to/manga/..."
+													className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] font-mono"
+												/>
+												<button
+													type="button"
+													onClick={handleResolveUrl}
+													disabled={resolvingWork || !sourceUrlInput.trim()}
+													className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+												>
+													{resolvingWork ? (
+														<Loader2 size={13} className="animate-spin" />
+													) : (
+														<RefreshCw size={13} />
+													)}
+													<span>Phân tích URL</span>
+												</button>
+											</div>
 										</div>
-									</div>
-								) : (
-									<div className="w-full space-y-2">
-										<p className="text-xs text-[var(--text-secondary)]">
-											Nhập đường dẫn truyện trên MangaFire để tải chương (Ví dụ:{" "}
-											<code className="text-zinc-400">
-												https://mangafire.to/manga/sheeply-horned-witch-romi.48y2
-											</code>
-											):
-										</p>
-										<div className="flex gap-2">
-											<input
-												type="text"
-												value={sourceUrlInput}
-												onChange={(e) => setSourceUrlInput(e.target.value)}
-												placeholder="https://mangafire.to/manga/..."
-												className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] font-mono"
-											/>
-											<button
-												type="button"
-												onClick={handleResolveUrl}
-												disabled={resolvingWork || !sourceUrlInput.trim()}
-												className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-											>
-												{resolvingWork ? (
-													<Loader2 size={13} className="animate-spin" />
-												) : (
-													<RefreshCw size={13} />
-												)}
-												<span>Phân tích URL</span>
-											</button>
-										</div>
-									</div>
-								)}
+									)}
 
-								{activeWork && (
-									<button
-										type="button"
-										onClick={() => {
-											setActiveWork(null);
-											setSourceUrlInput("");
-										}}
-										className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] text-[11px] font-semibold text-zinc-400 hover:text-[var(--text-primary)] transition shrink-0 cursor-pointer"
-									>
-										Đổi URL khác
-									</button>
+									{activeWork && (
+										<button
+											type="button"
+											onClick={() => {
+												setActiveWork(null);
+												setSourceUrlInput("");
+												setResolveProgress({
+													step: 0,
+													percent: 0,
+													status: "idle",
+													message: "",
+												});
+												clearProgressTimers();
+											}}
+											className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] text-[11px] font-semibold text-zinc-400 hover:text-[var(--text-primary)] transition shrink-0 cursor-pointer"
+										>
+											Đổi URL khác
+										</button>
+									)}
+								</div>
+
+								{/* Detailed Progress Tracker Card */}
+								{resolveProgress.status !== "idle" && (
+									<div className="p-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-card)]/90 backdrop-blur space-y-3.5 shadow-md animate-in fade-in zoom-in-95 duration-200">
+										<div className="flex items-center justify-between flex-wrap gap-2">
+											<div className="flex items-center space-x-2.5 min-w-0">
+												<div
+													className={`p-1.5 rounded-xl ${
+														resolveProgress.status === "success"
+															? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+															: resolveProgress.status === "error"
+																? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+																: "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)]"
+													}`}
+												>
+													{resolveProgress.status === "success" ? (
+														<CheckCircle2 size={16} />
+													) : resolveProgress.status === "error" ? (
+														<AlertCircle size={16} />
+													) : (
+														<Loader2 size={16} className="animate-spin" />
+													)}
+												</div>
+												<div className="min-w-0">
+													<div className="flex items-center gap-2 flex-wrap">
+														<span className="text-xs font-bold text-[var(--text-primary)]">
+															Tiến trình phân tích URL
+														</span>
+														<span
+															className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+																resolveProgress.status === "success"
+																	? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+																	: resolveProgress.status === "error"
+																		? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+																		: "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)]"
+															}`}
+														>
+															{resolveProgress.status === "success"
+																? "Hoàn tất 100%"
+																: resolveProgress.status === "error"
+																	? "Thất bại"
+																	: `Bước ${Math.min(resolveProgress.step, 4)} / 4`}
+														</span>
+													</div>
+													<p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+														{resolveProgress.message}
+													</p>
+												</div>
+											</div>
+											<div className="text-right">
+												<span className="text-sm font-black font-mono text-[var(--brand-orange)]">
+													{resolveProgress.percent}%
+												</span>
+											</div>
+										</div>
+
+										{/* Animated Progress Bar */}
+										<div className="w-full h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden relative shadow-inner">
+											<div
+												className={`h-full transition-all duration-500 ease-out rounded-full ${
+													resolveProgress.status === "success"
+														? "bg-emerald-500"
+														: resolveProgress.status === "error"
+															? "bg-rose-500"
+															: "bg-gradient-to-r from-[var(--brand-orange)] via-amber-400 to-[var(--brand-coral)]"
+												}`}
+												style={{ width: `${resolveProgress.percent}%` }}
+											/>
+										</div>
+
+										{/* 4-Step Pipeline Grid */}
+										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+											{RESOLVE_STEPS.map((step) => {
+												const isCompleted =
+													resolveProgress.status === "success" ||
+													resolveProgress.step > step.id;
+												const isActive =
+													resolveProgress.status === "running" &&
+													resolveProgress.step === step.id;
+												const isFailed =
+													resolveProgress.status === "error" &&
+													resolveProgress.step === step.id;
+
+												return (
+													<div
+														key={step.id}
+														className={`p-2.5 rounded-xl border text-left transition-all ${
+															isCompleted
+																? "bg-emerald-500/5 border-emerald-500/25"
+																: isActive
+																	? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)] ring-1 ring-[var(--brand-orange)]/30"
+																	: isFailed
+																		? "bg-rose-500/10 border-rose-500/30"
+																		: "bg-zinc-500/5 border-[var(--border-primary)] opacity-60"
+														}`}
+													>
+														<div className="flex items-center space-x-2">
+															<div className="shrink-0">
+																{isCompleted ? (
+																	<CheckCircle2
+																		size={14}
+																		className="text-emerald-500"
+																	/>
+																) : isActive ? (
+																	<Loader2
+																		size={14}
+																		className="text-[var(--brand-orange)] animate-spin"
+																	/>
+																) : isFailed ? (
+																	<AlertCircle
+																		size={14}
+																		className="text-rose-500"
+																	/>
+																) : (
+																	<div className="w-3.5 h-3.5 rounded-full border border-zinc-400 flex items-center justify-center text-[9px] font-mono text-zinc-400">
+																		{step.id}
+																	</div>
+																)}
+															</div>
+															<span
+																className={`text-[11px] font-bold truncate ${
+																	isCompleted
+																		? "text-emerald-600 dark:text-emerald-400"
+																		: isActive
+																			? "text-[var(--brand-orange)]"
+																			: isFailed
+																				? "text-rose-600 dark:text-rose-400"
+																				: "text-[var(--text-secondary)]"
+																}`}
+															>
+																{step.title}
+															</span>
+														</div>
+														<p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-tight">
+															{step.description}
+														</p>
+													</div>
+												);
+											})}
+										</div>
+
+										{/* Error Banner with Retry */}
+										{resolveProgress.status === "error" &&
+											resolveProgress.errorDetail && (
+												<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2">
+													<div className="flex items-center gap-2 min-w-0">
+														<AlertCircle size={14} className="shrink-0" />
+														<span className="truncate">
+															{resolveProgress.errorDetail}
+														</span>
+													</div>
+													<button
+														type="button"
+														onClick={handleResolveUrl}
+														className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-[11px] hover:bg-rose-700 transition cursor-pointer shrink-0"
+													>
+														Thử lại
+													</button>
+												</div>
+											)}
+									</div>
 								)}
 							</div>
 						)}
@@ -1233,9 +1555,20 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 										</span>
 									)}
 								{selectedReleaseIds.size > 0 && (
-									<span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] text-[10px] font-bold">
-										{selectedReleaseIds.size} đã chọn
-									</span>
+									<div className="flex items-center gap-1.5">
+										<span className="px-2 py-0.5 rounded-full bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] text-[10px] font-bold">
+											{selectedReleaseIds.size} đã chọn
+										</span>
+										<button
+											type="button"
+											onClick={handleClearSelection}
+											className="px-2 py-0.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-500/25 transition cursor-pointer flex items-center gap-1 shadow-xs"
+											title="Bỏ chọn tất cả các chương đang chọn"
+										>
+											<X size={10} />
+											<span>Bỏ chọn hết</span>
+										</button>
+									</div>
 								)}
 							</div>
 
@@ -1307,27 +1640,43 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 									</button>
 								)}
 
-								{/* Select All Toggle */}
-								<button
-									type="button"
-									onClick={() => {
-										const allDisplayedIds = displayedReleases.map((r) => r.id);
-										const allSelected =
-											allDisplayedIds.length > 0 &&
-											allDisplayedIds.every((id) => selectedReleaseIds.has(id));
-										if (allSelected) {
-											handleClearSelection();
-										} else {
-											handleSelectAll();
-										}
-									}}
-									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)] text-xs font-bold text-[var(--brand-orange)] transition cursor-pointer whitespace-nowrap"
-								>
-									{displayedReleases.length > 0 &&
-									displayedReleases.every((r) => selectedReleaseIds.has(r.id))
-										? "Bỏ chọn tất cả"
-										: "Chọn tất cả"}
-								</button>
+								{/* Selection Actions: Distinct Select All and Deselect All */}
+								<div className="flex items-center gap-1.5">
+									<button
+										type="button"
+										onClick={handleSelectAll}
+										disabled={displayedReleases.length === 0}
+										className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)] text-xs font-bold text-[var(--text-primary)] hover:text-[var(--brand-orange)] transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+										title="Chọn toàn bộ các bản phát hành đang hiển thị"
+									>
+										<CheckCheck
+											size={13}
+											className="text-[var(--brand-orange)]"
+										/>
+										<span>Chọn tất cả ({displayedReleases.length})</span>
+									</button>
+									<button
+										type="button"
+										onClick={handleClearSelection}
+										disabled={selectedReleaseIds.size === 0}
+										className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-xs ${
+											selectedReleaseIds.size > 0
+												? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 active:scale-95"
+												: "border-[var(--border-primary)] bg-[var(--bg-primary)] text-zinc-400 opacity-40 cursor-not-allowed"
+										}`}
+										title="Bỏ chọn toàn bộ các chương đã chọn để chuẩn bị tải xuống"
+									>
+										<X
+											size={13}
+											className={
+												selectedReleaseIds.size > 0
+													? "text-rose-500 stroke-[2.5]"
+													: "text-zinc-400"
+											}
+										/>
+										<span>Bỏ chọn tất cả ({selectedReleaseIds.size})</span>
+									</button>
+								</div>
 							</div>
 						</div>
 
@@ -1600,6 +1949,17 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 							</strong>{" "}
 							bản phát hành
 						</span>
+						{selectedReleaseIds.size > 0 && (
+							<button
+								type="button"
+								onClick={handleClearSelection}
+								className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-xs"
+								title="Bỏ chọn toàn bộ các chương đã chọn để chọn lại từ đầu"
+							>
+								<X size={12} />
+								<span>Bỏ chọn tất cả</span>
+							</button>
+						)}
 						{duplicatesInfo.uniqueChaptersCount > 0 && (
 							<span className="text-zinc-400 hidden sm:inline">
 								(tương ứng với các chương của {mangaTitle})
