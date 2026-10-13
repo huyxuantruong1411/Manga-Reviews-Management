@@ -1,5 +1,5 @@
 import io
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bson import ObjectId
@@ -93,6 +93,10 @@ async def test_create_download_plan_auto_link_success():
         patch(
             "backend.services.source_binding_service.source_binding_service._get_sources_col",
             return_value=MockMangaSourcesCol(),
+        ),
+        patch(
+            "backend.services.datasources.mangafire.MangaFireSourceProvider._fetch_work_details_sync",
+            return_value={"title": "Romi"},
         ),
     ):
         plan = await plan_service.create_plan(
@@ -450,7 +454,20 @@ async def test_failed_staging_preserves_ready_chapter():
             return _create_sample_image("JPEG")
         raise RuntimeError("Network disconnected while downloading page 2")
 
-    with pytest.raises(RuntimeError) as exc_info:
+    mock_minio = MagicMock()
+    mock_minio.upload_chapter_page_revision.return_value = (
+        "key",
+        100,
+        100,
+        100,
+        "sha",
+        "md5",
+    )
+
+    with (
+        patch.object(media_service, "_minio_service", mock_minio),
+        pytest.raises(RuntimeError) as exc_info,
+    ):
         await media_service.stage_and_verify_chapter(
             manga_id="manga_1",
             chapter_id="60c72b2f9b1d8b2bad000003",

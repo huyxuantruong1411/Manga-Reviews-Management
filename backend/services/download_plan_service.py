@@ -90,7 +90,13 @@ class DownloadPlanService:
         if not provider:
             raise ValueError(f"Unknown datasource provider: '{source}'")
 
-        work = await provider.resolve_work(source_work_id)
+        work = None
+        if hasattr(provider, "resolve_work"):
+            try:
+                work = await provider.resolve_work(source_work_id)
+            except Exception as e:
+                logger.warning(f"Could not resolve work context for {source}:{source_work_id}: {e}")
+
         if not work:
             work = SourceWork(
                 source=source,

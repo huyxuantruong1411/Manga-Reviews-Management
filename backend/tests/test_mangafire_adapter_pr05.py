@@ -312,7 +312,13 @@ async def test_mangafire_download_plan_one_release_per_chapter():
 
     release_ids = [r["id"] for r in releases]
 
-    with patch("backend.services.download_plan_service.get_db", return_value=mock_db):
+    with (
+        patch("backend.services.download_plan_service.get_db", return_value=mock_db),
+        patch(
+            "backend.services.datasources.mangafire.MangaFireSourceProvider._fetch_work_details_sync",
+            return_value={"title": "Romi"},
+        ),
+    ):
         plan = await download_plan_service.create_plan(
             manga_id="manga_123",
             source="mangafire",
