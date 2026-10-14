@@ -301,7 +301,7 @@ class TierlistService:
                     )
                 )
 
-            avg_rating = round(sum(row_scores) / len(row_scores), 2) if row_scores else None
+            avg_rating = round(sum(row_scores) / len(row_scores), 2) if (row_scores and settings.show_rating) else None
             hydrated_tiers.append(
                 HydratedTierRow(
                     row_id=row_id,
@@ -358,7 +358,11 @@ class TierlistService:
         unranked_count = len(unranked_pool)
         excluded_count = len(excluded_pool)
         completion_pct = round((ranked_count / total_creator_mangas * 100), 1) if total_creator_mangas > 0 else 0.0
-        overall_avg = round(sum(all_rated_scores) / len(all_rated_scores), 2) if all_rated_scores else None
+        overall_avg = (
+            round(sum(all_rated_scores) / len(all_rated_scores), 2)
+            if (all_rated_scores and settings.show_rating)
+            else None
+        )
 
         analytics = TierlistAnalyticsSummary(
             total_creator_mangas=total_creator_mangas,

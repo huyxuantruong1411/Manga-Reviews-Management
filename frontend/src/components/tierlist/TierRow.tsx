@@ -127,7 +127,7 @@ export const TierRow: React.FC<TierRowProps> = ({
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
-			className={`group relative flex flex-col md:flex-row items-stretch rounded-2xl border transition-all duration-200 bg-card shadow-xs ${
+			className={`relative flex flex-col md:flex-row items-stretch rounded-2xl border transition-all duration-200 bg-card shadow-xs ${
 				showSettings ? "z-30" : "z-10"
 			} ${
 				isDragOver
@@ -170,12 +170,14 @@ export const TierRow: React.FC<TierRowProps> = ({
 				{/* Row Metadata (Count & Average rating) */}
 				<div className="flex md:flex-col items-center gap-1.5 md:gap-0.5 text-[11px] opacity-90 font-medium">
 					<span>{row.item_count} bộ</span>
-					{row.average_rating !== null && row.average_rating !== undefined && (
-						<span className="flex items-center gap-0.5 font-bold">
-							<Star size={10} className="fill-current" />
-							<span>{row.average_rating}</span>
-						</span>
-					)}
+					{settings.show_rating &&
+						row.average_rating !== null &&
+						row.average_rating !== undefined && (
+							<span className="flex items-center gap-0.5 font-bold">
+								<Star size={10} className="fill-current" />
+								<span>{row.average_rating}</span>
+							</span>
+						)}
 				</div>
 			</div>
 

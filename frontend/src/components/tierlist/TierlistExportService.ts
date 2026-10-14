@@ -110,7 +110,13 @@ export async function exportTierlistToPng(
 		// Count indicator
 		ctx.font =
 			"bold 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-		ctx.fillText(`${row.item_count} bộ`, rowHeaderWidth / 2, labelY + 24);
+		const countStr =
+			tierlist.settings.show_rating &&
+			row.average_rating !== null &&
+			row.average_rating !== undefined
+				? `${row.item_count} bộ · ★${row.average_rating}`
+				: `${row.item_count} bộ`;
+		ctx.fillText(countStr, rowHeaderWidth / 2, labelY + 24);
 
 		// Reset text alignment
 		ctx.textAlign = "left";
@@ -177,7 +183,11 @@ export async function exportTierlistToPng(
 			}
 
 			// Rating badge on card bottom
-			if (item.personal_rating !== null && item.personal_rating !== undefined) {
+			if (
+				tierlist.settings.show_rating &&
+				item.personal_rating !== null &&
+				item.personal_rating !== undefined
+			) {
 				ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
 				ctx.beginPath();
 				ctx.roundRect(
@@ -261,7 +271,9 @@ export function generateTierlistMarkdown(tierlist: TierlistDetail): string {
 		} else {
 			for (const item of row.items) {
 				const ratingPart =
-					item.personal_rating !== null && item.personal_rating !== undefined
+					tierlist.settings.show_rating &&
+					item.personal_rating !== null &&
+					item.personal_rating !== undefined
 						? ` — ★ ${item.personal_rating}`
 						: "";
 				const notePart = item.note ? ` [${item.note}]` : "";

@@ -8,7 +8,7 @@ import {
 	Star,
 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import type {
 	CardAspectRatio,
@@ -58,6 +58,7 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 	const { shouldBlur } = useMangaBlur();
 	const [showMenu, setShowMenu] = useState(false);
 	const [isDragging, setIsDragging] = useState(false);
+	const cardRef = useRef<HTMLDivElement>(null);
 
 	const isCoverBlurred = shouldBlur({
 		content_rating: item.content_rating,
@@ -99,10 +100,16 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 
 	return (
 		<div
+			ref={cardRef}
 			draggable={isDraggable}
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
-			className={`group relative flex-shrink-0 flex flex-col rounded-xl bg-card border border-border shadow-xs select-none transition-all duration-150 ${
+			onMouseLeave={() => {
+				if (cardRef.current?.contains(document.activeElement)) {
+					(document.activeElement as HTMLElement)?.blur();
+				}
+			}}
+			className={`group/card relative flex-shrink-0 flex flex-col rounded-xl bg-card border border-border shadow-xs select-none transition-all duration-150 ${
 				showMenu ? "z-30" : "z-10"
 			} ${sizeClasses} ${
 				isDragging
@@ -120,7 +127,7 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 					src={item.cover_url || item.default_cover_url}
 					alt={item.title}
 					shouldBlur={isCoverBlurred}
-					className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+					className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-105"
 				/>
 
 				{/* Note Badge on top-left if present */}
@@ -157,13 +164,14 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 					)}
 
 				{/* Action Overlay Toolbar (Visible on hover / focus) */}
-				<div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex flex-col justify-between p-1 z-20">
+				<div className="absolute inset-0 bg-black/60 opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 transition-opacity flex flex-col justify-between p-1 z-20">
 					{/* Top Actions: Customize & Link */}
 					<div className="flex items-center justify-between">
 						<button
 							type="button"
 							onClick={(e) => {
 								e.stopPropagation();
+								(e.currentTarget as HTMLElement).blur();
 								onCustomize(item);
 							}}
 							title="Đổi bìa Volume / Ghi chú"
@@ -175,7 +183,10 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 							href={`/manga/${item.manga_id}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							onClick={(e) => e.stopPropagation()}
+							onClick={(e) => {
+								e.stopPropagation();
+								(e.currentTarget as HTMLElement).blur();
+							}}
 							title="Mở trang chi tiết"
 							className="p-1 rounded-md bg-white/20 hover:bg-white/40 text-white transition"
 						>

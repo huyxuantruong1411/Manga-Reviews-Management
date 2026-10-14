@@ -582,3 +582,57 @@ async def test_api_router_endpoints_e2e(mock_db, monkeypatch):
         # Delete
         del_res = await client.delete(f"/api/tierlists/{tierlist_id}")
         assert del_res.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_show_rating_toggle_synchronization(mock_db, monkeypatch):
+    """Verify that average_rating and overall_ranked_avg_rating are calculated ONLY when show_rating is True."""
+    from backend.services.tierlist_service import TierlistService
+
+    monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
+
+    service = TierlistService()
+
+    # Create tierlist with auto-seed so rows have rated items
+    tl = await service.create_tierlist(
+        "Abe Youichi",
+        TierlistCreateRequest(title="Rating Sync Test", auto_seed_by_rating=True),
+    )
+
+    # Initial state: show_rating defaults to True
+    assert tl.settings.show_rating is True
+    assert tl.analytics.overall_ranked_avg_rating is not None
+    # At least one seeded tier should have average_rating computed
+    seeded_tiers = [r for r in tl.tiers if r.items]
+    assert len(seeded_tiers) > 0
+    assert any(r.average_rating is not None for r in seeded_tiers)
+
+    # Toggle show_rating to False
+    updated_tl = await service.update_tierlist(
+        tl.id,
+        TierlistUpdateRequest(
+            settings={"show_rating": False},
+            expected_revision=tl.revision,
+        ),
+    )
+    assert updated_tl.settings.show_rating is False
+    assert updated_tl.analytics.overall_ranked_avg_rating is None
+    # All tiers must have average_rating == None
+    for row in updated_tl.tiers:
+        assert row.average_rating is None
+
+    # Toggle show_rating back to True
+    restored_tl = await service.update_tierlist(
+        tl.id,
+        TierlistUpdateRequest(
+            settings={"show_rating": True},
+            expected_revision=updated_tl.revision,
+        ),
+    )
+    assert restored_tl.settings.show_rating is True
+    assert restored_tl.analytics.overall_ranked_avg_rating is not None
+    restored_seeded = [r for r in restored_tl.tiers if r.items]
+    assert any(r.average_rating is not None for r in restored_seeded)

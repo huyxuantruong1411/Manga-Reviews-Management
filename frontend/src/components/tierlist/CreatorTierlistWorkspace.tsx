@@ -60,6 +60,44 @@ import { TierlistVersionCompareModal } from "./TierlistVersionCompareModal";
 import { TierRow } from "./TierRow";
 import { UnrankedMangaPool } from "./UnrankedMangaPool";
 
+const recomputeTiersStats = (
+	tiers: HydratedTierRow[],
+	showRating: boolean,
+): HydratedTierRow[] =>
+	tiers.map((row) => {
+		const count = row.items.length;
+		if (!showRating || count === 0) {
+			return { ...row, item_count: count, average_rating: null };
+		}
+		const scores = row.items
+			.map((i) => i.personal_rating)
+			.filter((s): s is number => s !== null && s !== undefined);
+		const avg =
+			scores.length > 0
+				? Math.round(
+						(scores.reduce((a, b) => a + b, 0) / scores.length) * 100,
+					) / 100
+				: null;
+		return { ...row, item_count: count, average_rating: avg };
+	});
+
+const calculateOverallAvg = (
+	tiers: HydratedTierRow[],
+	showRating: boolean,
+): number | null => {
+	if (!showRating) return null;
+	const allScores = tiers.flatMap((r) =>
+		r.items
+			.map((i) => i.personal_rating)
+			.filter((s): s is number => s !== null && s !== undefined),
+	);
+	return allScores.length > 0
+		? Math.round(
+				(allScores.reduce((a, b) => a + b, 0) / allScores.length) * 100,
+			) / 100
+		: null;
+};
+
 interface CreatorTierlistWorkspaceProps {
 	creatorName: string;
 	activeTierlistId?: string | null;
@@ -373,10 +411,9 @@ export const CreatorTierlistWorkspace: React.FC<
 		if (!foundItem) return;
 
 		// 2. Remove from all tiers and unranked pool
-		const updatedTiers = activeTierlist.tiers.map((row) => ({
+		const rawTiers = activeTierlist.tiers.map((row) => ({
 			...row,
 			items: row.items.filter((i) => i.manga_id !== mangaId),
-			item_count: row.items.filter((i) => i.manga_id !== mangaId).length,
 		}));
 
 		const updatedUnranked = activeTierlist.unranked_pool.filter(
@@ -384,30 +421,26 @@ export const CreatorTierlistWorkspace: React.FC<
 		);
 
 		// 3. Append to target row
-		const targetRow = updatedTiers.find((r) => r.row_id === targetRowId);
+		const targetRow = rawTiers.find((r) => r.row_id === targetRowId);
 		if (targetRow) {
 			targetRow.items.push(foundItem);
-			targetRow.item_count = targetRow.items.length;
 		}
 
-		// Recalculate average rating for target row
-		if (targetRow) {
-			const scores = targetRow.items
-				.map((i) => i.personal_rating)
-				.filter((s): s is number => s !== null && s !== undefined);
-			targetRow.average_rating =
-				scores.length > 0
-					? Math.round(
-							(scores.reduce((a, b) => a + b, 0) / scores.length) * 100,
-						) / 100
-					: null;
-		}
+		// Recompute all tiers stats with show_rating respected
+		const updatedTiers = recomputeTiersStats(
+			rawTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const totalRanked = updatedTiers.reduce(
 			(acc, r) => acc + r.items.length,
 			0,
 		);
 		const totalManga = activeTierlist.analytics.total_creator_mangas;
+		const newOverallAvg = calculateOverallAvg(
+			updatedTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const nextState: TierlistDetail = {
 			...activeTierlist,
@@ -421,6 +454,7 @@ export const CreatorTierlistWorkspace: React.FC<
 					totalManga > 0
 						? Math.round((totalRanked / totalManga) * 1000) / 10
 						: 0,
+				overall_ranked_avg_rating: newOverallAvg,
 			},
 		};
 
@@ -442,11 +476,15 @@ export const CreatorTierlistWorkspace: React.FC<
 		if (!foundItem) return;
 
 		// Remove from tiers and add back to pool
-		const updatedTiers = activeTierlist.tiers.map((row) => ({
+		const rawTiers = activeTierlist.tiers.map((row) => ({
 			...row,
 			items: row.items.filter((i) => i.manga_id !== mangaId),
-			item_count: row.items.filter((i) => i.manga_id !== mangaId).length,
 		}));
+
+		const updatedTiers = recomputeTiersStats(
+			rawTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const updatedUnranked = [...activeTierlist.unranked_pool, foundItem];
 		const totalRanked = updatedTiers.reduce(
@@ -454,6 +492,10 @@ export const CreatorTierlistWorkspace: React.FC<
 			0,
 		);
 		const totalManga = activeTierlist.analytics.total_creator_mangas;
+		const newOverallAvg = calculateOverallAvg(
+			updatedTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const nextState: TierlistDetail = {
 			...activeTierlist,
@@ -467,6 +509,7 @@ export const CreatorTierlistWorkspace: React.FC<
 					totalManga > 0
 						? Math.round((totalRanked / totalManga) * 1000) / 10
 						: 0,
+				overall_ranked_avg_rating: newOverallAvg,
 			},
 		};
 
@@ -486,7 +529,7 @@ export const CreatorTierlistWorkspace: React.FC<
 			let foundItem: HydratedTierItem | null = null;
 
 			// Remove from tiers or unranked
-			const updatedTiers = activeTierlist.tiers.map((row) => ({
+			const rawTiers = activeTierlist.tiers.map((row) => ({
 				...row,
 				items: row.items.filter((i) => {
 					if (i.manga_id === mangaId) {
@@ -512,6 +555,20 @@ export const CreatorTierlistWorkspace: React.FC<
 
 			if (!foundItem) return;
 
+			const updatedTiers = recomputeTiersStats(
+				rawTiers,
+				activeTierlist.settings.show_rating,
+			);
+			const totalRanked = updatedTiers.reduce(
+				(acc, r) => acc + r.items.length,
+				0,
+			);
+			const totalManga = activeTierlist.analytics.total_creator_mangas;
+			const newOverallAvg = calculateOverallAvg(
+				updatedTiers,
+				activeTierlist.settings.show_rating,
+			);
+
 			const nextExcludedIds = Array.from(
 				new Set([...activeTierlist.settings.excluded_manga_ids, mangaId]),
 			);
@@ -528,8 +585,14 @@ export const CreatorTierlistWorkspace: React.FC<
 				excluded_pool: updatedExcludedPool,
 				analytics: {
 					...activeTierlist.analytics,
+					ranked_count: totalRanked,
 					excluded_count: updatedExcludedPool.length,
 					unranked_count: updatedUnranked.length,
+					completion_pct:
+						totalManga > 0
+							? Math.round((totalRanked / totalManga) * 1000) / 10
+							: 0,
+					overall_ranked_avg_rating: newOverallAvg,
 				},
 			};
 
@@ -707,10 +770,12 @@ export const CreatorTierlistWorkspace: React.FC<
 		if (!targetRow || targetRow.items.length === 0) return;
 
 		const returnedItems = targetRow.items;
-		const updatedTiers = activeTierlist.tiers.map((r) =>
-			r.row_id === rowId
-				? { ...r, items: [], item_count: 0, average_rating: null }
-				: r,
+		const rawTiers = activeTierlist.tiers.map((r) =>
+			r.row_id === rowId ? { ...r, items: [] } : r,
+		);
+		const updatedTiers = recomputeTiersStats(
+			rawTiers,
+			activeTierlist.settings.show_rating,
 		);
 		const updatedUnranked = [...activeTierlist.unranked_pool, ...returnedItems];
 
@@ -719,6 +784,10 @@ export const CreatorTierlistWorkspace: React.FC<
 			0,
 		);
 		const totalManga = activeTierlist.analytics.total_creator_mangas;
+		const newOverallAvg = calculateOverallAvg(
+			updatedTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const nextState: TierlistDetail = {
 			...activeTierlist,
@@ -732,6 +801,7 @@ export const CreatorTierlistWorkspace: React.FC<
 					totalManga > 0
 						? Math.round((totalRanked / totalManga) * 1000) / 10
 						: 0,
+				overall_ranked_avg_rating: newOverallAvg,
 			},
 		};
 
@@ -754,7 +824,11 @@ export const CreatorTierlistWorkspace: React.FC<
 		const targetRow = activeTierlist.tiers.find((r) => r.row_id === rowId);
 		const returnedItems = targetRow?.items || [];
 
-		const updatedTiers = activeTierlist.tiers.filter((r) => r.row_id !== rowId);
+		const rawTiers = activeTierlist.tiers.filter((r) => r.row_id !== rowId);
+		const updatedTiers = recomputeTiersStats(
+			rawTiers,
+			activeTierlist.settings.show_rating,
+		);
 		const updatedUnranked = [...activeTierlist.unranked_pool, ...returnedItems];
 
 		const totalRanked = updatedTiers.reduce(
@@ -762,6 +836,10 @@ export const CreatorTierlistWorkspace: React.FC<
 			0,
 		);
 		const totalManga = activeTierlist.analytics.total_creator_mangas;
+		const newOverallAvg = calculateOverallAvg(
+			updatedTiers,
+			activeTierlist.settings.show_rating,
+		);
 
 		const nextState: TierlistDetail = {
 			...activeTierlist,
@@ -775,6 +853,7 @@ export const CreatorTierlistWorkspace: React.FC<
 					totalManga > 0
 						? Math.round((totalRanked / totalManga) * 1000) / 10
 						: 0,
+				overall_ranked_avg_rating: newOverallAvg,
 			},
 		};
 
@@ -1592,15 +1671,29 @@ export const CreatorTierlistWorkspace: React.FC<
 								<input
 									type="checkbox"
 									checked={activeTierlist.settings.show_rating}
-									onChange={(e) =>
+									onChange={(e) => {
+										const newShowRating = e.target.checked;
+										const updatedTiers = recomputeTiersStats(
+											activeTierlist.tiers,
+											newShowRating,
+										);
+										const newOverallAvg = calculateOverallAvg(
+											updatedTiers,
+											newShowRating,
+										);
 										pushHistory({
 											...activeTierlist,
 											settings: {
 												...activeTierlist.settings,
-												show_rating: e.target.checked,
+												show_rating: newShowRating,
 											},
-										})
-									}
+											tiers: updatedTiers,
+											analytics: {
+												...activeTierlist.analytics,
+												overall_ranked_avg_rating: newOverallAvg,
+											},
+										});
+									}}
 									className="rounded text-primary focus:ring-primary"
 								/>
 								<span>Hiện điểm số</span>
