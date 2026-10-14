@@ -95,12 +95,16 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 				? "Họa sĩ"
 				: "Cả hai";
 
+	const hasCaption = showTitle || showRoleBadge;
+
 	return (
 		<div
 			draggable={isDraggable}
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
-			className={`group relative flex-shrink-0 flex flex-col rounded-xl overflow-hidden bg-card border border-border shadow-xs select-none transition-all duration-150 ${sizeClasses} ${
+			className={`group relative flex-shrink-0 flex flex-col rounded-xl bg-card border border-border shadow-xs select-none transition-all duration-150 ${
+				showMenu ? "z-30" : "z-10"
+			} ${sizeClasses} ${
 				isDragging
 					? "opacity-35 scale-95 ring-2 ring-primary"
 					: "hover:shadow-md hover:border-primary/50"
@@ -108,7 +112,9 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 		>
 			{/* Cover Media Container */}
 			<div
-				className={`relative w-full ${aspectClass} overflow-hidden bg-muted`}
+				className={`relative w-full ${aspectClass} overflow-hidden ${
+					hasCaption ? "rounded-t-xl" : "rounded-xl"
+				} bg-muted`}
 			>
 				<BlurredCover
 					src={item.cover_url || item.default_cover_url}
@@ -296,7 +302,7 @@ export const TierItemCard: React.FC<TierItemCardProps> = ({
 
 			{/* Optional Caption Section */}
 			{(showTitle || showRoleBadge) && (
-				<div className="p-1.5 flex flex-col gap-0.5 bg-card">
+				<div className="p-1.5 flex flex-col gap-0.5 bg-card rounded-b-xl">
 					{showTitle && (
 						<p
 							title={item.title}

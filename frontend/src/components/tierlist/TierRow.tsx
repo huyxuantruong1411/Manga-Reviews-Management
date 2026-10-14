@@ -127,7 +127,9 @@ export const TierRow: React.FC<TierRowProps> = ({
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
-			className={`group relative flex flex-col md:flex-row items-stretch rounded-2xl border transition-all duration-200 bg-card overflow-hidden shadow-xs ${
+			className={`group relative flex flex-col md:flex-row items-stretch rounded-2xl border transition-all duration-200 bg-card shadow-xs ${
+				showSettings ? "z-30" : "z-10"
+			} ${
 				isDragOver
 					? "ring-2 ring-primary/80 border-primary bg-primary/5"
 					: `${theme.borderAccent} hover:border-primary/40`
@@ -135,7 +137,7 @@ export const TierRow: React.FC<TierRowProps> = ({
 		>
 			{/* Left Column: Tier Label & Header */}
 			<div
-				className={`w-full md:w-32 lg:w-36 flex-shrink-0 flex md:flex-col items-center justify-between md:justify-center p-3 gap-1 ${theme.headerBg} select-none transition-colors`}
+				className={`w-full md:w-32 lg:w-36 flex-shrink-0 flex md:flex-col items-center justify-between md:justify-center p-3 gap-1 ${theme.headerBg} select-none transition-colors rounded-t-2xl md:rounded-tr-none md:rounded-l-2xl`}
 			>
 				{isEditingLabel ? (
 					<input
@@ -178,7 +180,7 @@ export const TierRow: React.FC<TierRowProps> = ({
 			</div>
 
 			{/* Center Column: Drop Zone & Manga Cards */}
-			<div className="flex-1 min-h-[110px] md:min-h-[140px] p-2.5 md:p-3 flex flex-wrap items-center content-start gap-2.5 overflow-x-auto">
+			<div className="flex-1 min-h-[110px] md:min-h-[140px] p-2.5 md:p-3 flex flex-wrap items-start content-start gap-2.5 overflow-x-auto">
 				{row.items.length === 0 ? (
 					<div className="w-full h-full min-h-[90px] flex flex-col items-center justify-center p-4 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground select-none">
 						<span>
@@ -206,7 +208,7 @@ export const TierRow: React.FC<TierRowProps> = ({
 			</div>
 
 			{/* Right Column: Row Action Controls */}
-			<div className="w-full md:w-12 flex-shrink-0 flex md:flex-col items-center justify-end md:justify-center p-1.5 gap-1 border-t md:border-t-0 md:border-l border-border bg-muted/30">
+			<div className="w-full md:w-12 flex-shrink-0 flex md:flex-col items-center justify-end md:justify-center p-1.5 gap-1 border-t md:border-t-0 md:border-l border-border bg-muted/30 rounded-b-2xl md:rounded-bl-none md:rounded-r-2xl">
 				{/* Settings Popover Trigger */}
 				<div className="relative">
 					<button
@@ -227,7 +229,7 @@ export const TierRow: React.FC<TierRowProps> = ({
 								className="fixed inset-0 z-40 cursor-default bg-transparent border-0"
 								onClick={() => setShowSettings(false)}
 							/>
-							<div className="absolute right-0 top-full md:top-auto md:bottom-0 mt-1 md:mt-0 md:mr-1 w-64 rounded-2xl bg-popover text-popover-foreground border border-border shadow-xl p-3 z-50 flex flex-col gap-3 text-xs animate-in fade-in-50 zoom-in-95">
+							<div className="absolute right-0 md:right-full top-full md:top-0 mt-1 md:mt-0 md:mr-2 w-72 max-w-[calc(100vw-32px)] rounded-2xl bg-popover text-popover-foreground border border-border shadow-2xl p-3.5 z-50 flex flex-col gap-3 text-xs animate-in fade-in-50 zoom-in-95">
 								<div className="flex items-center justify-between border-b border-border pb-1.5">
 									<span className="font-bold text-xs">
 										Cài đặt hàng: {row.label}
@@ -235,7 +237,8 @@ export const TierRow: React.FC<TierRowProps> = ({
 									<button
 										type="button"
 										onClick={() => setShowSettings(false)}
-										className="text-muted-foreground hover:text-foreground font-bold"
+										aria-label="Đóng bảng cài đặt"
+										className="text-muted-foreground hover:text-foreground font-bold p-1 rounded-md hover:bg-muted transition"
 									>
 										✕
 									</button>

@@ -18,6 +18,7 @@ interface UnrankedMangaPoolProps {
 		label: string;
 		color_key: TierColorKey;
 	}>;
+	isSplitLayout?: boolean;
 	onQuickMove: (
 		mangaId: string,
 		targetRowId: string | "pool" | "exclude",
@@ -32,6 +33,7 @@ export const UnrankedMangaPool: React.FC<UnrankedMangaPoolProps> = ({
 	excludedPool,
 	settings,
 	availableRows,
+	isSplitLayout = false,
 	onQuickMove,
 	onRestoreExcluded,
 	onCustomizeItem,
@@ -133,15 +135,15 @@ export const UnrankedMangaPool: React.FC<UnrankedMangaPoolProps> = ({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			className={`rounded-2xl border bg-card transition-all duration-200 shadow-sm ${
-				isStickyDock
+				isStickyDock && !isSplitLayout
 					? "fixed bottom-3 left-4 right-4 z-40 max-h-[45vh] overflow-y-auto shadow-2xl border-primary/40 backdrop-blur-md bg-card/95"
 					: "relative"
 			} ${isDragOver ? "ring-2 ring-amber-500/80 border-amber-500 bg-amber-500/5" : "border-border"}`}
 		>
 			{/* Top Header Bar & Search Controls */}
-			<div className="p-3 md:p-4 border-b border-border flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-				{/* Tab Selection */}
-				<div className="flex items-center gap-2">
+			<div className="p-3 md:p-4 border-b border-border flex flex-col gap-3">
+				{/* Tab Selection & Dock toggle */}
+				<div className="flex flex-wrap items-center justify-between gap-2">
 					<div className="inline-flex rounded-xl bg-muted p-1">
 						<button
 							type="button"
@@ -167,32 +169,45 @@ export const UnrankedMangaPool: React.FC<UnrankedMangaPoolProps> = ({
 						</button>
 					</div>
 
-					{/* Sticky Dock Toggle */}
-					<button
-						type="button"
-						onClick={() => setIsStickyDock((prev) => !prev)}
-						title={
-							isStickyDock
-								? "Bỏ ghim đáy màn hình"
-								: "Ghim cố định dưới đáy màn hình (tiện kéo thả)"
-						}
-						className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition ${
-							isStickyDock
-								? "bg-primary text-primary-foreground border-primary"
-								: "bg-background text-muted-foreground hover:text-foreground border-border"
-						}`}
-					>
-						<Pin size={13} className={isStickyDock ? "rotate-45" : ""} />
-						<span className="hidden sm:inline">
-							{isStickyDock ? "Đã ghim đáy" : "Ghim đáy"}
-						</span>
-					</button>
+					<div className="flex items-center gap-2">
+						{filteredItems.length !==
+							(activeTab === "unranked"
+								? unrankedPool.length
+								: excludedPool.length) && (
+							<span className="text-[11px] text-muted-foreground font-semibold">
+								Lọc: {filteredItems.length} bộ
+							</span>
+						)}
+
+						{/* Sticky Dock Toggle - only shown in stacked mode */}
+						{!isSplitLayout && (
+							<button
+								type="button"
+								onClick={() => setIsStickyDock((prev) => !prev)}
+								title={
+									isStickyDock
+										? "Bỏ ghim đáy màn hình"
+										: "Ghim cố định dưới đáy màn hình (tiện kéo thả)"
+								}
+								className={`p-1.5 px-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition ${
+									isStickyDock
+										? "bg-primary text-primary-foreground border-primary"
+										: "bg-background text-muted-foreground hover:text-foreground border-border"
+								}`}
+							>
+								<Pin size={12} className={isStickyDock ? "rotate-45" : ""} />
+								<span className="hidden sm:inline">
+									{isStickyDock ? "Đã ghim đáy" : "Ghim đáy"}
+								</span>
+							</button>
+						)}
+					</div>
 				</div>
 
 				{/* Filter & Search Bar */}
 				<div className="flex flex-wrap items-center gap-2">
 					{/* Search by Title */}
-					<div className="relative flex-1 sm:w-48">
+					<div className="relative flex-1 min-w-[130px] sm:w-48">
 						<Search
 							size={13}
 							className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -247,7 +262,11 @@ export const UnrankedMangaPool: React.FC<UnrankedMangaPoolProps> = ({
 			</div>
 
 			{/* Cards Grid / Pool Area */}
-			<div className="p-3 md:p-4 min-h-[130px] flex flex-wrap items-center content-start gap-2.5 max-h-72 overflow-y-auto">
+			<div
+				className={`p-3 md:p-4 min-h-[80px] flex flex-wrap items-start content-start gap-2.5 ${
+					isSplitLayout ? "max-h-[calc(100vh-230px)] overflow-y-auto pr-1" : ""
+				}`}
+			>
 				{filteredItems.length === 0 ? (
 					<div className="w-full py-8 text-center text-xs text-muted-foreground select-none">
 						{activeTab === "unranked"

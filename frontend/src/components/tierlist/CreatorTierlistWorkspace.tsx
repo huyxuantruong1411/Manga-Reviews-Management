@@ -1,5 +1,6 @@
 import {
 	Check,
+	Columns2,
 	Copy,
 	Download,
 	FileDown,
@@ -10,6 +11,7 @@ import {
 	Plus,
 	Redo2,
 	RotateCw,
+	Rows2,
 	Save,
 	Sparkles,
 	Star,
@@ -17,7 +19,7 @@ import {
 	Undo2,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	autoSeedTierlist,
 	cloneTierlist,
@@ -100,6 +102,74 @@ export const CreatorTierlistWorkspace: React.FC<
 	const [showExportMenu, setShowExportMenu] = useState(false);
 	const [exportingPng, setExportingPng] = useState(false);
 	const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+
+	// Layout mode & resizable split pane
+	const [layoutMode, setLayoutMode] = useState<"stacked" | "split">(() => {
+		return (
+			(localStorage.getItem("creator_tierlist_layout_mode") as
+				| "stacked"
+				| "split") || "split"
+		);
+	});
+	const [splitRatio, setSplitRatio] = useState<number>(() => {
+		const saved = localStorage.getItem("creator_tierlist_split_ratio");
+		return saved ? Math.min(Math.max(Number(saved), 25), 75) : 58;
+	});
+	const [isResizing, setIsResizing] = useState(false);
+	const [isLargeScreen, setIsLargeScreen] = useState<boolean>(() => {
+		return typeof window !== "undefined" ? window.innerWidth >= 1024 : true;
+	});
+	const splitContainerRef = useRef<HTMLDivElement>(null);
+
+	const handleMouseDownResize = (e: React.MouseEvent) => {
+		e.preventDefault();
+		setIsResizing(true);
+	};
+
+	useEffect(() => {
+		const handleResize = () => {
+			setIsLargeScreen(window.innerWidth >= 1024);
+		};
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
+
+	useEffect(() => {
+		if (!isResizing) return;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			if (!splitContainerRef.current) return;
+			const rect = splitContainerRef.current.getBoundingClientRect();
+			const offsetX = e.clientX - rect.left;
+			const newRatio = (offsetX / rect.width) * 100;
+			const clamped = Math.min(Math.max(newRatio, 25), 75);
+			setSplitRatio(clamped);
+		};
+
+		const handleMouseUp = () => {
+			setIsResizing(false);
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		document.body.style.cursor = "col-resize";
+		document.body.style.userSelect = "none";
+
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+	}, [isResizing]);
+
+	useEffect(() => {
+		localStorage.setItem("creator_tierlist_layout_mode", layoutMode);
+	}, [layoutMode]);
+
+	useEffect(() => {
+		localStorage.setItem("creator_tierlist_split_ratio", splitRatio.toString());
+	}, [splitRatio]);
 
 	// Sync isDirty upstream
 	const markDirty = (dirty: boolean) => {
@@ -1275,87 +1345,252 @@ export const CreatorTierlistWorkspace: React.FC<
 						</div>
 					</div>
 
-					{/* Toggles: Title & Rating */}
-					<div className="flex items-center gap-4">
-						<label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground">
-							<input
-								type="checkbox"
-								checked={activeTierlist.settings.show_title}
-								onChange={(e) =>
-									pushHistory({
-										...activeTierlist,
-										settings: {
-											...activeTierlist.settings,
-											show_title: e.target.checked,
-										},
-									})
-								}
-								className="rounded text-primary focus:ring-primary"
-							/>
-							<span>Hiện tên truyện</span>
-						</label>
+					{/* Layout Mode & Toggles */}
+					<div className="flex flex-wrap items-center gap-4">
+						{/* Layout Mode Switcher */}
+						<div className="flex items-center gap-1.5">
+							<span className="text-muted-foreground font-semibold">
+								Bố cục:
+							</span>
+							<button
+								type="button"
+								onClick={() => setLayoutMode("split")}
+								className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+									layoutMode === "split"
+										? "bg-primary/10 text-primary border border-primary/30"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+								title="Hiển thị 2 cột song song (Tierlist bên trái, Kho thẻ bên phải)"
+							>
+								<Columns2 size={13} />
+								<span className="hidden sm:inline">2 Cột song song</span>
+							</button>
+							<button
+								type="button"
+								onClick={() => setLayoutMode("stacked")}
+								className={`px-2 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 ${
+									layoutMode === "stacked"
+										? "bg-primary/10 text-primary border border-primary/30"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+								title="Xếp chồng dọc (Tierlist ở trên, Kho thẻ ở dưới)"
+							>
+								<Rows2 size={13} />
+								<span className="hidden sm:inline">Xếp chồng dọc</span>
+							</button>
+							{layoutMode === "split" && (
+								<div className="hidden lg:flex items-center gap-1 pl-1.5 border-l border-border text-[10px] text-muted-foreground">
+									<span>Tỷ lệ:</span>
+									<button
+										type="button"
+										onClick={() => setSplitRatio(50)}
+										className={`px-1.5 py-0.5 rounded transition ${
+											splitRatio === 50
+												? "font-bold text-primary bg-primary/10"
+												: "hover:text-foreground"
+										}`}
+									>
+										50:50
+									</button>
+									<button
+										type="button"
+										onClick={() => setSplitRatio(58)}
+										className={`px-1.5 py-0.5 rounded transition ${
+											splitRatio === 58
+												? "font-bold text-primary bg-primary/10"
+												: "hover:text-foreground"
+										}`}
+									>
+										60:40
+									</button>
+									<button
+										type="button"
+										onClick={() => setSplitRatio(70)}
+										className={`px-1.5 py-0.5 rounded transition ${
+											splitRatio === 70
+												? "font-bold text-primary bg-primary/10"
+												: "hover:text-foreground"
+										}`}
+									>
+										70:30
+									</button>
+								</div>
+							)}
+						</div>
 
-						<label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground">
-							<input
-								type="checkbox"
-								checked={activeTierlist.settings.show_rating}
-								onChange={(e) =>
-									pushHistory({
-										...activeTierlist,
-										settings: {
-											...activeTierlist.settings,
-											show_rating: e.target.checked,
-										},
-									})
-								}
-								className="rounded text-primary focus:ring-primary"
-							/>
-							<span>Hiện điểm số</span>
-						</label>
+						{/* Toggles: Title & Rating */}
+						<div className="flex items-center gap-4 border-l border-border pl-3">
+							<label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground">
+								<input
+									type="checkbox"
+									checked={activeTierlist.settings.show_title}
+									onChange={(e) =>
+										pushHistory({
+											...activeTierlist,
+											settings: {
+												...activeTierlist.settings,
+												show_title: e.target.checked,
+											},
+										})
+									}
+									className="rounded text-primary focus:ring-primary"
+								/>
+								<span>Hiện tên truyện</span>
+							</label>
+
+							<label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground">
+								<input
+									type="checkbox"
+									checked={activeTierlist.settings.show_rating}
+									onChange={(e) =>
+										pushHistory({
+											...activeTierlist,
+											settings: {
+												...activeTierlist.settings,
+												show_rating: e.target.checked,
+											},
+										})
+									}
+									className="rounded text-primary focus:ring-primary"
+								/>
+								<span>Hiện điểm số</span>
+							</label>
+						</div>
 					</div>
 				</div>
 			</div>
 
-			{/* Tier Rows List */}
-			<div className="space-y-3">
-				{activeTierlist.tiers.map((row, idx) => (
-					<TierRow
-						key={row.row_id}
-						row={row}
-						rowIndex={idx}
-						totalRows={activeTierlist.tiers.length}
-						allRows={activeTierlist.tiers}
-						settings={activeTierlist.settings}
-						onDropManga={handleDropManga}
-						onQuickMove={handleQuickMove}
-						onMoveWithinRow={handleMoveWithinRow}
-						onCustomizeItem={(item) => setCustomizingItem(item)}
-						onUpdateRowLabel={handleUpdateRowLabel}
-						onUpdateRowColor={handleUpdateRowColor}
-						onUpdateRowDescription={handleUpdateRowDescription}
-						onMoveRow={handleMoveRow}
-						onInsertRow={handleInsertRow}
-						onClearRow={handleClearRow}
-						onDeleteRow={handleDeleteRow}
-					/>
-				))}
-			</div>
+			{/* Board & Pool Workspace Area */}
+			{layoutMode === "split" ? (
+				<div
+					ref={splitContainerRef}
+					className="flex flex-col lg:flex-row items-stretch lg:items-start relative gap-4 lg:gap-0"
+				>
+					{/* Left Column: Tier Rows */}
+					<div
+						className="w-full lg:flex-shrink-0 space-y-3"
+						style={{
+							width: isLargeScreen ? `calc(${splitRatio}% - 10px)` : "100%",
+						}}
+					>
+						{activeTierlist.tiers.map((row, idx) => (
+							<TierRow
+								key={row.row_id}
+								row={row}
+								rowIndex={idx}
+								totalRows={activeTierlist.tiers.length}
+								allRows={activeTierlist.tiers}
+								settings={activeTierlist.settings}
+								onDropManga={handleDropManga}
+								onQuickMove={handleQuickMove}
+								onMoveWithinRow={handleMoveWithinRow}
+								onCustomizeItem={(item) => setCustomizingItem(item)}
+								onUpdateRowLabel={handleUpdateRowLabel}
+								onUpdateRowColor={handleUpdateRowColor}
+								onUpdateRowDescription={handleUpdateRowDescription}
+								onMoveRow={handleMoveRow}
+								onInsertRow={handleInsertRow}
+								onClearRow={handleClearRow}
+								onDeleteRow={handleDeleteRow}
+							/>
+						))}
+					</div>
 
-			{/* Unranked Manga Pool & Dock */}
-			<UnrankedMangaPool
-				unrankedPool={activeTierlist.unranked_pool}
-				excludedPool={activeTierlist.excluded_pool}
-				settings={activeTierlist.settings}
-				availableRows={activeTierlist.tiers.map((r) => ({
-					row_id: r.row_id,
-					label: r.label,
-					color_key: r.color_key,
-				}))}
-				onQuickMove={handleQuickMove}
-				onRestoreExcluded={handleRestoreExcluded}
-				onCustomizeItem={(item) => setCustomizingItem(item)}
-				onDropMangaToPool={handleDropMangaToPool}
-			/>
+					{/* Resizable Divider Handle (Desktop only) */}
+					<div
+						onMouseDown={handleMouseDownResize}
+						className={`hidden lg:flex flex-col items-center justify-center w-5 -mx-0.5 z-20 cursor-col-resize select-none group relative transition-colors self-stretch min-h-[400px] ${
+							isResizing ? "bg-primary/20" : "hover:bg-primary/10"
+						}`}
+						title="Kéo sang trái/phải để điều chỉnh độ rộng 2 cột (Nhấp đúp để đặt lại 60:40)"
+						onDoubleClick={() => setSplitRatio(58)}
+					>
+						<div
+							className={`w-1.5 h-28 rounded-full transition-colors ${
+								isResizing
+									? "bg-primary ring-2 ring-primary/30"
+									: "bg-border group-hover:bg-primary/80"
+							}`}
+						/>
+						<div
+							className={`absolute top-4 px-2 py-0.5 rounded-md bg-popover text-popover-foreground text-[10px] font-bold border border-border shadow-md whitespace-nowrap pointer-events-none transition-opacity ${
+								isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+							}`}
+						>
+							{Math.round(splitRatio)}% : {Math.round(100 - splitRatio)}%
+						</div>
+					</div>
+
+					{/* Right Column: Unranked Manga Pool */}
+					<div
+						className="w-full lg:flex-shrink-0 lg:sticky lg:top-4"
+						style={{
+							width: isLargeScreen
+								? `calc(${100 - splitRatio}% - 10px)`
+								: "100%",
+						}}
+					>
+						<UnrankedMangaPool
+							unrankedPool={activeTierlist.unranked_pool}
+							excludedPool={activeTierlist.excluded_pool}
+							settings={activeTierlist.settings}
+							isSplitLayout={true}
+							availableRows={activeTierlist.tiers.map((r) => ({
+								row_id: r.row_id,
+								label: r.label,
+								color_key: r.color_key,
+							}))}
+							onQuickMove={handleQuickMove}
+							onRestoreExcluded={handleRestoreExcluded}
+							onCustomizeItem={(item) => setCustomizingItem(item)}
+							onDropMangaToPool={handleDropMangaToPool}
+						/>
+					</div>
+				</div>
+			) : (
+				/* Stacked Mode: Tierlist on top, Unranked Pool below */
+				<div className="space-y-6">
+					<div className="space-y-3">
+						{activeTierlist.tiers.map((row, idx) => (
+							<TierRow
+								key={row.row_id}
+								row={row}
+								rowIndex={idx}
+								totalRows={activeTierlist.tiers.length}
+								allRows={activeTierlist.tiers}
+								settings={activeTierlist.settings}
+								onDropManga={handleDropManga}
+								onQuickMove={handleQuickMove}
+								onMoveWithinRow={handleMoveWithinRow}
+								onCustomizeItem={(item) => setCustomizingItem(item)}
+								onUpdateRowLabel={handleUpdateRowLabel}
+								onUpdateRowColor={handleUpdateRowColor}
+								onUpdateRowDescription={handleUpdateRowDescription}
+								onMoveRow={handleMoveRow}
+								onInsertRow={handleInsertRow}
+								onClearRow={handleClearRow}
+								onDeleteRow={handleDeleteRow}
+							/>
+						))}
+					</div>
+
+					<UnrankedMangaPool
+						unrankedPool={activeTierlist.unranked_pool}
+						excludedPool={activeTierlist.excluded_pool}
+						settings={activeTierlist.settings}
+						isSplitLayout={false}
+						availableRows={activeTierlist.tiers.map((r) => ({
+							row_id: r.row_id,
+							label: r.label,
+							color_key: r.color_key,
+						}))}
+						onQuickMove={handleQuickMove}
+						onRestoreExcluded={handleRestoreExcluded}
+						onCustomizeItem={(item) => setCustomizingItem(item)}
+						onDropMangaToPool={handleDropMangaToPool}
+					/>
+				</div>
+			)}
 
 			{/* Modal: Customize Item (Volume Cover / Note) */}
 			<TierItemCustomizeModal
