@@ -76,7 +76,15 @@ Run from the workspace root:
 ```bash
 pnpm --dir frontend dev
 ```
-The application will be accessible at `http://localhost:5173` (Studio at `/translation`).
+The application will be accessible at `http://localhost:5173` (Observability at `/audit-logs`).
+
+### 4. Standalone ELK Observability Stack (Optional)
+Run from the workspace root:
+```bash
+python scripts/elk/bootstrap_env.py
+docker compose -f infra/elk/docker-compose.elk.yml --env-file infra/elk/.env up -d
+```
+Kibana dashboard will be available at `http://localhost:5601` or via `/audit-logs?tab=kibana`. See [`docs/logging.md`](./logging.md).
 
 ---
 
@@ -109,15 +117,21 @@ uv run --project backend python -m pytest backend/tests/test_manga_ocr_service.p
 # Translation Studio: jobs, profiles, fonts, revisions & envelope tests
 uv run --project backend python -m pytest backend/tests/test_translation_jobs.py backend/tests/test_translation_profiles.py backend/tests/test_translation_assets.py backend/tests/test_translation_revisions.py
 uv run --project backend python -m pytest services/translator-runtime/tests/
+
+# Structured Logging, Redaction, ES Sync & Observability APIs
+uv run --project backend python -m pytest backend/tests/test_log_*.py backend/tests/test_logging_config.py backend/tests/test_request_logging.py backend/tests/test_elk_scripts.py backend/tests/test_system_logs_api.py backend/tests/test_audit_es_sync.py
 ```
 
-### B. Frontend TypeScript & Production Build
+### B. Frontend TypeScript, Linting & Production Build
 ```bash
 # Typecheck
 pnpm --dir frontend run typecheck
 
 # Production bundle build
 pnpm --dir frontend run build
+
+# Playwright E2E & Observability tests
+pnpm --dir frontend run test:e2e
 ```
 
 ### C. Visual Responsive Inspection (Playwright)
@@ -137,5 +151,6 @@ pnpm --dir frontend test:a11y
 ## 5. Troubleshooting & Common Issues
 
 - **Redis Offline**: If Redis is offline, the API operates in fallback mode (direct DB reads). Background OCR enqueue calls (`POST /tasks/ocr`) will return HTTP 503.
-- **Port Conflicts**: Ensure ports `8000` (FastAPI), `5173` (Vite), `9000/9001` (MinIO API/Console), `6379` (Redis), and `27017` (MongoDB) are available.
+- **Elasticsearch Offline**: If Elasticsearch is offline, the backend falls back to MongoDB for audit log queries and streams local NDJSON files (`logs/manga-*.ndjson`) for application logs without raising errors.
+- **Port Conflicts**: Ensure ports `8000` (FastAPI), `5173` (Vite), `9000/9001` (MinIO API/Console), `6379` (Redis), `9200` (Elasticsearch), `5601` (Kibana), and `27017` (MongoDB) are available.
 - **MangaDex Rate Limits (429)**: The backend automatically falls back to headless Playwright browser emulation when MangaDex enforces Cloudflare rate limiting.

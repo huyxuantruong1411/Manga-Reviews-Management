@@ -25,6 +25,9 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!infra/elk/.env.example
+infra/elk/.env
+logs/
 *.pem
 *.key
 mangadex_access.txt
@@ -45,6 +48,8 @@ Thumbs.db
 downloads/
 backend/minio_data/
 backend/redis_data/
+infra/elk/elasticsearch_data/
+infra/elk/logstash_data/
 backend/scratch/
 artifacts/
 ref/

@@ -106,6 +106,10 @@ The system employs three asynchronous execution paths:
     - OCR Task in-progress: `task:ocr:{task_id}` (TTL: 3,600s)
     - OCR Task completed: `task:ocr:{task_id}` (TTL: 86,400s)
   - Invalidation: Called on updates/deletions in [`backend/services/manga_service.py`](../backend/services/manga_service.py) and [`backend/routers/reviews.py`](../backend/routers/reviews.py).
+- **Logging & Observability**:
+  - Structured ECS logs written to `logs/manga-*.ndjson` with automatic redaction of presigned URLs, Google AI keys, and tokens.
+  - Elasticsearch (`manga-logs-*`, `manga-audit-*`) queried via [`backend/routers/system_logs.py`](../backend/routers/system_logs.py) and [`backend/services/audit_search_service.py`](../backend/services/audit_search_service.py).
+  - Graceful fallback to MongoDB for audit searches and local NDJSON for application logs if Elasticsearch is offline. Detailed in [`docs/logging.md`](./logging.md).
 
 ---
 
@@ -126,4 +130,5 @@ When reasoning about the codebase, take note of these verified facts:
 - To set up local environment and run tests $\rightarrow$ [`docs/development.md`](./development.md)
 - To inspect coding and contribution rules $\rightarrow$ [`AGENTS.md`](../AGENTS.md)
 - To review security and data boundaries $\rightarrow$ [`SECURITY.md`](../SECURITY.md)
+- To inspect logging, secret redaction, and ELK observability $\rightarrow$ [`docs/logging.md`](./logging.md)
 - To trace project evolution and version history $\rightarrow$ [`docs/CHANGELOG.md`](./CHANGELOG.md)

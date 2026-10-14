@@ -257,3 +257,16 @@ erDiagram
 | **Routers** | Must contain NO direct DB queries or heavy computation. Input must be validated via Pydantic DTOs. | Some routers (e.g. [`backend/routers/reviews.py`](../backend/routers/reviews.py), [`backend/routers/creators.py`](../backend/routers/creators.py)) call `db.collection` directly. |
 | **Services** | Dedicated home for all domain logic, transactions, and S3 media coordination. | Most domains have dedicated services (`manga_service`, `chapter_service`, `download_service`), but there is no `review_service.py`. |
 | **Frontend** | Must use shadcn/ui components (`@/components/ui/`), semantic theme variables, and handle all 4 states (`Loading`, `Normal`, `Empty`, `Error`). | Legacy pages have been updated to use shadcn primitives, with TipTap custom extensions adhering to the design system. |
+
+---
+
+## 6. Logging & Observability Pipeline
+
+The platform incorporates an Elastic Common Schema (ECS) logging pipeline and ELK observability stack:
+- **Details**: Full operational and technical details are in [`docs/logging.md`](./logging.md).
+- **Structured Logs**: Emits ECS-formatted NDJSON to `logs/manga-{service}.ndjson` across `api`, `worker_ocr`, and `worker_translation`.
+- **Trace Context**: Propagates `X-Request-ID` across HTTP requests and background job slots as `trace.id`.
+- **Secret Redaction**: Automatic filter removes MinIO presigned URL signatures, Google AI keys, and Bearer tokens before writing to disk.
+- **ELK Topology**: Standalone Docker Compose environment in [`infra/elk/`](../infra/elk/) containing Elasticsearch (ILM retention), Logstash, Kibana (embedded iframe), and Filebeat.
+- **Resilience**: Zero-outage graceful fallback to MongoDB for audit logs and local NDJSON streaming for application logs if Elasticsearch is offline.
+

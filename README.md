@@ -93,8 +93,9 @@ See the [operational runbook](docs/translation/operational-runbook.md) for readi
 - **Cover Art Gallery**: Batch downloader for high-res official MangaDex cover art with presigned URLs.
 - **MangaDex Official Tags**: 70+ categorized genre and theme tags.
 
-### 8. 📊 Analytics, Telemetry & Audit Logs
-- Comprehensive charts: Reading statuses, personal ratings distribution, genres breakdown, download volume, and time-stamped audit logs for all library operations.
+### 8. 📊 Observability, Audit Logs & ELK Stack
+- **Audit & ECS Logs**: Business audit trails and ECS-structured logs with automated secret redaction and request tracing.
+- **ELK Stack & Native UI**: Standalone Docker ELK stack, embedded Kibana dashboards, and native ECS viewer with local NDJSON fallback. See [`docs/logging.md`](docs/logging.md).
 
 ---
 

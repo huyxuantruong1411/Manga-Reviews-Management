@@ -28,7 +28,9 @@
       "**/.codegraph/**",
       "**/graphify-out/**",
       "**/scratch/**",
-      "**/*_source_dump.txt"
+      "**/*_source_dump.txt",
+      "logs/**",
+      "**/infra/elk/*_data/**"
     ]
   }
 }

@@ -31,3 +31,13 @@ If you discover a security vulnerability or accidental secret exposure:
 2. Contact the repository maintainer privately via GitHub Private Vulnerability Reporting or email listed on the maintainer's GitHub profile ([@huyxuantruong1411](https://github.com/huyxuantruong1411)).
 3. Provide a clear description, reproduction steps, and potential impact.
 4. If a credential was mistakenly shared, revoke and rotate the secret immediately with the provider.
+
+---
+
+## 4. Secret Redaction & Log Hygiene
+
+The system enforces automated logging hygiene via [`backend/core/log_redaction.py`](backend/core/log_redaction.py):
+- **MinIO Presigned URLs**: Query signatures (`X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`) are stripped before disk write.
+- **Google AI Keys**: Patterns matching `AIzaSy[A-Za-z0-9_-]{33}` are replaced with `[REDACTED_API_KEY]`.
+- **Bearer Tokens**: HTTP authorization tokens are replaced with `Bearer [REDACTED_TOKEN]`.
+- **Ignored Artefacts**: The `logs/` directory, `infra/elk/.env`, and Elasticsearch data volumes are excluded from git tracking. Full logging specifications reside in [`docs/logging.md`](docs/logging.md).
