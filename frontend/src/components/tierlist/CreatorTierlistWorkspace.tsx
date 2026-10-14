@@ -55,6 +55,7 @@ import {
 	exportTierlistToPng,
 	generateTierlistMarkdown,
 } from "./TierlistExportService";
+import { ConfirmModal, NoticeModal } from "./TierlistFeedbackModal";
 import { TierlistVersionCompareModal } from "./TierlistVersionCompareModal";
 import { TierRow } from "./TierRow";
 import { UnrankedMangaPool } from "./UnrankedMangaPool";
@@ -102,6 +103,36 @@ export const CreatorTierlistWorkspace: React.FC<
 	const [showExportMenu, setShowExportMenu] = useState(false);
 	const [exportingPng, setExportingPng] = useState(false);
 	const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+
+	// Feedback Dialogs (professional replacements for window.confirm & alert)
+	const [confirmModal, setConfirmModal] = useState<{
+		isOpen: boolean;
+		title: string;
+		description: React.ReactNode;
+		confirmText?: string;
+		cancelText?: string;
+		variant?: "destructive" | "warning" | "primary" | "info";
+		iconType?: "trash" | "warning" | "sparkles" | "info";
+		onConfirm: () => void | Promise<void>;
+	}>({
+		isOpen: false,
+		title: "",
+		description: "",
+		onConfirm: () => {},
+	});
+
+	const [noticeModal, setNoticeModal] = useState<{
+		isOpen: boolean;
+		title: string;
+		description: React.ReactNode;
+		type?: "error" | "warning" | "info" | "success";
+		actionText?: string;
+	}>({
+		isOpen: false,
+		title: "",
+		description: "",
+		type: "info",
+	});
 
 	// Layout mode & resizable split pane
 	const [layoutMode, setLayoutMode] = useState<"stacked" | "split">(() => {
@@ -232,15 +263,29 @@ export const CreatorTierlistWorkspace: React.FC<
 	}, [creatorName]);
 
 	// When user clicks a different version from switcher
-	const handleSelectVersion = async (tierlistId: string) => {
+	const handleSelectVersion = (tierlistId: string) => {
 		if (tierlistId === activeTierlist?._id) return;
 		if (isDirty) {
-			const confirmSwitch = window.confirm(
-				"Bạn có thay đổi chưa lưu trên bảng xếp hạng này. Bạn có chắc muốn chuyển phiên bản?",
-			);
-			if (!confirmSwitch) return;
+			setConfirmModal({
+				isOpen: true,
+				title: "Chuyển phiên bản xếp hạng?",
+				description:
+					"Bạn có thay đổi chưa lưu trên bảng xếp hạng này. Chuyển phiên bản sẽ làm mất các thay đổi chưa lưu. Bạn có muốn tiếp tục?",
+				confirmText: "Chuyển phiên bản",
+				cancelText: "Ở lại lưu",
+				variant: "warning",
+				iconType: "warning",
+				onConfirm: () => {
+					setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+					switchVersion(tierlistId);
+				},
+			});
+			return;
 		}
+		switchVersion(tierlistId);
+	};
 
+	const switchVersion = async (tierlistId: string) => {
 		if (onSelectTierlistId) onSelectTierlistId(tierlistId);
 		try {
 			setLoading(true);
@@ -251,7 +296,13 @@ export const CreatorTierlistWorkspace: React.FC<
 			markDirty(false);
 		} catch (err: any) {
 			console.error("Failed to fetch tierlist detail", err);
-			alert("Lỗi khi chuyển phiên bản: " + (err.message || "Unknown error"));
+			setNoticeModal({
+				isOpen: true,
+				title: "Lỗi chuyển phiên bản",
+				description:
+					err.message || "Không thể tải chi tiết phiên bản bảng xếp hạng.",
+				type: "error",
+			});
 		} finally {
 			setLoading(false);
 		}
@@ -690,7 +741,13 @@ export const CreatorTierlistWorkspace: React.FC<
 	const handleDeleteRow = (rowId: string) => {
 		if (!activeTierlist) return;
 		if (activeTierlist.tiers.length <= 1) {
-			alert("Bảng xếp hạng cần có tối thiểu 1 hàng.");
+			setNoticeModal({
+				isOpen: true,
+				title: "Không thể xóa hàng",
+				description:
+					"Bảng xếp hạng cần duy trì tối thiểu 1 hàng để xếp các tác phẩm.",
+				type: "warning",
+			});
 			return;
 		}
 
@@ -764,38 +821,69 @@ export const CreatorTierlistWorkspace: React.FC<
 				.catch(console.error);
 		} catch (err: any) {
 			if (err.response?.status === 409) {
-				alert(
-					"Xung đột phiên bản! Bảng này đã được cập nhật từ một phiên khác. Vui lòng tải lại trang để nhận bản mới nhất.",
-				);
+				setNoticeModal({
+					isOpen: true,
+					title: "Xung đột phiên bản (409)",
+					description:
+						"Bảng xếp hạng này đã được cập nhật từ một phiên khác. Vui lòng tải lại trang để nhận dữ liệu mới nhất.",
+					type: "warning",
+				});
 			} else {
-				alert(
-					"Lỗi khi lưu bảng: " + (err.response?.data?.detail || err.message),
-				);
+				setNoticeModal({
+					isOpen: true,
+					title: "Lỗi lưu bảng xếp hạng",
+					description:
+						err.response?.data?.detail ||
+						err.message ||
+						"Không thể lưu các thay đổi lên máy chủ lúc này.",
+					type: "error",
+				});
 			}
 		} finally {
 			setSaving(false);
 		}
 	};
 
-	const handleAutoSeed = async () => {
+	const handleAutoSeed = () => {
 		if (!activeTierlist) return;
-		const confirmSeed = window.confirm(
-			"Thao tác này sẽ tự động phân loại các manga có điểm cá nhân vào các hàng. Bạn có muốn tiếp tục?",
-		);
-		if (!confirmSeed) return;
-
-		try {
-			setLoading(true);
-			const seeded = await autoSeedTierlist(activeTierlist._id);
-			setActiveTierlist(seeded);
-			setHistory([seeded]);
-			setHistoryIndex(0);
-			markDirty(false);
-		} catch (err: any) {
-			alert("Lỗi khi tự động xếp theo điểm: " + err.message);
-		} finally {
-			setLoading(false);
-		}
+		setConfirmModal({
+			isOpen: true,
+			title: "Tự động phân bổ theo điểm số?",
+			description:
+				"Thao tác này sẽ tự động phân loại các manga có điểm cá nhân vào các hàng S, A, B, C, D dựa trên điểm đánh giá của bạn. Vị trí hiện tại trên bảng sẽ được cập nhật lại.",
+			confirmText: "Xác nhận phân bổ",
+			cancelText: "Hủy bỏ",
+			variant: "primary",
+			iconType: "sparkles",
+			onConfirm: async () => {
+				setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+				try {
+					setLoading(true);
+					const seeded = await autoSeedTierlist(activeTierlist._id);
+					setActiveTierlist(seeded);
+					setHistory([seeded]);
+					setHistoryIndex(0);
+					markDirty(false);
+					setNoticeModal({
+						isOpen: true,
+						title: "Đã phân bổ thành công",
+						description:
+							"Toàn bộ tác phẩm có điểm số đã được tự động xếp vào các hàng tương ứng!",
+						type: "success",
+					});
+				} catch (err: any) {
+					setNoticeModal({
+						isOpen: true,
+						title: "Lỗi xếp hạng tự động",
+						description:
+							err.message || "Không thể tự động xếp hạng theo điểm lúc này.",
+						type: "error",
+					});
+				} finally {
+					setLoading(false);
+				}
+			},
+		});
 	};
 
 	const handleCreateNew = async () => {
@@ -814,7 +902,12 @@ export const CreatorTierlistWorkspace: React.FC<
 			setNewTitle("");
 			await loadSummariesAndDetail(created._id);
 		} catch (err: any) {
-			alert("Lỗi khi tạo bảng mới: " + err.message);
+			setNoticeModal({
+				isOpen: true,
+				title: "Lỗi tạo bảng mới",
+				description: err.message || "Không thể tạo bảng xếp hạng mới lúc này.",
+				type: "error",
+			});
 		} finally {
 			setLoading(false);
 		}
@@ -835,28 +928,51 @@ export const CreatorTierlistWorkspace: React.FC<
 			setCloneTitle("");
 			await loadSummariesAndDetail(cloned._id);
 		} catch (err: any) {
-			alert("Lỗi khi nhân bản: " + err.message);
+			setNoticeModal({
+				isOpen: true,
+				title: "Lỗi nhân bản",
+				description: err.message || "Không thể nhân bản bảng xếp hạng này.",
+				type: "error",
+			});
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	const handleDelete = async () => {
+	const handleDelete = () => {
 		if (!activeTierlist) return;
-		const confirmDel = window.confirm(
-			`Bạn có chắc chắn muốn xóa phiên bản "${activeTierlist.title}"?`,
-		);
-		if (!confirmDel) return;
-
-		try {
-			setLoading(true);
-			await deleteTierlist(activeTierlist._id);
-			await loadSummariesAndDetail();
-		} catch (err: any) {
-			alert("Lỗi khi xóa bảng: " + err.message);
-		} finally {
-			setLoading(false);
-		}
+		setConfirmModal({
+			isOpen: true,
+			title: `Xóa phiên bản "${activeTierlist.title}"?`,
+			description: `Bạn có chắc chắn muốn xóa phiên bản bảng xếp hạng "${activeTierlist.title}"? Hành động này sẽ xóa vĩnh viễn phiên bản này và không thể hoàn tác.`,
+			confirmText: "Xác nhận xóa",
+			cancelText: "Hủy bỏ",
+			variant: "destructive",
+			iconType: "trash",
+			onConfirm: async () => {
+				setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+				try {
+					setLoading(true);
+					await deleteTierlist(activeTierlist._id);
+					await loadSummariesAndDetail();
+					setNoticeModal({
+						isOpen: true,
+						title: "Đã xóa thành công",
+						description: `Phiên bản "${activeTierlist.title}" đã được xóa.`,
+						type: "success",
+					});
+				} catch (err: any) {
+					setNoticeModal({
+						isOpen: true,
+						title: "Lỗi xóa bảng",
+						description: err.message || "Không thể xóa bảng xếp hạng này.",
+						type: "error",
+					});
+				} finally {
+					setLoading(false);
+				}
+			},
+		});
 	};
 
 	const handleExportPng = async () => {
@@ -866,7 +982,13 @@ export const CreatorTierlistWorkspace: React.FC<
 			await exportTierlistToPng(activeTierlist);
 		} catch (err: any) {
 			console.error("Export PNG failed", err);
-			alert("Lỗi xuất ảnh PNG: " + err.message);
+			setNoticeModal({
+				isOpen: true,
+				title: "Lỗi xuất ảnh PNG",
+				description:
+					err.message || "Không thể kết xuất ảnh bảng xếp hạng lúc này.",
+				type: "error",
+			});
 		} finally {
 			setExportingPng(false);
 			setShowExportMenu(false);
@@ -945,7 +1067,13 @@ export const CreatorTierlistWorkspace: React.FC<
 								});
 								await loadSummariesAndDetail(created._id);
 							} catch (e: any) {
-								alert(e.message);
+								setNoticeModal({
+									isOpen: true,
+									title: "Lỗi khởi tạo mẫu",
+									description:
+										e.message || "Không thể tạo bảng xếp hạng mẫu lúc này.",
+									type: "error",
+								});
 							} finally {
 								setLoading(false);
 							}
@@ -972,7 +1100,13 @@ export const CreatorTierlistWorkspace: React.FC<
 								});
 								await loadSummariesAndDetail(created._id);
 							} catch (e: any) {
-								alert(e.message);
+								setNoticeModal({
+									isOpen: true,
+									title: "Lỗi khởi tạo mẫu",
+									description:
+										e.message || "Không thể tạo bảng xếp hạng mẫu lúc này.",
+									type: "error",
+								});
 							} finally {
 								setLoading(false);
 							}
@@ -999,7 +1133,13 @@ export const CreatorTierlistWorkspace: React.FC<
 								});
 								await loadSummariesAndDetail(created._id);
 							} catch (e: any) {
-								alert(e.message);
+								setNoticeModal({
+									isOpen: true,
+									title: "Lỗi khởi tạo mẫu",
+									description:
+										e.message || "Không thể tạo bảng xếp hạng mẫu lúc này.",
+									type: "error",
+								});
 							} finally {
 								setLoading(false);
 							}
@@ -1014,6 +1154,16 @@ export const CreatorTierlistWorkspace: React.FC<
 						</p>
 					</button>
 				</div>
+
+				{/* Notice Modal in empty state */}
+				<NoticeModal
+					isOpen={noticeModal.isOpen}
+					onClose={() => setNoticeModal((prev) => ({ ...prev, isOpen: false }))}
+					title={noticeModal.title}
+					description={noticeModal.description}
+					type={noticeModal.type}
+					actionText={noticeModal.actionText}
+				/>
 			</div>
 		);
 	}
@@ -1767,6 +1917,29 @@ export const CreatorTierlistWorkspace: React.FC<
 				currentTierlistId={activeTierlist._id}
 				isOpen={showCompareModal}
 				onClose={() => setShowCompareModal(false)}
+			/>
+
+			{/* Shared Confirm Modal */}
+			<ConfirmModal
+				isOpen={confirmModal.isOpen}
+				onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+				onConfirm={confirmModal.onConfirm}
+				title={confirmModal.title}
+				description={confirmModal.description}
+				confirmText={confirmModal.confirmText}
+				cancelText={confirmModal.cancelText}
+				variant={confirmModal.variant}
+				iconType={confirmModal.iconType}
+			/>
+
+			{/* Shared Notice Modal */}
+			<NoticeModal
+				isOpen={noticeModal.isOpen}
+				onClose={() => setNoticeModal((prev) => ({ ...prev, isOpen: false }))}
+				title={noticeModal.title}
+				description={noticeModal.description}
+				type={noticeModal.type}
+				actionText={noticeModal.actionText}
 			/>
 		</div>
 	);

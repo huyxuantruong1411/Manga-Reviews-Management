@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { CreatorTierlistWorkspace } from "../components/tierlist/CreatorTierlistWorkspace";
+import { ConfirmModal } from "../components/tierlist/TierlistFeedbackModal";
 import { BlurredCover } from "../components/ui/BlurredCover";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 
@@ -46,21 +47,28 @@ export const AuthorDetailPage: React.FC = () => {
 		(searchParams.get("tab") as "works" | "tierlist") || "works";
 	const tierlistId = searchParams.get("tierlistId");
 	const [isTierlistDirty, setIsTierlistDirty] = useState(false);
+	const [pendingTab, setPendingTab] = useState<"works" | "tierlist" | null>(
+		null,
+	);
+	const [showLeaveTabConfirm, setShowLeaveTabConfirm] = useState(false);
 
-	const handleTabChange = (nextTab: "works" | "tierlist") => {
-		if (nextTab === activeTab) return;
-		if (activeTab === "tierlist" && isTierlistDirty) {
-			const confirmLeave = window.confirm(
-				"Bạn có những chỉnh sửa bảng xếp hạng chưa lưu. Bạn có chắc chắn muốn rời tab Tierlist không?",
-			);
-			if (!confirmLeave) return;
-		}
+	const applyTabChange = (nextTab: "works" | "tierlist") => {
 		const newParams = new URLSearchParams(searchParams);
 		newParams.set("tab", nextTab);
 		if (nextTab === "works") {
 			newParams.delete("tierlistId");
 		}
 		setSearchParams(newParams);
+	};
+
+	const handleTabChange = (nextTab: "works" | "tierlist") => {
+		if (nextTab === activeTab) return;
+		if (activeTab === "tierlist" && isTierlistDirty) {
+			setPendingTab(nextTab);
+			setShowLeaveTabConfirm(true);
+			return;
+		}
+		applyTabChange(nextTab);
 	};
 
 	const handleSelectTierlistId = (id: string) => {
@@ -881,6 +889,29 @@ export const AuthorDetailPage: React.FC = () => {
 					</div>
 				</div>
 			)}
+
+			{/* Leave Dirty Tab Confirmation Modal */}
+			<ConfirmModal
+				isOpen={showLeaveTabConfirm}
+				onClose={() => {
+					setShowLeaveTabConfirm(false);
+					setPendingTab(null);
+				}}
+				onConfirm={() => {
+					if (pendingTab) {
+						setIsTierlistDirty(false);
+						applyTabChange(pendingTab);
+					}
+					setShowLeaveTabConfirm(false);
+					setPendingTab(null);
+				}}
+				title="Rời khỏi Bảng xếp hạng?"
+				description="Bạn đang có những thay đổi chưa lưu trên Bảng xếp hạng. Nếu chuyển tab bây giờ, tất cả các thay đổi chưa lưu sẽ bị mất."
+				confirmText="Rời đi không lưu"
+				cancelText="Ở lại chỉnh sửa"
+				variant="warning"
+				iconType="warning"
+			/>
 		</div>
 	);
 };
