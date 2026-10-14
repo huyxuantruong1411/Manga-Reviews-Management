@@ -276,6 +276,20 @@ async def init_db_indexes():
         await db.source_metadata_snapshots.create_index([("source", 1), ("source_work_id", 1)])
         await db.source_metadata_snapshots.create_index([("manga_id", 1), ("snapshot_hash", 1)])
 
+        # creator_tierlists
+        await db.creator_tierlists.create_index(
+            [("creator_name_normalized", 1), ("is_default", -1), ("updated_at", -1)],
+            name="tierlist_creator_default_updated",
+        )
+        await db.creator_tierlists.create_index(
+            [("creator_name_normalized", 1), ("created_at", -1)],
+            name="tierlist_creator_created",
+        )
+        await db.creator_tierlists.create_index(
+            "tiers.items.manga_id",
+            name="tierlist_item_manga_id",
+        )
+
         await ensure_deletion_reference_indexes(db)
 
         logger.info("Database indexes initialized successfully.")
