@@ -154,14 +154,14 @@ export const TierRow: React.FC<TierRowProps> = ({
 						}}
 						autoFocus
 						maxLength={30}
-						className="w-full text-center font-extrabold text-sm md:text-base px-1.5 py-0.5 rounded-md bg-black/30 text-white outline-hidden ring-1 ring-white/50"
+						className="w-full text-center font-spartan font-bold text-sm md:text-base px-1.5 py-0.5 rounded-md bg-black/30 text-white outline-hidden ring-1 ring-white/50"
 					/>
 				) : (
 					<button
 						type="button"
 						onClick={() => setIsEditingLabel(true)}
 						title="Nhấn để đổi tên hàng"
-						className="group/btn flex items-center justify-center gap-1 font-spartan font-black text-lg md:text-xl tracking-tight text-center cursor-pointer hover:opacity-85 transition truncate max-w-full"
+						className="group/btn flex items-center justify-center gap-1 font-spartan font-bold md:font-extrabold text-base md:text-lg tracking-normal text-center cursor-pointer hover:opacity-85 transition truncate max-w-full px-1 leading-snug drop-shadow-xs"
 					>
 						<span>{row.label}</span>
 					</button>

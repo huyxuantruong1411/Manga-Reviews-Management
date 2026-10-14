@@ -21,8 +21,10 @@ export default {
         }
       },
       fontFamily: {
-        spartan: ["League Spartan", "sans-serif"],
-        poppins: ["Poppins", "sans-serif"],
+        spartan: ["'Be Vietnam Pro'", "Inter", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
+        poppins: ["Inter", "'Be Vietnam Pro'", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
+        vietnam: ["'Be Vietnam Pro'", "sans-serif"],
+        inter: ["Inter", "sans-serif"],
       }
     },
   },
