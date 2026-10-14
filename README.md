@@ -29,6 +29,7 @@
 > - **Local Setup & Testing**: [`docs/development.md`](docs/development.md)
 > - **Agent Coding Guidelines**: [`AGENTS.md`](AGENTS.md)
 > - **Security Policy**: [`SECURITY.md`](SECURITY.md)
+> - **Changelog & Version History**: [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 
 ---
 

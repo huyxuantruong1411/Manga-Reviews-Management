@@ -126,3 +126,4 @@ When reasoning about the codebase, take note of these verified facts:
 - To set up local environment and run tests $\rightarrow$ [`docs/development.md`](./development.md)
 - To inspect coding and contribution rules $\rightarrow$ [`AGENTS.md`](../AGENTS.md)
 - To review security and data boundaries $\rightarrow$ [`SECURITY.md`](../SECURITY.md)
+- To trace project evolution and version history $\rightarrow$ [`docs/CHANGELOG.md`](./CHANGELOG.md)
