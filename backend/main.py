@@ -25,6 +25,7 @@ from backend.routers import (
     sync_manager,
     tags,
     tasks,
+    tierlists,
     translation,
     vision,
 )
@@ -107,6 +108,7 @@ app.include_router(tasks.router)
 app.include_router(translation.router)
 app.include_router(datasources.router)
 app.include_router(metadata.router)
+app.include_router(tierlists.router)
 
 
 @app.get("/health")

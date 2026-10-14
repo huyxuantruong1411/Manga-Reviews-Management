@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **180**
+Total Endpoints Discovered: **190**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -32,6 +32,9 @@ Total Endpoints Discovered: **180**
 | `PATCH` | `/api/chapters/{chapter_id}` | `update_single_chapter_metadata` | Chapters & Reader | [`chapters.py:155`](../../backend/routers/chapters.py#L155) | Yes |
 | `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:202`](../../backend/routers/chapters.py#L202) | Yes |
 | `GET` | `/api/creators/suggestions` | `get_suggestions` | Creators | [`creators.py:12`](../../backend/routers/creators.py#L12) | Yes |
+| `GET` | `/api/creators/{creator_name}/tierlists` | `list_creator_tierlists` | Creator Tierlists | [`tierlists.py:104`](../../backend/routers/tierlists.py#L104) | Yes |
+| `POST` | `/api/creators/{creator_name}/tierlists` | `create_creator_tierlist` | Creator Tierlists | [`tierlists.py:118`](../../backend/routers/tierlists.py#L118) | Yes |
+| `GET` | `/api/creators/{creator_name}/tierlists/compare` | `compare_creator_tierlists` | Creator Tierlists | [`tierlists.py:83`](../../backend/routers/tierlists.py#L83) | Yes |
 | `GET` | `/api/creators/{name}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
 | `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:29`](../../backend/routers/datasources.py#L29) | Yes |
 | `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:38`](../../backend/routers/datasources.py#L38) | Yes |
@@ -156,6 +159,13 @@ Total Endpoints Discovered: **180**
 | `PUT` | `/api/tags/{tag_id}` | `update_tag` | Tags | [`tags.py:95`](../../backend/routers/tags.py#L95) | Yes |
 | `POST` | `/api/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | No (Alias) |
 | `GET` | `/api/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | No (Alias) |
+| `GET` | `/api/tierlists/manga/{manga_id}/cover-image` | `stream_cover_image` | Creator Tierlists | [`tierlists.py:47`](../../backend/routers/tierlists.py#L47) | Yes |
+| `GET` | `/api/tierlists/manga/{manga_id}/cover-options` | `get_manga_cover_options` | Creator Tierlists | [`tierlists.py:35`](../../backend/routers/tierlists.py#L35) | Yes |
+| `DELETE` | `/api/tierlists/{tierlist_id}` | `delete_tierlist` | Creator Tierlists | [`tierlists.py:199`](../../backend/routers/tierlists.py#L199) | Yes |
+| `GET` | `/api/tierlists/{tierlist_id}` | `get_tierlist` | Creator Tierlists | [`tierlists.py:136`](../../backend/routers/tierlists.py#L136) | Yes |
+| `PUT` | `/api/tierlists/{tierlist_id}` | `update_tierlist` | Creator Tierlists | [`tierlists.py:148`](../../backend/routers/tierlists.py#L148) | Yes |
+| `POST` | `/api/tierlists/{tierlist_id}/auto-seed` | `auto_seed_tierlist` | Creator Tierlists | [`tierlists.py:187`](../../backend/routers/tierlists.py#L187) | Yes |
+| `POST` | `/api/tierlists/{tierlist_id}/clone` | `clone_tierlist` | Creator Tierlists | [`tierlists.py:169`](../../backend/routers/tierlists.py#L169) | Yes |
 | `POST` | `/api/translation/assets/cleanup` | `preview_or_run_cleanup` | Translation Studio | [`translation.py:240`](../../backend/routers/translation.py#L240) | Yes |
 | `GET` | `/api/translation/assets/resolve-url` | `resolve_asset_url` | Translation Studio | [`translation.py:260`](../../backend/routers/translation.py#L260) | Yes |
 | `POST` | `/api/translation/assets/upload-demo` | `upload_demo_asset` | Translation Studio | [`translation.py:246`](../../backend/routers/translation.py#L246) | Yes |
@@ -184,6 +194,6 @@ Total Endpoints Discovered: **180**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:113`](../../backend/main.py#L113) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:116`](../../backend/main.py#L116) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

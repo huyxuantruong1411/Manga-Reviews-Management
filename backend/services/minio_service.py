@@ -206,5 +206,18 @@ class MinioService:
                 results[key] = self.get_presigned_url(key)
         return results
 
+    def get_object_stream(self, object_name: str) -> tuple[bytes, str]:
+        """
+        Reads object data from MinIO and returns (data_bytes, content_type).
+        """
+        response = self.client.get_object(self.bucket, object_name)
+        try:
+            data = response.read()
+            content_type = response.headers.get("Content-Type", "image/jpeg")
+            return data, content_type
+        finally:
+            response.close()
+            response.release_conn()
+
 
 minio_service = MinioService()
