@@ -1,0 +1,3 @@
+# Ensure shell scripts and infra configs use LF line endings even on Windows
+*.sh text eol=lf
+infra/elk/** text eol=lf

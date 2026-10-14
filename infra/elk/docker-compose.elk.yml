@@ -1,0 +1,130 @@
+name: manga-elk
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-8.17.0}
+    container_name: manga-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} http://127.0.0.1:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    networks:
+      - elk-net
+
+  setup-es:
+    image: curlimages/curl:latest
+    container_name: manga-setup-es
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - KIBANA_PASSWORD=${KIBANA_PASSWORD}
+      - LOGSTASH_WRITER_PASSWORD=${LOGSTASH_WRITER_PASSWORD}
+      - APP_ES_PASSWORD=${APP_ES_PASSWORD}
+      - KIBANA_VIEWER_PASSWORD=${KIBANA_VIEWER_PASSWORD}
+    volumes:
+      - ./setup/setup-es.sh:/setup-es.sh:ro
+      - ./elasticsearch/ilm-manga-logs.json:/elasticsearch/ilm-manga-logs.json:ro
+      - ./elasticsearch/index-template-logs.json:/elasticsearch/index-template-logs.json:ro
+      - ./elasticsearch/index-template-audit.json:/elasticsearch/index-template-audit.json:ro
+    entrypoint: ["/bin/sh", "/setup-es.sh"]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - elk-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:${ELASTIC_VERSION:-8.17.0}
+    container_name: manga-logstash
+    environment:
+      - LS_JAVA_OPTS=-Xms512m -Xmx512m
+      - LOGSTASH_WRITER_PASSWORD=${LOGSTASH_WRITER_PASSWORD}
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipeline/manga-logs.conf:/usr/share/logstash/pipeline/manga-logs.conf:ro
+      - lsdata:/usr/share/logstash/data
+    depends_on:
+      setup-es:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - elk-net
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:${ELASTIC_VERSION:-8.17.0}
+    container_name: manga-filebeat
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ../../logs:/usr/share/filebeat/logs:ro
+    depends_on:
+      - logstash
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    networks:
+      - elk-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-8.17.0}
+    container_name: manga-kibana
+    environment:
+      - KIBANA_PASSWORD=${KIBANA_PASSWORD}
+      - KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY}
+      - KIBANA_VIEWER_PASSWORD=${KIBANA_VIEWER_PASSWORD}
+    ports:
+      - "127.0.0.1:5601:5601"
+    volumes:
+      - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    depends_on:
+      setup-es:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    networks:
+      - elk-net
+
+  setup-kibana:
+    image: curlimages/curl:latest
+    container_name: manga-setup-kibana
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    volumes:
+      - ./setup/setup-kibana.sh:/setup-kibana.sh:ro
+      - ./kibana/manga-dashboards.ndjson:/kibana/manga-dashboards.ndjson:ro
+    entrypoint: ["/bin/sh", "/setup-kibana.sh"]
+    depends_on:
+      - kibana
+    networks:
+      - elk-net
+
+volumes:
+  esdata:
+    driver: local
+  lsdata:
+    driver: local
+
+networks:
+  elk-net:
+    driver: bridge

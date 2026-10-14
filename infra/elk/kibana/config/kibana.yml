@@ -1,0 +1,24 @@
+server.name: kibana
+server.host: "0.0.0.0"
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.username: "kibana_system"
+elasticsearch.password: "${KIBANA_PASSWORD}"
+
+xpack.security.encryptionKey: "${KIBANA_ENCRYPTION_KEY}"
+xpack.encryptedSavedObjects.encryptionKey: "${KIBANA_ENCRYPTION_KEY}"
+xpack.reporting.encryptionKey: "${KIBANA_ENCRYPTION_KEY}"
+
+# Cho phép nhúng iframe từ ứng dụng React tại localhost:5173 và localhost:3000
+server.securityResponseHeaders.disableEmbedding: false
+server.csp.rules:
+  - "frame-ancestors 'self' http://localhost:5173 http://127.0.0.1:5173 http://localhost:3000 http://127.0.0.1:3000"
+
+# Cho phép truy cập ẩn danh vào giao diện chỉ đọc (Read-Only Viewer) trên loopback
+xpack.security.authc.providers:
+  anonymous.anonymous1:
+    order: 0
+    credentials:
+      username: "kibana_anonymous_viewer"
+      password: "${KIBANA_VIEWER_PASSWORD}"
+  basic.basic1:
+    order: 1

@@ -1,0 +1,22 @@
+{
+  "index_patterns": ["manga-audit-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "properties": {
+        "timestamp": { "type": "date" },
+        "entity_type": { "type": "keyword" },
+        "entity_id": { "type": "keyword" },
+        "action": { "type": "keyword" },
+        "actor": { "type": "keyword" },
+        "details": { "type": "object", "dynamic": true },
+        "ip_address": { "type": "ip" },
+        "user_agent": { "type": "keyword" },
+        "search_text": { "type": "text" }
+      }
+    }
+  }
+}

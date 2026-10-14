@@ -1,0 +1,15 @@
+filebeat.inputs:
+  - type: filestream
+    id: manga-ndjson-logs
+    enabled: true
+    paths:
+      - /usr/share/filebeat/logs/*.ndjson
+    prospector.scanner.check_interval: 2s
+    parsers:
+      - ndjson:
+          target: ""
+          overwrite_keys: true
+          add_error_key: true
+
+output.logstash:
+  hosts: ["logstash:5044"]

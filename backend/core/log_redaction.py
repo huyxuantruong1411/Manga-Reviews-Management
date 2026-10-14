@@ -27,7 +27,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
         rf"\1{_REDACTED}",
     ),
     # Authorization headers
-    (re.compile(r"(Authorization:\s*(?:Bearer|Basic)\s+)\S+", re.IGNORECASE), rf"\1{_REDACTED}"),
+    (re.compile(r"(Authorization:\s*(?:Bearer|Basic)\s+)[^\s\"']+", re.IGNORECASE), rf"\1{_REDACTED}"),
     # Google Gemini / AI Studio key pattern (AIza + 30-45 alphanumeric chars)
     (re.compile(r"AIza[0-9A-Za-z_\-]{30,45}"), _REDACTED),
     # JSON key-value: "password": "...", "secret": "...", "secret_key": "..."

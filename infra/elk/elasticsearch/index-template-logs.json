@@ -1,0 +1,78 @@
+{
+  "index_patterns": ["logs-mangalib.*-*"],
+  "data_stream": {},
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "manga-logs-policy"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "log": {
+          "properties": {
+            "level": { "type": "keyword" },
+            "logger": { "type": "keyword" }
+          }
+        },
+        "service": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "environment": { "type": "keyword" }
+          }
+        },
+        "event": {
+          "properties": {
+            "dataset": { "type": "keyword" },
+            "duration": { "type": "long" }
+          }
+        },
+        "trace": {
+          "properties": {
+            "id": { "type": "keyword" }
+          }
+        },
+        "manga": {
+          "properties": {
+            "task_id": { "type": "keyword" },
+            "job_id": { "type": "keyword" },
+            "manga_id": { "type": "keyword" },
+            "chapter_id": { "type": "keyword" },
+            "stage": { "type": "keyword" }
+          }
+        },
+        "http": {
+          "properties": {
+            "request": {
+              "properties": {
+                "method": { "type": "keyword" }
+              }
+            },
+            "response": {
+              "properties": {
+                "status_code": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "url": {
+          "properties": {
+            "path": { "type": "keyword" }
+          }
+        },
+        "client": {
+          "properties": {
+            "ip": { "type": "ip" }
+          }
+        },
+        "error": {
+          "properties": {
+            "type": { "type": "keyword" },
+            "message": { "type": "text" },
+            "stack_trace": { "type": "text" }
+          }
+        }
+      }
+    }
+  }
+}
