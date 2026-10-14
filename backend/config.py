@@ -30,6 +30,26 @@ class Settings(BaseSettings):
     port: int = 8000
     host: str = "127.0.0.1"
 
+    # Structured Logging (ECS)
+    log_level: str = Field(default="INFO")
+    log_format: str = Field(default="console")  # "console" | "json"
+    log_file_enabled: bool = Field(default=False)
+    log_dir: str = Field(default="logs")
+    log_skip_paths: list[str] = Field(default=["/health"])
+    service_environment: str = Field(default="dev")
+
+    # Elasticsearch & Kibana (used from Phase 5+)
+    es_enabled: bool = Field(default=False)
+    es_url: str = Field(default="http://127.0.0.1:9200")
+    es_username: str = Field(default="manga_app")
+    es_password: str = Field(default="")
+    es_request_timeout_s: int = Field(default=3)
+    audit_es_sync_enabled: bool = Field(default=False)
+    audit_es_search_enabled: bool = Field(default=False)
+    audit_es_index: str = Field(default="manga-audit")
+    kibana_url: str = Field(default="http://127.0.0.1:5601")
+    kibana_dashboard_id: str = Field(default="manga-system-overview")
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
         env_file_encoding="utf-8",

@@ -18,6 +18,9 @@ logger = logging.getLogger("translation_worker")
 
 async def startup(ctx: Dict[str, Any]) -> None:
     """Initializes MongoDB and Redis resources upon translation worker launch."""
+    from backend.core.logging_config import setup_logging
+
+    setup_logging("worker_translation")
     logger.info("Initializing Translation ARQ worker...")
     try:
         await connect_to_mongo()

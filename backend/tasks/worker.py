@@ -11,6 +11,9 @@ logger = logging.getLogger("worker")
 
 async def startup(ctx: Dict[str, Any]) -> None:
     """Initialize database and redis resources upon ARQ worker startup."""
+    from backend.core.logging_config import setup_logging
+
+    setup_logging("worker_ocr")
     logger.info("Initializing ARQ background worker...")
     try:
         await connect_to_mongo()

@@ -17,6 +17,7 @@ from typing import Any, Dict
 
 from fastapi import HTTPException
 
+from backend.core.log_context import log_context
 from backend.database.connection import get_db
 from backend.models.translation import (
     RegionData,
@@ -68,6 +69,16 @@ async def execute_translation_job_page(
     attempt: int = 1,
 ) -> Dict[str, Any]:
     """Claims a page slot, runs the isolated translation engine subprocess, and commits artifacts."""
+    with log_context(job_id=job_id, page_identity=page_identity):
+        return await _execute_translation_job_page_impl(ctx, job_id, page_identity, attempt)
+
+
+async def _execute_translation_job_page_impl(
+    ctx: Dict[str, Any],
+    job_id: str,
+    page_identity: str,
+    attempt: int = 1,
+) -> Dict[str, Any]:
     db = get_db()
     pages_col = db.translation_job_pages
     jobs_col = db.translation_jobs
@@ -243,9 +254,14 @@ async def execute_translation_job_page(
                     raw_ev = line[len("EVENT:") :]
                     try:
                         ev = json.loads(raw_ev)
+                        stage = ev.get("stage")
+                        logger.info(
+                            f"Translation stage: {stage}",
+                            extra={"manga.stage": stage, "manga.job_id": job_id, "manga.page_identity": page_identity},
+                        )
                         await pages_col.update_one(
                             {"job_id": job_id, "page_identity": page_identity},
-                            {"$set": {"stage": ev.get("stage")}},
+                            {"$set": {"stage": stage}},
                         )
                     except Exception:
                         pass

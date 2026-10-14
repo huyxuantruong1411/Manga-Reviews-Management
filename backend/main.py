@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
+from backend.core.logging_config import setup_logging
+from backend.core.request_logging import RequestLoggingMiddleware
 from backend.database.connection import close_mongo_connection, connect_to_mongo
 from backend.database.indexes import init_db_indexes
 from backend.routers import (
@@ -30,8 +32,8 @@ from backend.routers import (
     vision,
 )
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+# Configure Centralized Structured Logging (ECS)
+setup_logging("api", replace_uvicorn_access=True)
 logger = logging.getLogger("backend")
 
 
@@ -86,7 +88,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 # Include Routers
 app.include_router(manga.router)

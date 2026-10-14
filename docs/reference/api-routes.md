@@ -194,6 +194,6 @@ Total Endpoints Discovered: **190**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:115`](../../backend/main.py#L115) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:119`](../../backend/main.py#L119) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |
