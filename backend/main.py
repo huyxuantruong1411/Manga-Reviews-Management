@@ -25,6 +25,7 @@ from backend.routers import (
     recommendations,
     reviews,
     sync_manager,
+    system_logs,
     tags,
     tasks,
     tierlists,
@@ -49,6 +50,11 @@ async def lifespan(app: FastAPI):
 
         await init_redis_pool()
 
+        # Initialize Elasticsearch client (graceful fallback if offline/disabled)
+        from backend.core.elasticsearch import close_es_client, init_es_client
+
+        await init_es_client()
+
         # Auto-resume stuck or pending downloads
         from backend.services.download_service import download_service
 
@@ -58,9 +64,11 @@ async def lifespan(app: FastAPI):
         await close_mongo_connection()
         raise
     yield
-    # Shutdown: close Redis & Mongo connections
+    # Shutdown: close ES, Redis & Mongo connections
+    from backend.core.elasticsearch import close_es_client
     from backend.core.redis import close_arq_pool, close_redis_pool
 
+    await close_es_client()
     await close_arq_pool()
     await close_redis_pool()
     await close_mongo_connection()
@@ -113,17 +121,21 @@ app.include_router(translation.router)
 app.include_router(datasources.router)
 app.include_router(metadata.router)
 app.include_router(tierlists.router)
+app.include_router(system_logs.router)
 
 
 @app.get("/health")
 async def health_check():
+    from backend.core.elasticsearch import check_es_health
     from backend.core.redis import check_redis_health
 
     redis_stat = await check_redis_health()
+    es_stat = await check_es_health()
     return {
         "status": "ok",
         "service": "manga-library-backend",
         "redis": redis_stat,
+        "elasticsearch": es_stat,
     }
 
 

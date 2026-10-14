@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **190**
+Total Endpoints Discovered: **193**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -153,6 +153,9 @@ Total Endpoints Discovered: **190**
 | `PUT` | `/api/sync/settings` | `update_system_settings` | Sync Manager | [`sync_manager.py:90`](../../backend/routers/sync_manager.py#L90) | Yes |
 | `POST` | `/api/sync/single` | `sync_single` | Sync Manager | [`sync_manager.py:189`](../../backend/routers/sync_manager.py#L189) | Yes |
 | `GET` | `/api/sync/stats` | `get_stats` | Sync Manager | [`sync_manager.py:231`](../../backend/routers/sync_manager.py#L231) | Yes |
+| `GET` | `/api/system-logs` | `get_system_logs` | System Logs | [`system_logs.py:20`](../../backend/routers/system_logs.py#L20) | Yes |
+| `GET` | `/api/system-logs/elk-status` | `get_elk_status` | System Logs | [`system_logs.py:56`](../../backend/routers/system_logs.py#L56) | Yes |
+| `GET` | `/api/system-logs/stats` | `get_system_log_stats` | System Logs | [`system_logs.py:50`](../../backend/routers/system_logs.py#L50) | Yes |
 | `GET` | `/api/tags` | `list_tags` | Tags | [`tags.py:15`](../../backend/routers/tags.py#L15) | Yes |
 | `POST` | `/api/tags` | `create_custom_tag` | Tags | [`tags.py:44`](../../backend/routers/tags.py#L44) | Yes |
 | `DELETE` | `/api/tags/{tag_id}` | `delete_custom_tag` | Tags | [`tags.py:74`](../../backend/routers/tags.py#L74) | Yes |
@@ -194,6 +197,6 @@ Total Endpoints Discovered: **190**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:119`](../../backend/main.py#L119) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:128`](../../backend/main.py#L128) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

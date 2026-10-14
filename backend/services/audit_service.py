@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -6,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 
+from backend.config import settings
 from backend.database.connection import get_db
 
 logger = logging.getLogger(__name__)
@@ -118,6 +120,16 @@ class AuditService:
 
             res = await self._get_audit_collection().insert_one(log_doc)
             log_doc["_id"] = str(res.inserted_id)
+
+            # Optional dual-write to Elasticsearch
+            if settings.audit_es_sync_enabled:
+                try:
+                    from backend.services.audit_search_service import audit_search_service
+
+                    asyncio.create_task(audit_search_service.index_audit_doc(dict(log_doc)))
+                except Exception as es_err:
+                    logger.warning(f"Failed to dispatch async ES audit index: {es_err}")
+
             return self._serialize_log(log_doc)
         except Exception as e:
             logger.error(f"Failed to record audit log for {entity_type} {entity_id} ({action}): {e}")
@@ -140,6 +152,29 @@ class AuditService:
         """
         Query audit logs with multi-field search, filtering, and pagination.
         """
+        # Primary search via Elasticsearch if enabled
+        if settings.audit_es_search_enabled:
+            try:
+                from backend.services.audit_search_service import audit_search_service
+
+                es_res = await audit_search_service.search_audit_logs(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    action=action,
+                    actions=actions,
+                    actor=actor,
+                    search=search,
+                    start_date=start_date,
+                    end_date=end_date,
+                    skip=skip,
+                    limit=limit,
+                    sort_order=sort_order,
+                )
+                if es_res is not None:
+                    return es_res
+            except Exception as es_err:
+                logger.warning(f"Audit logs ES search failed, falling back to MongoDB: {es_err}")
+
         clauses = []
 
         if entity_type:
@@ -199,7 +234,13 @@ class AuditService:
         async for doc in cursor:
             items.append(self._serialize_log(doc))
 
-        return {"total": total, "items": items, "skip": skip, "limit": limit}
+        return {
+            "total": total,
+            "items": items,
+            "skip": skip,
+            "limit": limit,
+            "source_engine": "mongodb",
+        }
 
     async def get_entity_history(self, entity_id: str, limit: int = 200) -> List[Dict[str, Any]]:
         """

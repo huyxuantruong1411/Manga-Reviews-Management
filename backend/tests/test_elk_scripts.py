@@ -1,9 +1,10 @@
 """Unit tests for ELK utility scripts (bootstrap_env, prune_logs, smoke_logs)."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import json
 
+from backend.config import settings
 from scripts.elk.bootstrap_env import (
     CREDENTIAL_KEYS,
     ENCRYPTION_KEY,
@@ -11,7 +12,6 @@ from scripts.elk.bootstrap_env import (
 )
 from scripts.elk.prune_logs import prune_logs
 from scripts.elk.smoke_logs import emit_smoke_logs
-from backend.config import settings
 
 
 def test_bootstrap_elk_env(tmp_path: Path):
