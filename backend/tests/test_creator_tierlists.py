@@ -12,17 +12,18 @@ Covers:
 """
 
 from datetime import datetime, timezone
+
+import httpx
 import pytest
 from bson import ObjectId
-import httpx
 from fastapi import FastAPI
 
 from backend.models.tierlist import (
     TierItemEntry,
-    TierRowModel,
+    TierlistCloneRequest,
     TierlistCreateRequest,
     TierlistUpdateRequest,
-    TierlistCloneRequest,
+    TierRowModel,
 )
 
 
@@ -66,6 +67,7 @@ class MockMongoCollection:
                 elif isinstance(v, dict):
                     if "$regex" in v:
                         import re
+
                         pattern = v["$regex"]
                         flags = re.IGNORECASE if "i" in v.get("$options", "") else 0
                         if not re.search(pattern, str(doc.get(k, "")), flags):
@@ -95,6 +97,7 @@ class MockMongoCollection:
                         for sk, sv in subq.items():
                             if isinstance(sv, dict) and "$regex" in sv:
                                 import re
+
                                 pattern = sv["$regex"]
                                 flags = re.IGNORECASE if "i" in sv.get("$options", "") else 0
                                 if not re.search(pattern, str(doc.get(sk, "")), flags):
@@ -121,6 +124,7 @@ class MockMongoCollection:
                             break
                     elif "$regex" in v:
                         import re
+
                         pattern = v["$regex"]
                         flags = re.IGNORECASE if "i" in v.get("$options", "") else 0
                         if not re.search(pattern, str(doc.get(k, "")), flags):
@@ -260,7 +264,9 @@ async def test_create_first_tierlist_sets_default_and_hydrates_pool(mock_db, mon
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     req = TierlistCreateRequest(title="Main Tierlist", preset="standard")
@@ -293,7 +299,9 @@ async def test_deduplicate_tier_items_in_board(mock_db, sample_mangas, monkeypat
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     m1_id = str(sample_mangas[0]["_id"])
@@ -323,22 +331,26 @@ async def test_auto_discovery_of_newly_added_works(mock_db, sample_mangas, monke
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     created = await service.create_tierlist("Abe Youichi", TierlistCreateRequest(title="Discovery Test"))
 
     # Now simulate adding a new manga into DB with created_at in the future
     m5_id = ObjectId("507f1f77bcf86cd799439015")
-    await mock_db.mangas.insert_one({
-        "_id": m5_id,
-        "title": "Brand New Work",
-        "author": "Abe Youichi",
-        "artist": "Abe Youichi",
-        "personal_rating": 8.8,
-        "read_status": "unread",
-        "created_at": datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc),
-    })
+    await mock_db.mangas.insert_one(
+        {
+            "_id": m5_id,
+            "title": "Brand New Work",
+            "author": "Abe Youichi",
+            "artist": "Abe Youichi",
+            "personal_rating": 8.8,
+            "read_status": "unread",
+            "created_at": datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc),
+        }
+    )
 
     # Fetch hydrated detail
     refetched = await service.get_tierlist_by_id(str(created.id))
@@ -353,7 +365,9 @@ async def test_auto_seed_by_rating(mock_db, sample_mangas, monkeypatch):
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     req = TierlistCreateRequest(
@@ -381,10 +395,12 @@ async def test_auto_seed_by_rating(mock_db, sample_mangas, monkeypatch):
 @pytest.mark.anyio
 async def test_optimistic_locking_revision_conflict(mock_db, monkeypatch):
     """Test 5: Expected revision prevents concurrent overwrite; returns 409 Conflict."""
-    from backend.services.tierlist_service import TierlistService, TierlistRevisionConflictError
+    from backend.services.tierlist_service import TierlistRevisionConflictError, TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     created = await service.create_tierlist("Abe Youichi", TierlistCreateRequest(title="Locking Test"))
@@ -413,7 +429,9 @@ async def test_clone_and_exclusive_default(mock_db, monkeypatch):
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     v1 = await service.create_tierlist("Abe Youichi", TierlistCreateRequest(title="Version 1", is_default=True))
@@ -439,7 +457,9 @@ async def test_compare_two_tierlist_versions(mock_db, sample_mangas, monkeypatch
     from backend.services.tierlist_service import TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
 
     service = TierlistService()
     m1_id = str(sample_mangas[0]["_id"])
@@ -466,7 +486,12 @@ async def test_compare_two_tierlist_versions(mock_db, sample_mangas, monkeypatch
             title="Target Version",
             preset="empty",
             tiers=[
-                TierRowModel(row_id="r0", label="S", color_key="crimson", items=[TierItemEntry(manga_id=m2_id), TierItemEntry(manga_id=m3_id)]),
+                TierRowModel(
+                    row_id="r0",
+                    label="S",
+                    color_key="crimson",
+                    items=[TierItemEntry(manga_id=m2_id), TierItemEntry(manga_id=m3_id)],
+                ),
                 TierRowModel(row_id="r1", label="A", color_key="amber", items=[TierItemEntry(manga_id=m1_id)]),
             ],
         ),
@@ -486,7 +511,7 @@ async def test_compare_two_tierlist_versions(mock_db, sample_mangas, monkeypatch
 @pytest.mark.anyio
 async def test_stream_cover_image_security_boundary(mock_db, sample_mangas, monkeypatch):
     """Test 8: Cover image stream allows valid manga keys, rejects unassociated keys."""
-    from backend.services.tierlist_service import TierlistService, TierlistAccessDeniedError
+    from backend.services.tierlist_service import TierlistAccessDeniedError, TierlistService
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
 
@@ -514,8 +539,13 @@ async def test_api_router_endpoints_e2e(mock_db, monkeypatch):
     from backend.routers.tierlists import router as tierlists_router
 
     monkeypatch.setattr("backend.services.tierlist_service.get_db", lambda: mock_db)
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}")
-    monkeypatch.setattr("backend.services.tierlist_service.minio_service.get_object_stream", lambda key: (b"fake_image_bytes", "image/jpeg"))
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_presigned_url", lambda key: f"http://minio/{key}"
+    )
+    monkeypatch.setattr(
+        "backend.services.tierlist_service.minio_service.get_object_stream",
+        lambda key: (b"fake_image_bytes", "image/jpeg"),
+    )
 
     app = FastAPI()
     app.include_router(tierlists_router)

@@ -15,7 +15,6 @@ from backend.models.tierlist import (
     TierBoardSettings,
     TierColorKey,
     TierItemEntry,
-    TierRowModel,
     TierlistAnalyticsSummary,
     TierlistCloneRequest,
     TierlistComparisonItemDiff,
@@ -24,6 +23,7 @@ from backend.models.tierlist import (
     TierlistDetailResponse,
     TierlistSummaryItem,
     TierlistUpdateRequest,
+    TierRowModel,
 )
 from backend.services.audit_service import audit_service
 from backend.services.minio_service import minio_service
@@ -42,8 +42,7 @@ class TierlistRevisionConflictError(Exception):
         self.current_revision = current_revision
         self.expected_revision = expected_revision
         super().__init__(
-            message
-            or f"Revision conflict: current revision is {current_revision}, expected {expected_revision}"
+            message or f"Revision conflict: current revision is {current_revision}, expected {expected_revision}"
         )
 
 
@@ -138,10 +137,12 @@ class TierlistService:
         name_regex = {"$regex": rf"(^|,\s*){re.escape(clean_name)}(\s*,|$)", "$options": "i"}
 
         coll = self._get_mangas_collection()
-        cursor = coll.find({
-            "$or": [{"author": name_regex}, {"artist": name_regex}],
-            "is_deleted": {"$ne": True},
-        })
+        cursor = coll.find(
+            {
+                "$or": [{"author": name_regex}, {"artist": name_regex}],
+                "is_deleted": {"$ne": True},
+            }
+        )
 
         mangas: List[Dict[str, Any]] = []
         pattern = re.compile(rf"(^|,\s*){re.escape(clean_name)}(\s*,|$)", re.IGNORECASE)
@@ -654,7 +655,9 @@ class TierlistService:
             # Promote newest remaining tierlist to default
             remaining = await coll.find({"creator_name_normalized": norm_name}).to_list(length=100)
             if remaining:
-                remaining.sort(key=lambda d: d.get("updated_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+                remaining.sort(
+                    key=lambda d: d.get("updated_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True
+                )
                 await coll.update_one({"_id": remaining[0]["_id"]}, {"$set": {"is_default": True}})
 
         await audit_service.log_event(
