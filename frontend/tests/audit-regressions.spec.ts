@@ -353,6 +353,7 @@ test("leaving the reader flushes the last page before the debounce expires", asy
 	const progress = await mockReader(page, "single");
 	await page.goto("/manga/audit-manga/read/audit-chapter");
 	await expect(page.getByAltText("Page 1", { exact: true })).toBeVisible();
+	await page.locator("body").click();
 	await page.keyboard.press("ArrowRight");
 	await expect(page.getByAltText("Page 2", { exact: true })).toBeVisible();
 	await page.getByTitle("Đóng trình đọc", { exact: true }).click();
