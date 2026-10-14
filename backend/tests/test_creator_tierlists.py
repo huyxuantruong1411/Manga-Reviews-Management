@@ -11,7 +11,7 @@ Covers:
 8. Cover options and image streaming security boundary.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -348,7 +348,7 @@ async def test_auto_discovery_of_newly_added_works(mock_db, sample_mangas, monke
             "artist": "Abe Youichi",
             "personal_rating": 8.8,
             "read_status": "unread",
-            "created_at": datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc),
+            "created_at": created.created_at + timedelta(days=1),
         }
     )
 
