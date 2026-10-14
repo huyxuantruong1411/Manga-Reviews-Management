@@ -1,15 +1,18 @@
 import {
 	ArrowLeft,
+	BookOpen,
 	ExternalLink,
 	Grid,
+	Layers,
 	LayoutGrid,
 	List as ListIcon,
 	Star,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import { CreatorTierlistWorkspace } from "../components/tierlist/CreatorTierlistWorkspace";
 import { BlurredCover } from "../components/ui/BlurredCover";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 
@@ -34,8 +37,38 @@ interface AuthorWork {
 export const AuthorDetailPage: React.FC = () => {
 	const { name } = useParams<{ name: string }>();
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const { settings, shouldBlur } = useMangaBlur();
 	const isRatingHidden = settings.enabled && settings.hideRating;
+
+	// Tab and Tierlist synchronization
+	const activeTab =
+		(searchParams.get("tab") as "works" | "tierlist") || "works";
+	const tierlistId = searchParams.get("tierlistId");
+	const [isTierlistDirty, setIsTierlistDirty] = useState(false);
+
+	const handleTabChange = (nextTab: "works" | "tierlist") => {
+		if (nextTab === activeTab) return;
+		if (activeTab === "tierlist" && isTierlistDirty) {
+			const confirmLeave = window.confirm(
+				"Bạn có những chỉnh sửa bảng xếp hạng chưa lưu. Bạn có chắc chắn muốn rời tab Tierlist không?",
+			);
+			if (!confirmLeave) return;
+		}
+		const newParams = new URLSearchParams(searchParams);
+		newParams.set("tab", nextTab);
+		if (nextTab === "works") {
+			newParams.delete("tierlistId");
+		}
+		setSearchParams(newParams);
+	};
+
+	const handleSelectTierlistId = (id: string) => {
+		const newParams = new URLSearchParams(searchParams);
+		newParams.set("tab", "tierlist");
+		newParams.set("tierlistId", id);
+		setSearchParams(newParams);
+	};
 
 	// State
 	const [author, setAuthor] = useState<any>(null);
@@ -417,366 +450,417 @@ export const AuthorDetailPage: React.FC = () => {
 				)}
 			</div>
 
-			{/* Works list container */}
-			<div className="space-y-6">
-				{/* Controls Toolbar */}
-				<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 shadow-sm">
-					<div>
-						<h2 className="font-spartan font-bold text-lg">
-							Works ({works.length})
-						</h2>
-					</div>
+			{/* Primary View Tabs */}
+			<div className="flex items-center gap-1 p-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-sm">
+				<button
+					onClick={() => handleTabChange("works")}
+					className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+						activeTab === "works"
+							? "bg-[var(--brand-orange)] text-white shadow-md shadow-[var(--brand-orange)]/20"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+					}`}
+				>
+					<BookOpen size={16} />
+					<span>Tác phẩm trong thư viện</span>
+					<span
+						className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+							activeTab === "works"
+								? "bg-white/25 text-white"
+								: "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+						}`}
+					>
+						{works.length}
+					</span>
+				</button>
+				<button
+					onClick={() => handleTabChange("tierlist")}
+					className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+						activeTab === "tierlist"
+							? "bg-[var(--brand-orange)] text-white shadow-md shadow-[var(--brand-orange)]/20"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+					}`}
+				>
+					<Layers size={16} />
+					<span>Tierlist Maker</span>
+				</button>
+			</div>
 
-					<div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-						{/* Sort by */}
-						<div className="flex items-center space-x-2">
-							<span className="text-xs text-[var(--text-secondary)] font-bold">
-								Sort by
-							</span>
-							<select
-								value={sortMode}
-								onChange={(e) => setSortMode(e.target.value)}
-								className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none"
-							>
-								<option value="none">None (Default)</option>
-								<option value="title-asc">Title (A-Z)</option>
-								<option value="title-desc">Title (Z-A)</option>
-								<option value="year-newest">Year (Newest)</option>
-								<option value="year-oldest">Year (Oldest)</option>
-								<option value="rating-highest">Rating (Highest)</option>
-							</select>
+			{/* Tab Content */}
+			{activeTab === "works" && (
+				<div className="space-y-6">
+					{/* Controls Toolbar */}
+					<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 shadow-sm">
+						<div>
+							<h2 className="font-spartan font-bold text-lg">
+								Works ({works.length})
+							</h2>
 						</div>
 
-						{/* Layout Toggles */}
-						<div className="flex items-center rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)] ml-auto sm:ml-0">
-							<button
-								onClick={() => handleSaveLayout("list")}
-								className={`p-1.5 rounded-lg transition ${
-									viewMode === "list"
-										? "bg-[var(--brand-orange)] text-white"
-										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-								}`}
-								title="List View"
-							>
-								<ListIcon size={16} />
-							</button>
-							<button
-								onClick={() => handleSaveLayout("card")}
-								className={`p-1.5 rounded-lg transition ${
-									viewMode === "card"
-										? "bg-[var(--brand-orange)] text-white"
-										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-								}`}
-								title="Detailed Card View"
-							>
-								<LayoutGrid size={16} />
-							</button>
-							<button
-								onClick={() => handleSaveLayout("grid")}
-								className={`p-1.5 rounded-lg transition ${
-									viewMode === "grid"
-										? "bg-[var(--brand-orange)] text-white"
-										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-								}`}
-								title="Grid View"
-							>
-								<Grid size={16} />
-							</button>
-						</div>
-					</div>
-				</div>
-
-				{/* Display works */}
-				{sortedWorks.length > 0 ? (
-					viewMode === "grid" ? (
-						/* GRID VIEW */
-						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-							{sortedWorks.map((manga) => (
-								<div
-									key={manga.id}
-									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col group relative cursor-pointer"
-									onClick={() => navigate(`/manga/${manga.local_id}`)}
+						<div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+							{/* Sort by */}
+							<div className="flex items-center space-x-2">
+								<span className="text-xs text-[var(--text-secondary)] font-bold">
+									Sort by
+								</span>
+								<select
+									value={sortMode}
+									onChange={(e) => setSortMode(e.target.value)}
+									className="px-3 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none"
 								>
-									{/* Cover Frame */}
-									<div className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
-										{manga.coverUrl ? (
-											<BlurredCover
-												src={manga.coverUrl}
-												alt={manga.title}
-												className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-pointer"
-												shouldBlur={shouldBlur({
-													content_rating: manga.content_rating,
-													tag_ids: manga.tag_ids,
-												})}
-												onClick={(e: React.MouseEvent) => {
-													e.stopPropagation();
-													setZoomedCoverUrl(manga.coverUrl);
-												}}
-											/>
-										) : (
-											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-												<span>No Cover Image</span>
-											</div>
-										)}
+									<option value="none">None (Default)</option>
+									<option value="title-asc">Title (A-Z)</option>
+									<option value="title-desc">Title (Z-A)</option>
+									<option value="year-newest">Year (Newest)</option>
+									<option value="year-oldest">Year (Oldest)</option>
+									<option value="rating-highest">Rating (Highest)</option>
+								</select>
+							</div>
 
-										{/* Status / Demographic Badges */}
-										<span className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-sm text-white rounded text-[9px] uppercase font-bold tracking-wider">
-											{manga.status}
-										</span>
-									</div>
-
-									{/* Content details */}
-									<div className="p-3 flex-1 flex flex-col justify-between space-y-2">
-										<div className="space-y-1">
-											<h4
-												className="font-spartan font-bold text-xs leading-tight text-[var(--text-primary)] line-clamp-2 hover:text-[var(--brand-orange)] cursor-pointer"
-												title={manga.title}
-											>
-												{manga.title}
-											</h4>
-											<p className="text-[10px] text-[var(--text-secondary)]">
-												{manga.year} •{" "}
-												<span className="capitalize">
-													{manga.demographic || "none"}
-												</span>
-											</p>
-										</div>
-
-										{/* Read Status Badge */}
-										{getReadStatusBadge(manga)}
-									</div>
-								</div>
-							))}
-						</div>
-					) : viewMode === "list" ? (
-						/* LIST VIEW */
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm">
-							<div className="overflow-x-auto">
-								<table className="w-full text-left border-collapse">
-									<thead>
-										<tr className="border-b border-[var(--border-primary)] text-xs text-[var(--text-secondary)] uppercase font-bold tracking-wider">
-											<th className="p-4 w-16 text-center">Cover</th>
-											<th className="p-4 text-left">Title</th>
-											<th className="p-4 w-28 text-left">Year / Status</th>
-											<th className="p-4 w-28 text-left">Demographic</th>
-											<th className="p-4 w-32 text-left">Rating</th>
-											<th className="p-4 w-36 text-left">Read Status</th>
-											<th className="p-4 w-28 text-right">Actions</th>
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-[var(--border-primary)]">
-										{sortedWorks.map((manga) => (
-											<tr
-												key={manga.id}
-												className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 text-sm transition cursor-pointer"
-												onClick={() => navigate(`/manga/${manga.local_id}`)}
-											>
-												<td className="p-3">
-													<div className="w-10 aspect-[3/4] rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
-														{manga.coverUrl ? (
-															<BlurredCover
-																src={manga.coverUrl}
-																alt={manga.title}
-																className="w-full h-full object-cover cursor-pointer"
-																shouldBlur={shouldBlur({
-																	content_rating: manga.content_rating,
-																	tag_ids: manga.tag_ids,
-																})}
-																onClick={(e: React.MouseEvent) => {
-																	e.stopPropagation();
-																	setZoomedCoverUrl(manga.coverUrl);
-																}}
-															/>
-														) : (
-															<div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400">
-																No cover
-															</div>
-														)}
-													</div>
-												</td>
-												<td className="p-3 font-semibold">
-													<span className="hover:text-[var(--brand-orange)] cursor-pointer transition">
-														{manga.title}
-													</span>
-												</td>
-												<td className="p-3 text-zinc-500">
-													{manga.year}{" "}
-													<span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded ml-1.5">
-														{manga.status}
-													</span>
-												</td>
-												<td className="p-3 capitalize text-zinc-500">
-													{manga.demographic || "none"}
-												</td>
-												<td className="p-3 text-xs text-zinc-500">
-													{manga.ratingAverage !== null && (
-														<div
-															className={`flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-														>
-															<Star
-																size={11}
-																className="fill-yellow-500 text-yellow-500"
-															/>
-															<span>{manga.ratingAverage.toFixed(2)} / 10</span>
-														</div>
-													)}
-												</td>
-												<td
-													className="p-3"
-													onClick={(e) => e.stopPropagation()}
-												>
-													{getReadStatusBadge(manga)}
-												</td>
-												<td
-													className="p-3 text-right"
-													onClick={(e) => e.stopPropagation()}
-												>
-													<button
-														onClick={() => navigate(`/manga/${manga.local_id}`)}
-														className="px-3 py-1 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 hover:opacity-90 rounded-lg text-xs font-bold transition"
-													>
-														View Detail
-													</button>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
+							{/* Layout Toggles */}
+							<div className="flex items-center rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)] ml-auto sm:ml-0">
+								<button
+									onClick={() => handleSaveLayout("list")}
+									className={`p-1.5 rounded-lg transition ${
+										viewMode === "list"
+											? "bg-[var(--brand-orange)] text-white"
+											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+									}`}
+									title="List View"
+								>
+									<ListIcon size={16} />
+								</button>
+								<button
+									onClick={() => handleSaveLayout("card")}
+									className={`p-1.5 rounded-lg transition ${
+										viewMode === "card"
+											? "bg-[var(--brand-orange)] text-white"
+											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+									}`}
+									title="Detailed Card View"
+								>
+									<LayoutGrid size={16} />
+								</button>
+								<button
+									onClick={() => handleSaveLayout("grid")}
+									className={`p-1.5 rounded-lg transition ${
+										viewMode === "grid"
+											? "bg-[var(--brand-orange)] text-white"
+											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+									}`}
+									title="Grid View"
+								>
+									<Grid size={16} />
+								</button>
 							</div>
 						</div>
-					) : (
-						/* DETAILED CARD VIEW */
-						<div className="space-y-6">
-							{sortedWorks.map((manga) => (
-								<div
-									key={manga.id}
-									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-5 md:p-6 flex flex-col md:flex-row gap-6 relative shadow-sm hover:shadow-md transition"
-								>
-									{/* Cover (Larger) */}
+					</div>
+
+					{/* Display works */}
+					{sortedWorks.length > 0 ? (
+						viewMode === "grid" ? (
+							/* GRID VIEW */
+							<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+								{sortedWorks.map((manga) => (
 									<div
-										className="w-32 md:w-36 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-md flex-shrink-0 mx-auto md:mx-0 cursor-pointer"
-										onClick={() =>
-											manga.coverUrl && setZoomedCoverUrl(manga.coverUrl)
-										}
+										key={manga.id}
+										className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col group relative cursor-pointer"
+										onClick={() => navigate(`/manga/${manga.local_id}`)}
 									>
-										{manga.coverUrl ? (
-											<BlurredCover
-												src={manga.coverUrl}
-												alt={manga.title}
-												className="w-full h-full object-cover hover:scale-105 transition duration-300 cursor-pointer"
-												shouldBlur={shouldBlur({
-													content_rating: manga.content_rating,
-													tag_ids: manga.tag_ids,
-												})}
-											/>
-										) : (
-											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 text-xs">
-												<span>No Cover</span>
-											</div>
-										)}
-									</div>
-
-									{/* Metadata & Synopsis Details */}
-									<div className="flex-1 flex flex-col justify-between space-y-4">
-										<div className="space-y-2">
-											{/* Upper Stats Row */}
-											<div className="flex flex-wrap items-center gap-2">
-												{/* Demographic */}
-												{manga.demographic && (
-													<span className="px-2.5 py-0.5 bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/30 rounded-xl text-[10px] font-bold uppercase">
-														{manga.demographic}
-													</span>
-												)}
-
-												{/* Publish Status */}
-												<span className="px-2.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 rounded-xl text-[10px] font-bold uppercase">
-													{manga.status}
-												</span>
-
-												{/* Rating */}
-												{manga.ratingAverage !== null && (
-													<span
-														className={`px-2.5 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 rounded-xl text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-													>
-														<Star
-															size={10}
-															className="fill-yellow-500 text-yellow-500"
-														/>
-														<span>{manga.ratingAverage.toFixed(2)}</span>
-													</span>
-												)}
-
-												{/* Read Status */}
-												<div className="ml-auto">
-													{getReadStatusBadge(manga)}
-												</div>
-											</div>
-
-											{/* Title */}
-											<h3
-												onClick={() => navigate(`/manga/${manga.local_id}`)}
-												className="text-xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--brand-orange)] cursor-pointer transition"
-											>
-												{manga.title}
-											</h3>
-
-											{/* Year */}
-											<p className="text-xs text-[var(--text-secondary)] font-medium">
-												Released in {manga.year}
-											</p>
-
-											{/* Synopsis */}
-											{manga.description ? (
-												<p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed max-w-3xl">
-													{manga.description}
-												</p>
+										{/* Cover Frame */}
+										<div className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
+											{manga.coverUrl ? (
+												<BlurredCover
+													src={manga.coverUrl}
+													alt={manga.title}
+													className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-pointer"
+													shouldBlur={shouldBlur({
+														content_rating: manga.content_rating,
+														tag_ids: manga.tag_ids,
+													})}
+													onClick={(e: React.MouseEvent) => {
+														e.stopPropagation();
+														setZoomedCoverUrl(manga.coverUrl);
+													}}
+												/>
 											) : (
-												<p className="text-xs text-zinc-400 italic">
-													No synopsis available.
+												<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
+													<span>No Cover Image</span>
+												</div>
+											)}
+
+											{/* Status / Demographic Badges */}
+											<span className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-sm text-white rounded text-[9px] uppercase font-bold tracking-wider">
+												{manga.status}
+											</span>
+										</div>
+
+										{/* Content details */}
+										<div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+											<div className="space-y-1">
+												<h4
+													className="font-spartan font-bold text-xs leading-tight text-[var(--text-primary)] line-clamp-2 hover:text-[var(--brand-orange)] cursor-pointer"
+													title={manga.title}
+												>
+													{manga.title}
+												</h4>
+												<p className="text-[10px] text-[var(--text-secondary)]">
+													{manga.year} •{" "}
+													<span className="capitalize">
+														{manga.demographic || "none"}
+													</span>
 												</p>
+											</div>
+
+											{/* Read Status Badge */}
+											{getReadStatusBadge(manga)}
+										</div>
+									</div>
+								))}
+							</div>
+						) : viewMode === "list" ? (
+							/* LIST VIEW */
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm">
+								<div className="overflow-x-auto">
+									<table className="w-full text-left border-collapse">
+										<thead>
+											<tr className="border-b border-[var(--border-primary)] text-xs text-[var(--text-secondary)] uppercase font-bold tracking-wider">
+												<th className="p-4 w-16 text-center">Cover</th>
+												<th className="p-4 text-left">Title</th>
+												<th className="p-4 w-28 text-left">Year / Status</th>
+												<th className="p-4 w-28 text-left">Demographic</th>
+												<th className="p-4 w-32 text-left">Rating</th>
+												<th className="p-4 w-36 text-left">Read Status</th>
+												<th className="p-4 w-28 text-right">Actions</th>
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-[var(--border-primary)]">
+											{sortedWorks.map((manga) => (
+												<tr
+													key={manga.id}
+													className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 text-sm transition cursor-pointer"
+													onClick={() => navigate(`/manga/${manga.local_id}`)}
+												>
+													<td className="p-3">
+														<div className="w-10 aspect-[3/4] rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
+															{manga.coverUrl ? (
+																<BlurredCover
+																	src={manga.coverUrl}
+																	alt={manga.title}
+																	className="w-full h-full object-cover cursor-pointer"
+																	shouldBlur={shouldBlur({
+																		content_rating: manga.content_rating,
+																		tag_ids: manga.tag_ids,
+																	})}
+																	onClick={(e: React.MouseEvent) => {
+																		e.stopPropagation();
+																		setZoomedCoverUrl(manga.coverUrl);
+																	}}
+																/>
+															) : (
+																<div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-400">
+																	No cover
+																</div>
+															)}
+														</div>
+													</td>
+													<td className="p-3 font-semibold">
+														<span className="hover:text-[var(--brand-orange)] cursor-pointer transition">
+															{manga.title}
+														</span>
+													</td>
+													<td className="p-3 text-zinc-500">
+														{manga.year}{" "}
+														<span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded ml-1.5">
+															{manga.status}
+														</span>
+													</td>
+													<td className="p-3 capitalize text-zinc-500">
+														{manga.demographic || "none"}
+													</td>
+													<td className="p-3 text-xs text-zinc-500">
+														{manga.ratingAverage !== null && (
+															<div
+																className={`flex items-center space-x-1 font-bold text-yellow-600 dark:text-yellow-400 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+															>
+																<Star
+																	size={11}
+																	className="fill-yellow-500 text-yellow-500"
+																/>
+																<span>
+																	{manga.ratingAverage.toFixed(2)} / 10
+																</span>
+															</div>
+														)}
+													</td>
+													<td
+														className="p-3"
+														onClick={(e) => e.stopPropagation()}
+													>
+														{getReadStatusBadge(manga)}
+													</td>
+													<td
+														className="p-3 text-right"
+														onClick={(e) => e.stopPropagation()}
+													>
+														<button
+															onClick={() =>
+																navigate(`/manga/${manga.local_id}`)
+															}
+															className="px-3 py-1 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 hover:opacity-90 rounded-lg text-xs font-bold transition"
+														>
+															View Detail
+														</button>
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						) : (
+							/* DETAILED CARD VIEW */
+							<div className="space-y-6">
+								{sortedWorks.map((manga) => (
+									<div
+										key={manga.id}
+										className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-5 md:p-6 flex flex-col md:flex-row gap-6 relative shadow-sm hover:shadow-md transition"
+									>
+										{/* Cover (Larger) */}
+										<div
+											className="w-32 md:w-36 aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 shadow-md flex-shrink-0 mx-auto md:mx-0 cursor-pointer"
+											onClick={() =>
+												manga.coverUrl && setZoomedCoverUrl(manga.coverUrl)
+											}
+										>
+											{manga.coverUrl ? (
+												<BlurredCover
+													src={manga.coverUrl}
+													alt={manga.title}
+													className="w-full h-full object-cover hover:scale-105 transition duration-300 cursor-pointer"
+													shouldBlur={shouldBlur({
+														content_rating: manga.content_rating,
+														tag_ids: manga.tag_ids,
+													})}
+												/>
+											) : (
+												<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 text-xs">
+													<span>No Cover</span>
+												</div>
 											)}
 										</div>
 
-										{/* Genre Tags & Actions Row */}
-										<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[var(--border-primary)]">
-											{/* Genre Badges (max 4) */}
-											<div className="flex flex-wrap gap-1.5">
-												{manga.tags.slice(0, 4).map((tag) => (
-													<span
-														key={tag}
-														className="px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[10px] font-semibold text-[var(--text-secondary)] capitalize"
-													>
-														{tag}
+										{/* Metadata & Synopsis Details */}
+										<div className="flex-1 flex flex-col justify-between space-y-4">
+											<div className="space-y-2">
+												{/* Upper Stats Row */}
+												<div className="flex flex-wrap items-center gap-2">
+													{/* Demographic */}
+													{manga.demographic && (
+														<span className="px-2.5 py-0.5 bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/30 rounded-xl text-[10px] font-bold uppercase">
+															{manga.demographic}
+														</span>
+													)}
+
+													{/* Publish Status */}
+													<span className="px-2.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 rounded-xl text-[10px] font-bold uppercase">
+														{manga.status}
 													</span>
-												))}
-												{manga.tags.length > 4 && (
-													<span className="text-[10px] text-zinc-400 font-bold">
-														+{manga.tags.length - 4} more
-													</span>
+
+													{/* Rating */}
+													{manga.ratingAverage !== null && (
+														<span
+															className={`px-2.5 py-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 rounded-xl text-[10px] font-bold flex items-center space-x-0.5 ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+														>
+															<Star
+																size={10}
+																className="fill-yellow-500 text-yellow-500"
+															/>
+															<span>{manga.ratingAverage.toFixed(2)}</span>
+														</span>
+													)}
+
+													{/* Read Status */}
+													<div className="ml-auto">
+														{getReadStatusBadge(manga)}
+													</div>
+												</div>
+
+												{/* Title */}
+												<h3
+													onClick={() => navigate(`/manga/${manga.local_id}`)}
+													className="text-xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--brand-orange)] cursor-pointer transition"
+												>
+													{manga.title}
+												</h3>
+
+												{/* Year */}
+												<p className="text-xs text-[var(--text-secondary)] font-medium">
+													Released in {manga.year}
+												</p>
+
+												{/* Synopsis */}
+												{manga.description ? (
+													<p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed max-w-3xl">
+														{manga.description}
+													</p>
+												) : (
+													<p className="text-xs text-zinc-400 italic">
+														No synopsis available.
+													</p>
 												)}
 											</div>
 
-											{/* Direct Button Action */}
-											<div className="flex gap-2 sm:ml-auto">
-												<button
-													onClick={() => navigate(`/manga/${manga.local_id}`)}
-													className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition hover:opacity-90"
-												>
-													View detail & review
-												</button>
+											{/* Genre Tags & Actions Row */}
+											<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[var(--border-primary)]">
+												{/* Genre Badges (max 4) */}
+												<div className="flex flex-wrap gap-1.5">
+													{manga.tags.slice(0, 4).map((tag) => (
+														<span
+															key={tag}
+															className="px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[10px] font-semibold text-[var(--text-secondary)] capitalize"
+														>
+															{tag}
+														</span>
+													))}
+													{manga.tags.length > 4 && (
+														<span className="text-[10px] text-zinc-400 font-bold">
+															+{manga.tags.length - 4} more
+														</span>
+													)}
+												</div>
+
+												{/* Direct Button Action */}
+												<div className="flex gap-2 sm:ml-auto">
+													<button
+														onClick={() => navigate(`/manga/${manga.local_id}`)}
+														className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition hover:opacity-90"
+													>
+														View detail & review
+													</button>
+												</div>
 											</div>
 										</div>
 									</div>
-								</div>
-							))}
+								))}
+							</div>
+						)
+					) : (
+						<div className="text-center py-20 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl text-[var(--text-secondary)]">
+							No works found for this creator on MangaDex.
 						</div>
-					)
-				) : (
-					<div className="text-center py-20 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl text-[var(--text-secondary)]">
-						No works found for this creator on MangaDex.
-					</div>
-				)}
-			</div>
+					)}
+				</div>
+			)}
+
+			{/* Tierlist Maker Tab */}
+			{activeTab === "tierlist" && name && (
+				<CreatorTierlistWorkspace
+					creatorName={name}
+					activeTierlistId={tierlistId}
+					onSelectTierlistId={handleSelectTierlistId}
+					onDirtyChange={setIsTierlistDirty}
+				/>
+			)}
 
 			{/* Shared Lightbox Cover Zoom Modal */}
 			{zoomedCoverUrl && (
