@@ -1,5 +1,6 @@
 import {
 	Calendar,
+	Filter,
 	Globe,
 	Image as ImageIcon,
 	RefreshCw,
@@ -7,9 +8,40 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+
+/** Maps ISO 639-1 / BCP-47 locale codes to human-readable labels */
+const LOCALE_LABELS: Record<string, string> = {
+	ja: "Japanese",
+	en: "English",
+	ko: "Korean",
+	"zh-hk": "Chinese (HK)",
+	"zh-tw": "Chinese (TW)",
+	zh: "Chinese",
+	th: "Thai",
+	vi: "Vietnamese",
+	es: "Spanish",
+	"es-la": "Spanish (LA)",
+	"pt-br": "Portuguese (BR)",
+	pt: "Portuguese",
+	fr: "French",
+	de: "German",
+	it: "Italian",
+	ru: "Russian",
+	ar: "Arabic",
+	id: "Indonesian",
+	ms: "Malay",
+	tl: "Filipino",
+	pl: "Polish",
+	tr: "Turkish",
+	uk: "Ukrainian",
+	bn: "Bengali",
+	hi: "Hindi",
+	my: "Burmese",
+	mn: "Mongolian",
+};
 
 interface CoverArt {
 	_id: string;
@@ -41,7 +73,37 @@ export const CoverArtGallery: React.FC<CoverArtGalleryProps> = ({
 	const [syncProgress, setSyncProgress] = useState(0);
 	const [syncLogs, setSyncLogs] = useState<string[]>([]);
 	const [selectedCover, setSelectedCover] = useState<CoverArt | null>(null);
+	const [selectedLocale, setSelectedLocale] = useState<string | null>(null);
 	const { showAlert } = useAlert();
+
+	// Compute unique locales with counts for filter chips
+	const localeStats = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const c of covers) {
+			const key = (c.locale || "unknown").toLowerCase();
+			counts.set(key, (counts.get(key) || 0) + 1);
+		}
+		// Sort: ja first, then en, then rest alphabetically
+		const priority = ["ja", "en"];
+		return Array.from(counts.entries())
+			.sort((a, b) => {
+				const pa = priority.indexOf(a[0]);
+				const pb = priority.indexOf(b[0]);
+				if (pa !== -1 && pb !== -1) return pa - pb;
+				if (pa !== -1) return -1;
+				if (pb !== -1) return 1;
+				return a[0].localeCompare(b[0]);
+			})
+			.map(([locale, count]) => ({ locale, count }));
+	}, [covers]);
+
+	// Filtered covers based on selected locale
+	const filteredCovers = useMemo(() => {
+		if (!selectedLocale) return covers;
+		return covers.filter(
+			(c) => (c.locale || "unknown").toLowerCase() === selectedLocale,
+		);
+	}, [covers, selectedLocale]);
 
 	const addLog = (msg: string) => {
 		const timestamp = new Date().toLocaleTimeString();
@@ -148,8 +210,26 @@ export const CoverArtGallery: React.FC<CoverArtGalleryProps> = ({
 						Cover Art Gallery
 					</h3>
 					<p className="text-sm text-[var(--text-secondary)]">
-						Total of {covers.length} cover art{covers.length !== 1 ? "s" : ""}{" "}
-						synced for this title.
+						{selectedLocale ? (
+							<>
+								Showing{" "}
+								<span className="font-semibold text-[var(--text-primary)]">
+									{filteredCovers.length}
+								</span>{" "}
+								of {covers.length} cover art{covers.length !== 1 ? "s" : ""}
+								{" · "}
+								Locale:{" "}
+								<span className="font-semibold uppercase text-[var(--text-primary)]">
+									{LOCALE_LABELS[selectedLocale] ||
+										selectedLocale.toUpperCase()}
+								</span>
+							</>
+						) : (
+							<>
+								Total of {covers.length} cover art
+								{covers.length !== 1 ? "s" : ""} synced for this title.
+							</>
+						)}
 					</p>
 				</div>
 				<button
@@ -245,74 +325,161 @@ export const CoverArtGallery: React.FC<CoverArtGalleryProps> = ({
 					</button>
 				</div>
 			) : (
-				/* Grid Display */
-				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-					{covers.map((cover) => (
-						<div
-							key={cover._id}
-							onClick={() => setSelectedCover(cover)}
-							className="group relative flex flex-col bg-[var(--bg-card)] border border-[var(--border-primary)] hover:border-[var(--brand-orange)] rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer hover:-translate-y-1"
-						>
-							{/* Cover Image */}
-							<div className="relative aspect-[2/3] w-full bg-zinc-100 dark:bg-zinc-900 overflow-hidden">
-								{cover.cover_url ? (
-									<img
-										src={cover.cover_url}
-										alt={cover.volume ? `Volume ${cover.volume}` : "Cover Art"}
-										className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-										loading="lazy"
-									/>
-								) : (
-									<div className="w-full h-full flex items-center justify-center text-[var(--text-secondary)]">
-										<ImageIcon size={32} />
-									</div>
-								)}
-
-								{/* Overlay with Zoom Icon */}
-								<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-									<div className="p-3 bg-white/20 backdrop-blur-md text-white rounded-full scale-75 group-hover:scale-100 transition-all duration-300">
-										<ZoomIn size={20} />
-									</div>
-								</div>
-
-								{/* Volume Badge */}
-								<div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md text-white text-xs font-semibold rounded-full shadow-sm">
-									{cover.volume ? `Vol. ${cover.volume}` : "Oneshot / Special"}
-								</div>
+				<div className="space-y-5">
+					{/* Locale Filter Bar */}
+					{localeStats.length > 1 && (
+						<div className="flex flex-wrap items-center gap-2">
+							<div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)] mr-1 select-none">
+								<Filter size={13} />
+								<span>Cover Locale</span>
 							</div>
 
-							{/* Cover Details */}
-							<div className="p-3.5 flex-1 flex flex-col justify-between">
-								<div className="space-y-1">
-									<div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
-										<Globe size={12} />
-										<span className="uppercase">
-											{cover.locale || "unknown"}
-										</span>
-									</div>
-									{cover.description && (
-										<p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">
-											"{cover.description}"
-										</p>
-									)}
-								</div>
-								{cover.created_at && (
-									<div className="mt-2.5 flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
-										<Calendar size={10} />
-										<span>
-											{new Date(cover.created_at).toLocaleDateString(
-												undefined,
-												{
-													year: "numeric",
-													month: "short",
-												},
-											)}
-										</span>
-									</div>
-								)}
-							</div>
+							{/* All chip */}
+							<button
+								type="button"
+								onClick={() => setSelectedLocale(null)}
+								className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+									selectedLocale === null
+										? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)] shadow-sm shadow-[var(--brand-orange)]/20"
+										: "bg-[var(--bg-card)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:border-[var(--brand-orange)]/50 hover:text-[var(--text-primary)]"
+								}`}
+							>
+								<Globe size={12} />
+								All
+								<span
+									className={`ml-0.5 text-[10px] ${
+										selectedLocale === null
+											? "text-white/80"
+											: "text-[var(--text-secondary)]"
+									}`}
+								>
+									{covers.length}
+								</span>
+							</button>
+
+							{/* Locale chips */}
+							{localeStats.map(({ locale, count }) => (
+								<button
+									key={locale}
+									type="button"
+									onClick={() =>
+										setSelectedLocale(selectedLocale === locale ? null : locale)
+									}
+									title={LOCALE_LABELS[locale] || locale.toUpperCase()}
+									className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+										selectedLocale === locale
+											? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)] shadow-sm shadow-[var(--brand-orange)]/20"
+											: "bg-[var(--bg-card)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:border-[var(--brand-orange)]/50 hover:text-[var(--text-primary)]"
+									}`}
+								>
+									<span className="uppercase">{locale}</span>
+									<span
+										className={`ml-0.5 text-[10px] ${
+											selectedLocale === locale
+												? "text-white/80"
+												: "text-[var(--text-secondary)]"
+										}`}
+									>
+										{count}
+									</span>
+								</button>
+							))}
 						</div>
-					))}
+					)}
+
+					{/* Grid Display */}
+					{filteredCovers.length === 0 ? (
+						<div className="flex flex-col items-center justify-center py-12 px-4 bg-[var(--bg-card)] border border-dashed border-[var(--border-primary)] rounded-2xl text-center">
+							<Globe size={28} className="text-[var(--text-secondary)] mb-3" />
+							<p className="text-sm font-medium text-[var(--text-secondary)]">
+								No covers found for locale{" "}
+								<strong className="uppercase text-[var(--text-primary)]">
+									{LOCALE_LABELS[selectedLocale || ""] ||
+										selectedLocale?.toUpperCase()}
+								</strong>
+							</p>
+							<button
+								type="button"
+								onClick={() => setSelectedLocale(null)}
+								className="mt-3 text-xs font-semibold text-[var(--brand-orange)] hover:underline cursor-pointer"
+							>
+								Clear filter
+							</button>
+						</div>
+					) : (
+						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+							{filteredCovers.map((cover) => (
+								<div
+									key={cover._id}
+									onClick={() => setSelectedCover(cover)}
+									className="group relative flex flex-col bg-[var(--bg-card)] border border-[var(--border-primary)] hover:border-[var(--brand-orange)] rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer hover:-translate-y-1"
+								>
+									{/* Cover Image */}
+									<div className="relative aspect-[2/3] w-full bg-zinc-100 dark:bg-zinc-900 overflow-hidden">
+										{cover.cover_url ? (
+											<img
+												src={cover.cover_url}
+												alt={
+													cover.volume ? `Volume ${cover.volume}` : "Cover Art"
+												}
+												className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+												loading="lazy"
+											/>
+										) : (
+											<div className="w-full h-full flex items-center justify-center text-[var(--text-secondary)]">
+												<ImageIcon size={32} />
+											</div>
+										)}
+
+										{/* Overlay with Zoom Icon */}
+										<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+											<div className="p-3 bg-white/20 backdrop-blur-md text-white rounded-full scale-75 group-hover:scale-100 transition-all duration-300">
+												<ZoomIn size={20} />
+											</div>
+										</div>
+
+										{/* Volume Badge */}
+										<div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md text-white text-xs font-semibold rounded-full shadow-sm">
+											{cover.volume
+												? `Vol. ${cover.volume}`
+												: "Oneshot / Special"}
+										</div>
+									</div>
+
+									{/* Cover Details */}
+									<div className="p-3.5 flex-1 flex flex-col justify-between">
+										<div className="space-y-1">
+											<div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
+												<Globe size={12} />
+												<span className="uppercase">
+													{cover.locale || "unknown"}
+												</span>
+											</div>
+											{cover.description && (
+												<p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">
+													"{cover.description}"
+												</p>
+											)}
+										</div>
+										{cover.created_at && (
+											<div className="mt-2.5 flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+												<Calendar size={10} />
+												<span>
+													{new Date(cover.created_at).toLocaleDateString(
+														undefined,
+														{
+															year: "numeric",
+															month: "short",
+														},
+													)}
+												</span>
+											</div>
+										)}
+									</div>
+								</div>
+							))}
+						</div>
+					)}
 				</div>
 			)}
 
