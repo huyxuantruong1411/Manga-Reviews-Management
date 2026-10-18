@@ -1129,13 +1129,43 @@ class MangaService:
             tracker_data = await fetch_tracker_metadata(links)
             if tracker_data:
                 combined = tracker_data.get("combined", {})
-                update_payload: Dict[str, Any] = {"tracker_metadata": tracker_data, "updated_at": datetime.utcnow()}
+                update_payload: Dict[str, Any] = {
+                    "tracker_metadata": tracker_data,
+                    "updated_at": datetime.now(timezone.utc),
+                }
 
                 # Auto fill start/end dates if currently missing
                 if not manga.get("published_start_date") and combined.get("published_start_date"):
                     update_payload["published_start_date"] = combined["published_start_date"]
                 if not manga.get("published_end_date") and combined.get("published_end_date"):
                     update_payload["published_end_date"] = combined["published_end_date"]
+
+                # Enrich with extended MAL metadata if MAL ID exists
+                mal_id = None
+                if tracker_data.get("mal") and isinstance(tracker_data["mal"], dict):
+                    mal_id = tracker_data["mal"].get("id")
+                if not mal_id:
+                    from backend.services.mal_enrichment_service import extract_mal_id
+
+                    mal_id = extract_mal_id(links)
+
+                if mal_id:
+                    try:
+                        from backend.services.mal_enrichment_service import (
+                            apply_extended_mal_metadata_to_manga,
+                            fetch_mal_manga_page_html,
+                            parse_mal_manga_info_html,
+                        )
+
+                        info_html = await fetch_mal_manga_page_html(str(mal_id))
+                        if info_html:
+                            extended_meta = parse_mal_manga_info_html(info_html, str(mal_id))
+                            ext_update = apply_extended_mal_metadata_to_manga(
+                                manga, extended_meta, apply_empty_fields=True
+                            )
+                            update_payload.update(ext_update)
+                    except Exception as mal_err:
+                        logger.warning(f"Error enriching extended MAL metadata for {manga_id}: {mal_err}")
 
                 await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_payload})
                 await self.log_action(manga_id, "enrich_trackers", note="Enriched metadata from external trackers")

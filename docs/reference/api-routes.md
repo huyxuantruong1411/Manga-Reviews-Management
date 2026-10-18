@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **193**
+Total Endpoints Discovered: **200**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -81,6 +81,13 @@ Total Endpoints Discovered: **193**
 | `GET` | `/api/manga/{manga_id}/export/download/{export_id}` | `download_manga_export` | Chapters & Reader | [`chapters.py:348`](../../backend/routers/chapters.py#L348) | Yes |
 | `POST` | `/api/manga/{manga_id}/export/open-folder` | `open_export_folder_in_explorer` | Chapters & Reader | [`chapters.py:362`](../../backend/routers/chapters.py#L362) | Yes |
 | `POST` | `/api/manga/{manga_id}/export/stream` | `export_manga_chapters_stream` | Chapters & Reader | [`chapters.py:334`](../../backend/routers/chapters.py#L334) | Yes |
+| `DELETE` | `/api/manga/{manga_id}/external-reviews` | `clear_manga_external_reviews` | External Reviews | [`external_reviews.py:135`](../../backend/routers/external_reviews.py#L135) | Yes |
+| `GET` | `/api/manga/{manga_id}/external-reviews` | `list_external_reviews` | External Reviews | [`external_reviews.py:21`](../../backend/routers/external_reviews.py#L21) | Yes |
+| `POST` | `/api/manga/{manga_id}/external-reviews/sync` | `trigger_external_review_sync` | External Reviews | [`external_reviews.py:52`](../../backend/routers/external_reviews.py#L52) | Yes |
+| `GET` | `/api/manga/{manga_id}/external-reviews/sync-status` | `get_sync_status` | External Reviews | [`external_reviews.py:64`](../../backend/routers/external_reviews.py#L64) | Yes |
+| `GET` | `/api/manga/{manga_id}/external-reviews/sync-stream` | `stream_sync_progress` | External Reviews | [`external_reviews.py:72`](../../backend/routers/external_reviews.py#L72) | Yes |
+| `POST` | `/api/manga/{manga_id}/external-reviews/sync/cancel` | `cancel_sync` | External Reviews | [`external_reviews.py:109`](../../backend/routers/external_reviews.py#L109) | Yes |
+| `DELETE` | `/api/manga/{manga_id}/external-reviews/{review_id}` | `delete_external_review` | External Reviews | [`external_reviews.py:121`](../../backend/routers/external_reviews.py#L121) | Yes |
 | `GET` | `/api/manga/{manga_id}/history` | `get_manga_history` | Manga | [`manga.py:242`](../../backend/routers/manga.py#L242) | Yes |
 | `POST` | `/api/manga/{manga_id}/import-folder` | `import_local_folder` | Chapters & Reader | [`chapters.py:226`](../../backend/routers/chapters.py#L226) | Yes |
 | `POST` | `/api/manga/{manga_id}/import-folder-stream` | `import_local_folder_stream` | Chapters & Reader | [`chapters.py:246`](../../backend/routers/chapters.py#L246) | Yes |
@@ -197,6 +204,6 @@ Total Endpoints Discovered: **193**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:128`](../../backend/main.py#L128) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:130`](../../backend/main.py#L130) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

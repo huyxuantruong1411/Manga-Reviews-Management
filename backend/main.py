@@ -18,6 +18,7 @@ from backend.routers import (
     creators,
     datasources,
     downloads,
+    external_reviews,
     image_tools,
     manga,
     mangadex,
@@ -108,6 +109,7 @@ app.include_router(mangadex.router)
 app.include_router(downloads.router)
 app.include_router(analytics.router)
 app.include_router(creators.router)
+app.include_router(external_reviews.router)
 app.include_router(ai.router)
 app.include_router(image_tools.router)
 app.include_router(cover_arts.router)
