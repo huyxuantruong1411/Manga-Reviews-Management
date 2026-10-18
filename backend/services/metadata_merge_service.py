@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -40,7 +41,32 @@ class MetadataMergeService:
         "original_language",
         "links",
         "cover_url",
+        "tag_ids",
+        "source_metrics",
     ]
+
+    SEO_JUNK_PATTERNS = [
+        re.compile(r"read\s+.*online", re.I),
+        re.compile(r"free\s+manga", re.I),
+        re.compile(r"manga\s+online", re.I),
+        re.compile(r"read\s+free", re.I),
+        re.compile(r"high\s+quality", re.I),
+        re.compile(r"scanlation", re.I),
+        re.compile(r"all\s+chapters", re.I),
+        re.compile(r"latest\s+chapters", re.I),
+        re.compile(r"english\s+scan", re.I),
+        re.compile(r"raw\s+manga", re.I),
+    ]
+
+    @classmethod
+    def is_seo_junk(cls, title: str) -> bool:
+        clean = re.sub(r"<[^>]+>", "", title).strip()
+        if not clean or len(clean) > 250:
+            return True
+        for pat in cls.SEO_JUNK_PATTERNS:
+            if pat.search(clean):
+                return True
+        return False
 
     @staticmethod
     def normalize_status(raw_status: Optional[str]) -> Optional[str]:
@@ -59,14 +85,17 @@ class MetadataMergeService:
 
     @classmethod
     def merge_alt_titles(cls, existing_alts: List[str], candidate_alts: List[str]) -> List[str]:
-        merged = list(existing_alts)
-        existing_lookup = {a.strip().lower() for a in existing_alts if a}
+        merged = [a.strip() for a in existing_alts if a and not cls.is_seo_junk(a)]
+        existing_lookup = {a.strip().lower() for a in merged}
         for alt in candidate_alts:
             if not alt:
                 continue
-            normalized = alt.strip().lower()
+            clean_alt = re.sub(r"<[^>]+>", "", alt).strip()
+            if not clean_alt or cls.is_seo_junk(clean_alt):
+                continue
+            normalized = clean_alt.lower()
             if normalized not in existing_lookup:
-                merged.append(alt.strip())
+                merged.append(clean_alt)
                 existing_lookup.add(normalized)
         return merged
 
@@ -123,15 +152,24 @@ class MetadataMergeService:
         has_conflicts = False
 
         for field in self.MERGEABLE_FIELDS:
-            curr_val = manga_doc.get(field)
-            cand_val: Any = None
-
-            if field == "cover_url":
+            if field == "source_metrics":
+                curr_val = manga_doc.get("source_metrics", {}).get(candidate.source)
+                cand_val = candidate.extra_metadata.get("source_metrics") or candidate.extra_metadata.get("metrics")
+            elif field == "tag_ids":
+                curr_val = manga_doc.get("tag_ids", [])
+                cand_val = candidate.extra_metadata.get("genres") or candidate.extra_metadata.get("tags")
+            elif field == "cover_url":
+                curr_val = manga_doc.get("cover_url")
                 cand_val = candidate.cover_url
             elif field == "status":
+                curr_val = manga_doc.get("status")
                 cand_val = self.normalize_status(candidate.status)
             elif hasattr(candidate, field):
+                curr_val = manga_doc.get(field)
                 cand_val = getattr(candidate, field)
+            else:
+                curr_val = manga_doc.get(field)
+                cand_val = None
 
             if cand_val is None and field not in ("title", "description", "author", "artist", "year"):
                 continue
@@ -229,6 +267,36 @@ class MetadataMergeService:
                 val = self.merge_alt_titles(manga.get("alt_titles", []), candidate.alt_titles)
             elif field == "links":
                 val = self.merge_links(manga.get("links", []), candidate)
+            elif field == "source_metrics":
+                metrics = candidate.extra_metadata.get("source_metrics") or candidate.extra_metadata.get("metrics")
+                if metrics:
+                    existing_metrics = dict(manga.get("source_metrics") or {})
+                    existing_metrics[candidate.source] = metrics
+                    val = existing_metrics
+            elif field == "tag_ids":
+                genres = candidate.extra_metadata.get("genres") or candidate.extra_metadata.get("tags") or []
+                if genres:
+                    existing_tag_ids = list(manga.get("tag_ids", []))
+                    for g in genres:
+                        g_name = str(g).strip()
+                        if not g_name:
+                            continue
+                        tag_doc = await db.tags.find_one({"name_lower": g_name.lower()})
+                        if tag_doc:
+                            tid = str(tag_doc["_id"])
+                        else:
+                            res = await db.tags.insert_one(
+                                {
+                                    "name": g_name,
+                                    "name_lower": g_name.lower(),
+                                    "description": "",
+                                    "created_at": now_utc,
+                                }
+                            )
+                            tid = str(res.inserted_id)
+                        if tid not in existing_tag_ids:
+                            existing_tag_ids.append(tid)
+                    val = existing_tag_ids
             elif hasattr(candidate, field):
                 val = getattr(candidate, field)
 
@@ -240,6 +308,39 @@ class MetadataMergeService:
                     "source_work_id": candidate.source_work_id,
                     "updated_at": now_utc.isoformat(),
                 }
+
+        # Auto-track source metrics if present even if not explicitly checked in accepted_fields
+        cand_metrics = candidate.extra_metadata.get("source_metrics") or candidate.extra_metadata.get("metrics")
+        if cand_metrics and "source_metrics" not in update_doc:
+            existing_metrics = dict(manga.get("source_metrics") or {})
+            existing_metrics[candidate.source] = cand_metrics
+            update_doc["source_metrics"] = existing_metrics
+            if "source_metrics" not in applied_fields:
+                applied_fields.append("source_metrics")
+            provenance["source_metrics"] = {
+                "source": candidate.source,
+                "source_work_id": candidate.source_work_id,
+                "updated_at": now_utc.isoformat(),
+            }
+
+        # Candidate cover art gallery registration
+        if candidate.cover_url:
+            try:
+                await db.cover_arts.update_one(
+                    {"manga_id": manga_id, "source": candidate.source, "source_url": candidate.cover_url},
+                    {
+                        "$setOnInsert": {
+                            "manga_id": manga_id,
+                            "source": candidate.source,
+                            "source_url": candidate.cover_url,
+                            "is_candidate": True,
+                            "created_at": now_utc,
+                        }
+                    },
+                    upsert=True,
+                )
+            except Exception as ca_err:
+                logger.debug(f"Candidate cover art registration skipped: {ca_err}")
 
         new_rev = current_rev + 1
         update_doc["metadata_revision"] = new_rev
