@@ -105,27 +105,27 @@ See the [operational runbook](docs/translation/operational-runbook.md) for readi
 flowchart TD
     Client["Frontend (React 19 + TypeScript + Tailwind v4 + shadcn/ui)"]
     API["Backend (FastAPI + Python 3.12)"]
-    Mongo[("MongoDB 6.0+\nMetadata & Panels")]
-    MinIO[("MinIO S3\nCovers, Pages & Translations")]
-    Redis[("Redis 7.0+\nCache & Task Queues")]
-    WorkerOCR["ARQ OCR Worker\n(Panel Scanning)"]
-    WorkerTrans["ARQ Translation Worker\n(Chapter Pipelines)"]
-    Runtime["Isolated Runtime Subprocess\n(services/translator-runtime)"]
+    Mongo[("MongoDB 6.0+<br/>Metadata & Panels")]
+    MinIO[("MinIO S3<br/>Covers, Pages & Translations")]
+    Redis[("Redis 7.0+<br/>Cache & Task Queues")]
+    WorkerOCR["ARQ OCR Worker<br/>(Panel Scanning)"]
+    WorkerTrans["ARQ Translation Worker<br/>(Chapter Pipelines)"]
+    Runtime["Isolated Runtime Subprocess<br/>(services/translator-runtime)"]
     DexAPI["MangaDex APIv5"]
 
-    Client -->|REST, SSE & S3 Streams| API
-    API -->|Read / Write| Mongo
-    API -->|Presigned URLs & Streams| MinIO
-    API -->|Cache Read / Write| Redis
-    API -->|Enqueue Jobs| Redis
-    Redis -->|Claim OCR Jobs| WorkerOCR
-    Redis -->|Claim Translation Jobs| WorkerTrans
-    WorkerOCR -->|Store Panels| Mongo
-    WorkerTrans -->|Spawn Runner| Runtime
-    Runtime -->|Rendered Artifacts| WorkerTrans
-    WorkerTrans -->|Upload Artifacts| MinIO
-    WorkerTrans -->|Update Bindings| Mongo
-    API -->|Fetch Metadata| DexAPI
+    Client -->|"REST, SSE & S3"| API
+    API -->|"Read/Write"| Mongo
+    API -->|"Presigned URLs"| MinIO
+    API -->|"Cache Read/Write"| Redis
+    API -->|"Enqueue Jobs"| Redis
+    Redis -->|"Claim OCR"| WorkerOCR
+    Redis -->|"Claim Translation"| WorkerTrans
+    WorkerOCR -->|"Store Panels"| Mongo
+    WorkerTrans -->|"Spawn Runner"| Runtime
+    Runtime -->|"Rendered Artifacts"| WorkerTrans
+    WorkerTrans -->|"Upload Artifacts"| MinIO
+    WorkerTrans -->|"Update Bindings"| Mongo
+    API -->|"Metadata"| DexAPI
 ```
 
 ---
