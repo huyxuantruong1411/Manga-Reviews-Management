@@ -38,6 +38,8 @@ import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
 import { SourceDownloadDialog } from "../components/manga/download/SourceDownloadDialog";
+import { ExternalReviewsManagerPanel } from "../components/manga/ExternalReviewsManagerPanel";
+import { MALExtendedMetadataPanel } from "../components/manga/MALExtendedMetadataPanel";
 import { MetadataComparisonDrawer } from "../components/manga/MetadataComparisonDrawer";
 import { PanelLexisTab } from "../components/manga/PanelLexisTab";
 import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
@@ -47,6 +49,7 @@ import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useAlert } from "../hooks/useAlert";
 import { useDownload } from "../hooks/useDownload";
 import { useMangaBlur } from "../hooks/useMangaBlur";
+import type { MALExtendedMetadata } from "../types/externalReview";
 
 interface Tag {
 	_id: string;
@@ -108,6 +111,9 @@ export interface TrackerMetadataPayload {
 	fetched_at?: string;
 	anilist?: AniListMetadata | null;
 	myanimelist?: MALMetadata | null;
+	mal?: { id?: string | number } | null;
+	mal_id?: string | number | null;
+	mal_extended?: MALExtendedMetadata | null;
 	combined?: TrackerMetadataCombined;
 }
 
@@ -954,6 +960,27 @@ export const MangaDetailPage: React.FC = () => {
 					next.delete("tab");
 				} else {
 					next.set("tab", newTab);
+				}
+				return next;
+			},
+			{ replace: true },
+		);
+	};
+
+	const reviewTabParam = searchParams.get("reviewTab");
+	const reviewSubTab: "personal" | "external" = useMemo(() => {
+		if (reviewTabParam === "external") return "external";
+		return "personal";
+	}, [reviewTabParam]);
+
+	const setReviewSubTab = (subTab: "personal" | "external") => {
+		setSearchParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				if (subTab === "personal") {
+					next.delete("reviewTab");
+				} else {
+					next.set("reviewTab", "external");
 				}
 				return next;
 			},
@@ -3173,6 +3200,13 @@ export const MangaDetailPage: React.FC = () => {
 				</div>
 			)}
 
+			{/* MAL Extended Metadata Panel */}
+			{manga.tracker_metadata?.mal_extended && (
+				<MALExtendedMetadataPanel
+					metadata={manga.tracker_metadata.mal_extended}
+				/>
+			)}
+
 			{/* Grouped Metadata Grid */}
 			<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
 				<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
@@ -3783,97 +3817,155 @@ export const MangaDetailPage: React.FC = () => {
 						</div>
 					)}
 
-					{/* Personal Reviews Tab */}
+					{/* Reviews Tab (Personal & External Community) */}
 					{activeTab === "reviews" && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
-							<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)]/60 pb-4">
-								<div>
-									<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
-										<FileText
-											size={20}
-											className="text-[var(--brand-orange)]"
-										/>
-										<span>Personal Reviews & Analysis ({reviews.length})</span>
-									</h3>
-									<p className="text-xs text-[var(--text-secondary)] mt-1">
-										Ghi chú, cảm nghĩ cá nhân và bài viết phân tích chi tiết cho
-										manga này
-									</p>
-								</div>
+						<div className="space-y-6">
+							{/* Segmented Sub-tabs Switcher */}
+							<div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-fit">
+								<button
+									type="button"
+									onClick={() => setReviewSubTab("personal")}
+									className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
+										reviewSubTab === "personal"
+											? "bg-[var(--brand-orange)] text-white shadow-xs"
+											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+									}`}
+								>
+									<FileText size={14} />
+									<span>✍️ Bài viết Cá nhân ({reviews.length})</span>
+								</button>
 
 								<button
 									type="button"
-									onClick={handleStartCreateReview}
-									className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl flex items-center space-x-2 transition shadow-sm self-start sm:self-auto cursor-pointer"
+									onClick={() => setReviewSubTab("external")}
+									className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
+										reviewSubTab === "external"
+											? "bg-blue-600 text-white shadow-xs"
+											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+									}`}
 								>
-									<Plus size={15} />
-									<span>Viết bài Review mới</span>
+									<Globe size={14} />
+									<span>🌐 Đánh giá Cộng đồng (MAL)</span>
 								</button>
 							</div>
 
-							{reviews.length === 0 ? (
-								<div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
-									<FileText size={40} className="mx-auto text-zinc-400/50" />
-									<div className="text-sm font-bold text-[var(--text-primary)]">
-										Chưa có bài review nào
-									</div>
-									<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-										Lưu lại những cảm nghĩ, đánh giá hoặc ghi chú sâu sắc của
-										bạn về cốt truyện, nhân vật và nét vẽ.
-									</p>
-									<button
-										type="button"
-										onClick={handleStartCreateReview}
-										className="mt-2 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition shadow-sm inline-flex items-center space-x-1.5 cursor-pointer"
-									>
-										<Plus size={14} />
-										<span>Bắt đầu viết review</span>
-									</button>
-								</div>
-							) : (
-								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-									{reviews.map((r) => (
-										<div
-											key={r._id}
-											onClick={() => handleSelectReview(r)}
-											className="group relative p-5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)]/50 hover:shadow-md transition cursor-pointer flex flex-col justify-between"
-										>
-											<div className="space-y-2.5">
-												<div className="flex items-start justify-between gap-2">
-													<h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition line-clamp-2">
-														{r.title}
-													</h4>
-													<button
-														type="button"
-														onClick={(e) => {
-															e.stopPropagation();
-															handleDeleteReview(r._id);
-														}}
-														className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition opacity-0 group-hover:opacity-100 shrink-0"
-														title="Delete Review"
-													>
-														<Trash2 size={14} />
-													</button>
-												</div>
-
-												<div className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)]">
-													<Clock size={12} className="text-zinc-400 shrink-0" />
-													<span>
-														Cập nhật:{" "}
-														{new Date(r.updated_at).toLocaleDateString()}
-													</span>
-												</div>
-											</div>
-
-											<div className="pt-4 mt-4 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-xs">
-												<span className="text-[var(--brand-orange)] font-bold group-hover:underline flex items-center space-x-1">
-													<span>Mở & Chỉnh sửa</span>
-													<ArrowRight size={13} />
+							{/* Sub-tab 1: Personal Reviews */}
+							{reviewSubTab === "personal" && (
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
+									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)]/60 pb-4">
+										<div>
+											<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
+												<FileText
+													size={20}
+													className="text-[var(--brand-orange)]"
+												/>
+												<span>
+													Personal Reviews & Analysis ({reviews.length})
 												</span>
-											</div>
+											</h3>
+											<p className="text-xs text-[var(--text-secondary)] mt-1">
+												Ghi chú, cảm nghĩ cá nhân và bài viết phân tích chi tiết
+												cho manga này
+											</p>
 										</div>
-									))}
+
+										<button
+											type="button"
+											onClick={handleStartCreateReview}
+											className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl flex items-center space-x-2 transition shadow-sm self-start sm:self-auto cursor-pointer"
+										>
+											<Plus size={15} />
+											<span>Viết bài Review mới</span>
+										</button>
+									</div>
+
+									{reviews.length === 0 ? (
+										<div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
+											<FileText
+												size={40}
+												className="mx-auto text-zinc-400/50"
+											/>
+											<div className="text-sm font-bold text-[var(--text-primary)]">
+												Chưa có bài review nào
+											</div>
+											<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
+												Lưu lại những cảm nghĩ, đánh giá hoặc ghi chú sâu sắc
+												của bạn về cốt truyện, nhân vật và nét vẽ.
+											</p>
+											<button
+												type="button"
+												onClick={handleStartCreateReview}
+												className="mt-2 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition shadow-sm inline-flex items-center space-x-1.5 cursor-pointer"
+											>
+												<Plus size={14} />
+												<span>Bắt đầu viết review</span>
+											</button>
+										</div>
+									) : (
+										<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+											{reviews.map((r) => (
+												<div
+													key={r._id}
+													onClick={() => handleSelectReview(r)}
+													className="group relative p-5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)]/50 hover:shadow-md transition cursor-pointer flex flex-col justify-between"
+												>
+													<div className="space-y-2.5">
+														<div className="flex items-start justify-between gap-2">
+															<h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition line-clamp-2">
+																{r.title}
+															</h4>
+															<button
+																type="button"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleDeleteReview(r._id);
+																}}
+																className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition opacity-0 group-hover:opacity-100 shrink-0"
+																title="Delete Review"
+															>
+																<Trash2 size={14} />
+															</button>
+														</div>
+
+														<div className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)]">
+															<Clock
+																size={12}
+																className="text-zinc-400 shrink-0"
+															/>
+															<span>
+																Cập nhật:{" "}
+																{new Date(r.updated_at).toLocaleDateString()}
+															</span>
+														</div>
+													</div>
+
+													<div className="pt-4 mt-4 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-xs">
+														<span className="text-[var(--brand-orange)] font-bold group-hover:underline flex items-center space-x-1">
+															<span>Mở & Chỉnh sửa</span>
+															<ArrowRight size={13} />
+														</span>
+													</div>
+												</div>
+											))}
+										</div>
+									)}
 								</div>
+							)}
+
+							{/* Sub-tab 2: External Reviews */}
+							{reviewSubTab === "external" && (
+								<ExternalReviewsManagerPanel
+									mangaId={manga._id}
+									mangaTitle={manga.title}
+									initialMalId={
+										manga.tracker_metadata?.mal?.id
+											? String(manga.tracker_metadata.mal.id)
+											: manga.tracker_metadata?.mal_id
+												? String(manga.tracker_metadata.mal_id)
+												: undefined
+									}
+									onMetadataUpdated={fetchMangaDetails}
+								/>
 							)}
 						</div>
 					)}
