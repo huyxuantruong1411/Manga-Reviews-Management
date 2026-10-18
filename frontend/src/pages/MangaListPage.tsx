@@ -155,9 +155,11 @@ export const MangaListPage: React.FC = () => {
 		if (s === "manual" || s === "mangadex") return s;
 		return "all";
 	});
-	const [sortBy, setSortBy] = useState(
-		() => searchParams.get("sortBy") || "added_at",
-	);
+	const [sortBy, setSortBy] = useState(() => {
+		const s = searchParams.get("sortBy");
+		if (s) return s;
+		return searchParams.get("search") ? "relevance" : "added_at";
+	});
 	const [sortOrder, setSortOrder] = useState(
 		() => searchParams.get("sortOrder") || "desc",
 	);
@@ -225,6 +227,11 @@ export const MangaListPage: React.FC = () => {
 			if (search !== debouncedSearch) {
 				setPage(1);
 			}
+			if (search.trim()) {
+				setSortBy((prev) => (prev === "added_at" ? "relevance" : prev));
+			} else {
+				setSortBy((prev) => (prev === "relevance" ? "added_at" : prev));
+			}
 		}, 300);
 
 		return () => {
@@ -275,7 +282,14 @@ export const MangaListPage: React.FC = () => {
 		setSourceFilter(
 			source === "manual" || source === "mangadex" ? source : "all",
 		);
-		setSortBy(searchParams.get("sortBy") || "added_at");
+		const urlSort = searchParams.get("sortBy");
+		if (urlSort) {
+			setSortBy(urlSort);
+		} else if (searchValue) {
+			setSortBy("relevance");
+		} else {
+			setSortBy("added_at");
+		}
 		setSortOrder(searchParams.get("sortOrder") || "desc");
 		setPage(Math.max(1, Math.floor(Number(searchParams.get("page")) || 1)));
 		setIsAdvancedSearchOpen(
@@ -1104,6 +1118,7 @@ export const MangaListPage: React.FC = () => {
 									}}
 									className="w-full px-4 py-2.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer font-medium"
 								>
+									<option value="relevance">Relevance</option>
 									<option value="added_at">Date Added</option>
 									<option value="updated_at">Date Updated</option>
 									<option value="title">Title</option>
@@ -1718,6 +1733,7 @@ export const MangaListPage: React.FC = () => {
 								}}
 								className="px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition cursor-pointer text-xs font-bold shadow-sm"
 							>
+								<option value="relevance">Relevance</option>
 								<option value="added_at">Date Added</option>
 								<option value="updated_at">Date Updated</option>
 								<option value="title">Title</option>

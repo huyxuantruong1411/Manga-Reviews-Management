@@ -62,7 +62,10 @@ async def list_mangas(
     is_manual: Optional[bool] = Query(
         None, description="Filter for manually added mangas (True=manual only, False=MangaDex only)"
     ),
-    sort_by: str = Query("added_at", description="Field to sort by"),
+    sort_by: str = Query(
+        "added_at",
+        description="Field to sort by (relevance, added_at, updated_at, title, personal_rating, year, etc.)",
+    ),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=10000),

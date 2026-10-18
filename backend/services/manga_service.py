@@ -18,6 +18,7 @@ from backend.services.content_deletion_service import (
 )
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
+from backend.services.search_ranking_service import rank_manga_search_results
 from backend.services.tracker_service import fetch_tracker_metadata
 
 logger = logging.getLogger(__name__)
@@ -279,22 +280,45 @@ class MangaService:
             else:
                 query = {"$and": clauses}
 
-        # Sorting
+        # Sorting & Query Execution
         order = -1 if sort_order == "desc" else 1
-        # MongoDB sort format
-        sort_query = [(sort_by, order)]
 
-        # Execute query
         coll = self._get_mangas_collection()
         total = await coll.count_documents(query)
 
-        cursor = coll.find(query).sort(sort_query).skip(skip).limit(limit)
-        items = []
-        async for doc in cursor:
-            # Map cover image
-            if doc.get("minio_cover_key"):
-                doc["cover_url"] = minio_service.get_presigned_url(doc["minio_cover_key"])
-            items.append(serialize_doc(doc))
+        should_rank_by_relevance = bool(search and search.strip()) and (sort_by in ("relevance", "added_at"))
+
+        if should_rank_by_relevance:
+            # When searching with default or relevance sort, fetch all matching documents
+            # to apply multi-factor Information Retrieval (IR) scoring in memory.
+            # This ensures that exact/prefix/phrase matches (e.g. "Sekai Oni") rank at the top,
+            # while 100% of all matching records are preserved without narrowing results.
+            matched_cursor = coll.find(query)
+            all_docs = await matched_cursor.to_list(length=None)
+            secondary_field = "added_at" if sort_by in ("relevance", "added_at") else sort_by
+            ranked_docs = rank_manga_search_results(
+                all_docs,
+                search=search,
+                sort_by=secondary_field,
+                sort_order=sort_order,
+            )
+            page_docs = ranked_docs[skip : skip + limit]
+            items = []
+            for doc in page_docs:
+                if doc.get("minio_cover_key"):
+                    doc["cover_url"] = minio_service.get_presigned_url(doc["minio_cover_key"])
+                items.append(serialize_doc(doc))
+        else:
+            # Native MongoDB indexed query and sort for non-search browsing
+            # or explicit user-selected sort columns (e.g. year, personal_rating)
+            actual_sort_by = "added_at" if sort_by == "relevance" else sort_by
+            sort_query = [(actual_sort_by, order)]
+            cursor = coll.find(query).sort(sort_query).skip(skip).limit(limit)
+            items = []
+            async for doc in cursor:
+                if doc.get("minio_cover_key"):
+                    doc["cover_url"] = minio_service.get_presigned_url(doc["minio_cover_key"])
+                items.append(serialize_doc(doc))
 
         return {"total": total, "items": items, "skip": skip, "limit": limit}
 
