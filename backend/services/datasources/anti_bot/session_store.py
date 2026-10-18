@@ -22,12 +22,17 @@ class SessionStore:
     per datasource provider to maintain long-lived Cloudflare clearance sessions.
     """
 
-    def __init__(self, base_dir: str = "backend/data/datasource-sessions"):
+    def __init__(
+        self,
+        base_dir: str = "backend/data/datasource-sessions",
+        provider: Optional[str] = None,
+    ):
         self.base_dir = os.path.abspath(base_dir)
+        self.default_provider = provider.strip().lower() if provider else None
 
-    def _get_provider_dir(self, provider: str) -> str:
-        clean_provider = provider.strip().lower()
-        provider_dir = os.path.join(self.base_dir, clean_provider)
+    def _get_provider_dir(self, provider: Optional[str] = None) -> str:
+        target = (provider or self.default_provider or "default").strip().lower()
+        provider_dir = os.path.join(self.base_dir, target)
         os.makedirs(provider_dir, exist_ok=True)
         return provider_dir
 

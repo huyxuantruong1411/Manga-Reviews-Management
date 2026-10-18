@@ -59,6 +59,14 @@ def _init_builtin_providers() -> None:
         except Exception as e:
             logger.error(f"Failed to initialize MangaFireSourceProvider: {e}")
 
+    if "comix" not in _PROVIDERS:
+        try:
+            from backend.services.datasources.comix import ComixProvider
+
+            register_datasource_provider(ComixProvider())
+        except Exception as e:
+            logger.error(f"Failed to initialize ComixProvider: {e}")
+
 
 class ProviderRegistry:
     def get_provider(self, name: str) -> MangaSourceProvider:
