@@ -898,6 +898,9 @@ class MangaService:
         # Delete recommendations
         await db.manga_recommendations.delete_many({"manga_id": manga_id})
 
+        # Delete external reviews
+        await db.external_reviews.delete_many({"manga_id": manga_id})
+
         # Delete reviews (or soft delete)
         await get_db().reviews.update_many(
             {"manga_id": manga_id}, {"$set": {"is_deleted": True, "updated_at": datetime.utcnow()}}

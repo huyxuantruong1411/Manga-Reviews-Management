@@ -14,6 +14,7 @@ DELETION_REFERENCE_INDEXES = (
     ("panel_scan_pages", "manga_id", "deletion_scan_manga"),
     ("translation_jobs", "source_manifest.chapter_id", "deletion_job_chapter"),
     ("translation_jobs", "source_manifest.manga_id", "deletion_job_manga"),
+    ("external_reviews", "manga_id", "deletion_external_reviews_manga"),
 )
 
 
@@ -288,6 +289,29 @@ async def init_db_indexes():
         await db.creator_tierlists.create_index(
             "tiers.items.manga_id",
             name="tierlist_item_manga_id",
+        )
+
+        # external_reviews
+        await db.external_reviews.create_index(
+            [("manga_id", 1), ("source", 1), ("source_review_id", 1)],
+            unique=True,
+            name="ext_reviews_unique_source_review",
+        )
+        await db.external_reviews.create_index(
+            [("manga_id", 1), ("source", 1), ("posted_at", -1)],
+            name="ext_reviews_manga_source_posted",
+        )
+        await db.external_reviews.create_index(
+            [("manga_id", 1), ("recommendation_status", 1)],
+            name="ext_reviews_manga_recommendation",
+        )
+        await db.external_reviews.create_index(
+            [("manga_id", 1), ("is_spoiler", 1), ("is_preliminary", 1)],
+            name="ext_reviews_manga_flags",
+        )
+        await db.external_reviews.create_index(
+            [("manga_id", 1), ("reactions.total", -1)],
+            name="ext_reviews_manga_reactions",
         )
 
         await ensure_deletion_reference_indexes(db)
