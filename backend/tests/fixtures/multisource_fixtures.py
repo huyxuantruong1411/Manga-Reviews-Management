@@ -26,6 +26,15 @@ COLLISION_FIXTURES: Dict[str, Dict[str, Any]] = {
         "title": "MangaFire Release 123",
         "page_count": 25,
     },
+    "comix_release": {
+        "source": "comix",
+        "source_work_id": "r9j5m",
+        "source_id": "123",  # Same ID
+        "language": "en",
+        "chapter_number": "1",
+        "title": "Comix Release 123",
+        "page_count": 22,
+    },
 }
 
 # 2. Same Chapter Number with Multiple Releases (e.g. MangaFire Romi Ch. 14)
@@ -140,4 +149,84 @@ SYNTHETIC_MANIFEST_V2: Dict[str, Any] = {
     ],
     "adapter_version": "1.0.0",
     "observed_at": "2026-10-12T16:00:00Z",
+}
+
+# 7. Comix (comix.to) Yajin Work Fixture
+COMIX_YAJIN_FIXTURE: Dict[str, Any] = {
+    "work_id": "r9j5m",
+    "slug": "yajin",
+    "canonical_url": "https://comix.to/title/r9j5m-yajin",
+    "title": "Yajin",
+    "alt_titles": ["野人", "Wild Man Yajin"],
+    "author": "Author Yajin",
+    "artist": "Artist Yajin",
+    "description": "Story of Yajin surviving in harsh wilderness.",
+    "status": "ongoing",
+    "year": "2023",
+    "genres": ["Action", "Adventure", "Drama", "Seinen"],
+    "content_rating": "safe",
+    "cover_url": "https://img.comix.to/covers/r9j5m.jpg",
+    "available_languages": ["en"],
+}
+
+# 8. Comix Chapter Releases Fixture
+COMIX_CHAPTER_RELEASES_FIXTURE: List[Dict[str, Any]] = [
+    {
+        "id": "cmx_rel_001",
+        "work_id": "r9j5m",
+        "chapter_number": "1",
+        "title": "The Awakening",
+        "volume": "1",
+        "language": "en",
+        "unit_kind": "chapter",
+        "pages_count": 22,
+        "group_name": "Comix Scan",
+    },
+    {
+        "id": "cmx_rel_014",
+        "work_id": "r9j5m",
+        "chapter_number": "14",
+        "title": "Wild Encounter",
+        "volume": "2",
+        "language": "en",
+        "unit_kind": "chapter",
+        "pages_count": 20,
+        "group_name": "Comix Scan",
+    },
+]
+
+# 9. Comix Manifest v2 Fixture
+COMIX_MANIFEST_V2_FIXTURE: Dict[str, Any] = {
+    "schema_version": 2,
+    "manga_id": "manga_test_yajin",
+    "chapter_id": "c_cmx_14",
+    "logical_chapter_id": "slot_14",
+    "media_revision_id": "rev_cmx_14_uuid",
+    "pages_revision": 1,
+    "source": {
+        "provider": "comix",
+        "work_id": "r9j5m",
+        "release_id": "cmx_rel_014",
+        "language": "en",
+        "unit_kind": "chapter",
+        "chapter_number_raw": "14",
+        "numbering_scope_id": "scope_default",
+    },
+    "page_count": 4,
+    "pages": [
+        {
+            "page_uid": f"uid_cmx_p_{i}",
+            "page_number": i,
+            "filename": f"{i:04d}.webp",
+            "object_key": f"chapters/manga_test_yajin/c_cmx_14/revisions/rev_cmx_14_uuid/{i:04d}.webp",
+            "content_type": "image/webp",
+            "file_size": 320000,
+            "width": 1100,
+            "height": 1600,
+            "sha256": f"c{i}a" * 16,
+        }
+        for i in range(1, 5)
+    ],
+    "adapter_version": "1.0.0",
+    "observed_at": "2026-10-18T16:00:00Z",
 }
