@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import backend.database.connection as db_conn
 from backend.config import settings
 from backend.models.translation import TranslationProviderInDB
-from backend.services.translation.runtime import engine_status
+from backend.services.translation.runtime import engine_status, find_translator_python
 
 logger = logging.getLogger("backend.translation.providers")
 
@@ -121,8 +121,9 @@ class TranslationProviderService:
 
     def probe_runtime_environment(self) -> Dict[str, Any]:
         report = self._probe_hardware_environment()
-        report["engine"] = engine_status()
-        report["ready_for_inference"] = False
+        status = engine_status()
+        report["engine"] = status
+        report["ready_for_inference"] = status.get("status") == "ready"
         return report
 
     def _probe_hardware_environment(self) -> Dict[str, Any]:
@@ -136,6 +137,18 @@ class TranslationProviderService:
             / "translator-runtime"
             / "probe_compatibility.py"
         )
+        py_exe = find_translator_python()
+        if py_exe and probe_path.is_file():
+            try:
+                import json
+                import subprocess
+
+                res = subprocess.run([py_exe, str(probe_path)], capture_output=True, text=True, timeout=10)
+                if res.returncode == 0:
+                    return json.loads(res.stdout)
+            except Exception as pe:
+                logger.warning(f"Error running probe via isolated runtime {py_exe}: {pe}")
+
         if probe_path.is_file():
             try:
                 spec = importlib.util.spec_from_file_location("probe_compatibility", probe_path)

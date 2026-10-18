@@ -27,7 +27,10 @@
 ## Bảng tổng hợp Changelog (Change Log Summary Table)
 
 | Phiên bản (Version) | Ngày cập nhật | Hạng mục / Tính năng | Loại thay đổi | Mô tả chi tiết công việc | Người thực hiện | Trạng thái |
-|---|---|---|---|---|---|---|
+| **v0.13.0** | 18/10/2026 | ELK Observability Stack & Structured Logging | 🆕 Added | Kiến trúc ELK Stack hoàn chỉnh: ecs-logging, structured logging với dynamic secret redaction & request tracing (`X-Trace-Id`), Elasticsearch sync worker, 3-tab Observability Center trên `/audit-logs` với Native ECS Log Viewer và Kibana Embed. | Huy1411 | ✅ Đã hoàn thành |
+| **v0.13.0** | 18/10/2026 | Real MangaTranslator Engine Integration | 🚀 Release | Tích hợp engine MangaTranslator thực tế trên GPU GTX 1660 Ti (CUDA), YOLOv8 speech bubble detector, Gemini 2.5 Flash Lite dialogue translator, isolated Python runtime runner, và dynamic hardware/engine readiness probing. | Huy1411 | ✅ Đã hoàn thành |
+| **v0.13.0** | 18/10/2026 | Manga Reader Performance & Progressive Streaming | ⚡ Perf | Non-blocking progressive image streaming (trang tải xong hiển thị tức thì, ưu tiên tuyệt đối cho `?page=x`), hàng đợi nạp trước thông minh (`useMangaPreloadQueue`), Skeleton shimmer giữ chỗ theo đúng tỷ lệ gốc (`aspectRatio: width / height`). | Huy1411 | ✅ Đã hoàn thành |
+| **v0.13.0** | 18/10/2026 | Reader Boundary Navigation & Panel Detector Modal | 🐛 Fixed | Điều hướng cross-chapter liền mạch: lùi chapter chuyển về trang cuối cùng (`?page=last`), chạm giới hạn 2 đầu tự động thoát về Manga Details. Kết nối và hiển thị `PanelDetailModal` khi click nút "Chi tiết" trong Panel Words Detector. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.12.0** | 14/10/2026 | Creator Tier List Maker | 🆕 Added | Thiết kế models, database indexes, migration cho Creator Tierlists. Implement `TierlistService` + REST router endpoints (CRUD, reorder, snapshot, restore) kèm unit tests. Xây dựng frontend components (`TierlistMaker`, `TierRow`, `TierPoolArea`, `TierlistFeedbackModal`), tích hợp tab Creator Tierlist vào `AuthorDetailPage`, resizable 2-column split layout, custom feedback modals thay thế native alert/confirm. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.12.0** | 14/10/2026 | Typography & Font Rendering | 🎨 Style | Tối ưu hiển thị font tiếng Việt với Be Vietnam Pro và Inter, cải thiện Vietnamese diacritics rendering trên toàn hệ thống. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.11.0** | 12–13/10/2026 | Multi-Source Ingestion Architecture (PR00–PR08) | 🚀 Release | Kiến trúc multi-source hoàn chỉnh qua 9 PR tuần tự: ADR & MangaFire live spike → contracts & registry → identity schema & migration → media staging & download plan → lifecycle epoch fencing & slot reconciliation → MangaFire provider adapter & download pipeline → metadata enrichment & merge preview & field locks → slot-based reader navigation & ReleaseSwitcher → acceptance matrix verification & documentation sync. | Huy1411 | ✅ Đã hoàn thành |
@@ -79,6 +82,22 @@
 ---
 
 ## Chi tiết từng phiên bản (Detailed Version History)
+
+### v0.13.0 — Observability Stack, Real MangaTranslator, & Reader Performance *(18/10/2026)*
+
+**Tổng quan**: Nâng cấp toàn diện hạ tầng quan sát hệ thống (ELK Stack & ECS logging), tích hợp engine dịch thuật MangaTranslator thực tế (CUDA GPU + Gemini Pro fallback), tối ưu hóa triệt để tốc độ nạp trang truyện (progressive non-blocking streaming & smart preloader queue), sửa lỗi điều hướng ranh giới chapter liền mạch và kết nối modal chi tiết từ vựng/panel.
+
+| Thay đổi | Chi tiết |
+|---|---|
+| 🆕 ELK Observability Stack | Elasticsearch & Kibana Docker Compose, ecs-logging JSON formatter, dynamic query API, sanitization & secret redaction |
+| 🆕 Observability Center UI | 3-tab console tại `/audit-logs` với Native ECS Log Viewer, LogQL search, log detail modal, và Kibana Embed tab |
+| 🚀 Real MangaTranslator Engine | Kết nối isolated runner với CUDA GTX 1660 Ti, YOLOv8 speech bubble detector, Gemini 2.5 Flash Lite translation, hardware & engine readiness probe |
+| ⚡ Reader Progressive Streaming | Tải và hiển thị độc lập từng trang truyện, ưu tiên độ trễ thấp nhất cho `?page=x` (`fetchPriority="high"`, `loading="eager"`), Skeleton shimmer chuẩn tỷ lệ gốc (`aspectRatio`) |
+| ⚡ Smart Image Preloader Queue | Hook `useMangaPreloadQueue` tự động nạp trước các trang kế tiếp vào Browser Cache ngầm với concurrency control |
+| 🐛 Seamless Boundary Navigation | Lùi chapter nhảy về trang cuối cùng (`?page=last`), chạm giới hạn 2 đầu tự động thoát về Manga Details, đồng bộ URL `?page` mượt mà |
+| 🐛 Panel Detail Modal Integration | Kết nối `PanelDetailModal` vào `PanelWordsDetectorPage` khi bấm nút "Chi tiết" |
+
+---
 
 ### v0.12.0 — Creator Tier List Maker & Typography *(14/10/2026)*
 

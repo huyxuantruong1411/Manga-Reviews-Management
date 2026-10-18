@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://127.0.0.1:6379/0")
 
     gemini_api_key: str = Field(default="")
+    translator_python_path: Optional[str] = Field(default=None)
 
     download_dir: str = Field(default="d:/Projects/Manga/Manga-Reviews-Management/downloads")
 

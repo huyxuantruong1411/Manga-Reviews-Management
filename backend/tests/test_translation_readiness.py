@@ -38,17 +38,25 @@ class ReadinessTests(unittest.IsolatedAsyncioTestCase):
     async def test_unavailable_engine_rejects_job_before_any_db_write(self):
         request = TranslationJobCreate(source=TranslationJobSource(chapter_id="fixture"))
         database = MagicMock()
-        with patch("backend.services.translation.job_service.get_db", database):
-            with self.assertRaises(HTTPException) as caught:
-                await translation_job_service.create_job(request)
+        with patch("backend.services.translation.runtime.has_translation_engine", return_value=False):
+            with patch("backend.services.translation.job_service.get_db", database):
+                with self.assertRaises(HTTPException) as caught:
+                    await translation_job_service.create_job(request)
         self.assertEqual(caught.exception.status_code, 503)
         self.assertEqual(caught.exception.detail["code"], "TRANSLATION_ENGINE_UNAVAILABLE")
         database.assert_not_called()
 
     def test_hardware_probe_cannot_claim_real_engine_readiness(self):
-        result = translation_provider_service.probe_runtime_environment()
-        self.assertFalse(result["ready_for_inference"])
-        self.assertEqual(result["engine"]["status"], "unavailable")
+        with patch("backend.services.translation.runtime.has_translation_engine", return_value=False):
+            result = translation_provider_service.probe_runtime_environment()
+            self.assertFalse(result["ready_for_inference"])
+            self.assertEqual(result["engine"]["status"], "unavailable")
+
+    def test_hardware_probe_reports_ready_when_engine_installed(self):
+        with patch("backend.services.translation.runtime.has_translation_engine", return_value=True):
+            result = translation_provider_service.probe_runtime_environment()
+            self.assertTrue(result["ready_for_inference"])
+            self.assertEqual(result["engine"]["status"], "ready")
 
     def test_offline_stub_is_labelled_synthetic(self):
         result = translation_provider_service.probe_provider_credentials("offline_stub")

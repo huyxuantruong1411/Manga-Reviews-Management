@@ -17,6 +17,7 @@ from typing import Any, Dict
 
 from fastapi import HTTPException
 
+from backend.config import settings
 from backend.core.log_context import log_context
 from backend.database.connection import get_db
 from backend.models.translation import (
@@ -25,7 +26,7 @@ from backend.models.translation import (
     TranslationResultInDB,
     utc_now,
 )
-from backend.services.translation.runtime import require_translation_engine
+from backend.services.translation.runtime import find_translator_python, require_translation_engine
 from backend.services.translation.storage_service import translation_storage_service
 
 logger = logging.getLogger("translation_worker")
@@ -223,9 +224,17 @@ async def _execute_translation_job_page_impl(
         runner_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "../../services/translator-runtime/adapter/runner.py")
         )
+        py_exe = find_translator_python() or sys.executable
 
-        cmd = [sys.executable, runner_path, "--envelope-stdin"]
+        cmd = [py_exe, runner_path, "--envelope-stdin", "--real"]
         env_json = json.dumps(envelope)
+
+        sub_env = {
+            **os.environ,
+            "GEMINI_API_KEY": settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", ""),
+            "GOOGLE_API_KEY": settings.gemini_api_key or os.environ.get("GOOGLE_API_KEY", ""),
+            "PYTHONIOENCODING": "utf-8",
+        }
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -233,6 +242,7 @@ async def _execute_translation_job_page_impl(
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=sub_env,
             )
 
             stdout_data, stderr_data = await proc.communicate(input=env_json.encode("utf-8"))

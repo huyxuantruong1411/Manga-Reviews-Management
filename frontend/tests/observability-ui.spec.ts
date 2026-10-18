@@ -151,9 +151,7 @@ test.describe("Observability Center (Audit & Application Logs)", () => {
 		await expect(
 			page.getByText("Uvicorn running on http://127.0.0.1:8000"),
 		).toBeVisible();
-		await expect(
-			page.getByText("Local NDJSON Fallback"),
-		).toBeVisible();
+		await expect(page.getByText("Local NDJSON Fallback")).toBeVisible();
 
 		// Switch to Kibana Observability (Tab 3)
 		await kibanaTabBtn.click();

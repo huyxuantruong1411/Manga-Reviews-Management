@@ -28,6 +28,7 @@ import {
 import client, { apiErrorMessage, apiUrl } from "../api/client";
 import { FullPageModal } from "../components/manga/FullPageModal";
 import { PanelCard } from "../components/manga/PanelCard";
+import { PanelDetailModal } from "../components/manga/PanelDetailModal";
 import { WordPopover } from "../components/manga/WordPopover";
 import { useAlert } from "../hooks/useAlert";
 import { notifyTaskCompleted } from "../services/notificationService";
@@ -100,6 +101,8 @@ export const PanelWordsDetectorPage: React.FC = () => {
 		useState<boolean>(false);
 
 	// Modals & Popover states
+	const [selectedDetailPanel, setSelectedDetailPanel] =
+		useState<PanelResult | null>(null);
 	const [selectedFullPagePanel, setSelectedFullPagePanel] =
 		useState<PanelResult | null>(null);
 	const [popoverWord, setPopoverWord] = useState<string | null>(null);
@@ -970,6 +973,7 @@ export const PanelWordsDetectorPage: React.FC = () => {
 								searchQuery={activeQuery}
 								onOpenFullPage={(p) => setSelectedFullPagePanel(p)}
 								onWordClick={handleWordClick}
+								onOpenDetail={setSelectedDetailPanel}
 							/>
 						))}
 					</div>
@@ -1352,6 +1356,20 @@ export const PanelWordsDetectorPage: React.FC = () => {
 						</div>
 					</div>
 				</div>
+			)}
+
+			{/* 6. Panel Detail Zoom & Inspection Modal */}
+			{selectedDetailPanel && (
+				<PanelDetailModal
+					key={selectedDetailPanel?.panel_id}
+					panel={selectedDetailPanel}
+					onClose={() => setSelectedDetailPanel(null)}
+					onOpenFullPage={(p) => {
+						setSelectedDetailPanel(null);
+						setSelectedFullPagePanel(p);
+					}}
+					onWordClick={handleWordClick}
+				/>
 			)}
 
 			{/* 7. Full Page Modal with Golden Focus Frame */}

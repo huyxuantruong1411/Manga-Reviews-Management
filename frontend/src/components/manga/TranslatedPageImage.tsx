@@ -66,7 +66,15 @@ const PageImageState: React.FC<TranslatedPageImageProps> = ({
 			{(!imageLoaded ||
 				(displayMode === "compare" && hasTranslation && !compareLoaded)) &&
 				!imageError && (
-					<Skeleton className="w-full min-h-96 aspect-[2/3] rounded-md flex items-center justify-center border border-border">
+					<Skeleton
+						className="w-full min-h-96 rounded-md flex items-center justify-center border border-border"
+						style={{
+							aspectRatio:
+								page.width && page.height && page.height > 0
+									? `${page.width} / ${page.height}`
+									: "2 / 3",
+						}}
+					>
 						<div className="flex flex-col items-center space-y-2 text-zinc-500">
 							<Loader2
 								size={24}
@@ -113,11 +121,11 @@ const PageImageState: React.FC<TranslatedPageImageProps> = ({
 					width={page.width || undefined}
 					height={page.height || undefined}
 					loading={priority ? "eager" : "lazy"}
-					fetchPriority={priority ? "high" : "auto"}
+					fetchPriority={priority ? "high" : "low"}
 					decoding="async"
 					onLoad={() => setImageLoaded(true)}
 					onError={() => setImageError(true)}
-					className={`${imageFitClass} shadow-2xl transition duration-200 select-none ${
+					className={`${imageFitClass} shadow-2xl transition-opacity duration-300 select-none ${
 						imageLoaded
 							? "opacity-100"
 							: "opacity-0 absolute pointer-events-none"

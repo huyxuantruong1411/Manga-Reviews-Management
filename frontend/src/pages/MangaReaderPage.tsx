@@ -24,6 +24,7 @@ import client, { apiErrorMessage } from "../api/client";
 import { saveReadingProgress } from "../api/readingProgress";
 import { ReaderTranslationPanel } from "../components/manga/ReaderTranslationPanel";
 import { TranslatedPageImage } from "../components/manga/TranslatedPageImage";
+import { useMangaPreloadQueue } from "../hooks/useMangaPreloadQueue";
 import { useTranslation } from "../hooks/useTranslation";
 import type { Chapter, PageItem } from "../types/chapter";
 
@@ -33,7 +34,12 @@ export const MangaReaderPage: React.FC = () => {
 		chapterId: string;
 	}>();
 	const [searchParams] = useSearchParams();
-	const initialPageParam = parseInt(searchParams.get("page") || "1", 10) || 1;
+	const pageParam = searchParams.get("page");
+	const initialPageTarget: number | "last" = useMemo(() => {
+		if (pageParam === "last") return "last";
+		const parsed = parseInt(pageParam || "1", 10);
+		return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+	}, [pageParam]);
 	const navigate = useNavigate();
 
 	// Manga & Chapter states
@@ -46,7 +52,9 @@ export const MangaReaderPage: React.FC = () => {
 	const chapterRequestRef = useRef<AbortController | null>(null);
 	const restorePageRef = useRef<number | null>(null);
 	const [loadingChapter, setLoadingChapter] = useState<boolean>(true);
-	const [currentPage, setCurrentPage] = useState<number>(initialPageParam);
+	const [currentPage, setCurrentPage] = useState<number>(() =>
+		initialPageTarget === "last" ? 1 : initialPageTarget,
+	);
 
 	// Translation state & job orchestration
 	const translation = useTranslation({
@@ -114,7 +122,7 @@ export const MangaReaderPage: React.FC = () => {
 	// Chapter requests are independent of display settings and cannot overwrite
 	// a newer navigation. Never save a chapter from a different manga URL.
 	const loadChapter = useCallback(
-		async (targetChapterId: string, targetPage: number = 1) => {
+		async (targetChapterId: string, targetPage: number | "last" = 1) => {
 			chapterRequestRef.current?.abort();
 			const controller = new AbortController();
 			chapterRequestRef.current = controller;
@@ -133,15 +141,31 @@ export const MangaReaderPage: React.FC = () => {
 				setCurrentChapter(data);
 				if (data.language) setActiveLanguage(data.language.toLowerCase());
 				const chapterPages = data.pages || [];
-				const page = Math.min(
-					Math.max(1, targetPage),
-					chapterPages.length || 1,
-				);
-				restorePageRef.current = page;
+				const total = chapterPages.length || 1;
+				const resolvedPage =
+					targetPage === "last"
+						? total
+						: Math.min(Math.max(1, targetPage), total);
+				restorePageRef.current = resolvedPage;
 				pageRefs.current = [];
 				setPages(chapterPages);
-				setCurrentPage(page);
-				window.scrollTo({ top: 0 });
+				setCurrentPage(resolvedPage);
+
+				// Replace URL to reflect actual resolved page number cleanly without reload
+				if (targetPage === "last") {
+					navigate(
+						`/manga/${mangaId}/read/${targetChapterId}?page=${resolvedPage}`,
+						{ replace: true },
+					);
+				}
+
+				if (readingMode === "long_strip") {
+					if (resolvedPage === 1) {
+						window.scrollTo({ top: 0 });
+					}
+				} else {
+					window.scrollTo({ top: 0 });
+				}
 			} catch (error) {
 				if (!controller.signal.aborted)
 					setReaderError(
@@ -154,13 +178,20 @@ export const MangaReaderPage: React.FC = () => {
 				if (!controller.signal.aborted) setLoadingChapter(false);
 			}
 		},
-		[mangaId],
+		[mangaId, navigate, readingMode],
 	);
 
 	useEffect(() => {
-		if (chapterId) void loadChapter(chapterId, initialPageParam);
+		if (chapterId) void loadChapter(chapterId, initialPageTarget);
 		return () => chapterRequestRef.current?.abort();
-	}, [chapterId, initialPageParam, loadChapter]);
+	}, [chapterId, initialPageTarget, loadChapter]);
+
+	// Progressive smart preloading queue for background page caching
+	useMangaPreloadQueue({
+		pages,
+		currentPage,
+		readingMode,
+	});
 
 	const pendingProgressRef = useRef<(() => void) | null>(null);
 	useEffect(() => {
@@ -408,6 +439,7 @@ export const MangaReaderPage: React.FC = () => {
 		targetChapter: Chapter;
 		missingCount: number;
 		missingDesc: string;
+		targetPage?: number | "last";
 	} | null>(null);
 
 	// MangaDex-style Language switch modal state
@@ -415,13 +447,16 @@ export const MangaReaderPage: React.FC = () => {
 		targetChapter: Chapter;
 	} | null>(null);
 
-	const goToChapter = (targetChapId: string, pageNum: number = 1) => {
+	const goToChapter = (targetChapId: string, pageNum: number | "last" = 1) => {
 		navigate(`/manga/${mangaId}/read/${targetChapId}?page=${pageNum}`);
 	};
 
-	const handleSafeGoToChapter = (targetChap: Chapter) => {
+	const handleSafeGoToChapter = (
+		targetChap: Chapter,
+		pageNum: number | "last" = 1,
+	) => {
 		if (!currentChapter) {
-			goToChapter(targetChap.id, 1);
+			goToChapter(targetChap.id, pageNum);
 			return;
 		}
 
@@ -433,7 +468,7 @@ export const MangaReaderPage: React.FC = () => {
 			setActiveLanguage(targetChap.language || "en");
 		}
 
-		// Check forward chapter gap
+		// Check forward chapter gap only when navigating forward
 		if (targetChap.chapter_numeric > currentChapter.chapter_numeric) {
 			const gap = detectGap(
 				currentChapter.chapter_numeric,
@@ -444,21 +479,42 @@ export const MangaReaderPage: React.FC = () => {
 					targetChapter: targetChap,
 					missingCount: gap.count,
 					missingDesc: gap.desc,
+					targetPage: pageNum,
 				});
 				return;
 			}
 		}
 
-		goToChapter(targetChap.id, 1);
+		goToChapter(targetChap.id, pageNum);
 	};
 
-	const handleRequestNextChapter = () => {
+	// Seamless cross-chapter navigation handlers
+	const handleRequestNextChapter = useCallback(() => {
 		if (nextChapter) {
-			handleSafeGoToChapter(nextChapter);
+			handleSafeGoToChapter(nextChapter, 1);
 		} else if (nextAltLanguageChapter) {
 			setLanguageSwitchModal({ targetChapter: nextAltLanguageChapter });
+		} else {
+			// At the last page of the final chapter: boundary reached -> exit to manga details
+			handleExit();
 		}
-	};
+	}, [
+		nextChapter,
+		nextAltLanguageChapter,
+		currentChapter,
+		activeLanguage,
+		mangaId,
+	]);
+
+	const handleRequestPrevChapter = useCallback(() => {
+		if (prevChapter) {
+			// Seamlessly transition to the LAST page of the previous chapter
+			handleSafeGoToChapter(prevChapter, "last");
+		} else {
+			// At the first page of the first chapter: boundary reached -> exit to manga details
+			handleExit();
+		}
+	}, [prevChapter, currentChapter, activeLanguage, mangaId]);
 
 	const handleSwitchLanguage = (newLang: string) => {
 		setActiveLanguage(newLang);
@@ -493,6 +549,17 @@ export const MangaReaderPage: React.FC = () => {
 
 		goToChapter(candidateChapters[0].id, 1);
 	};
+
+	// Seamlessly sync URL ?page=x parameter with currentPage without full-page re-renders
+	useEffect(() => {
+		if (loadingChapter || !chapterId || !currentPage) return;
+		const currentUrlParam = searchParams.get("page");
+		if (currentUrlParam !== String(currentPage)) {
+			const newUrl = new URL(window.location.href);
+			newUrl.searchParams.set("page", String(currentPage));
+			window.history.replaceState(null, "", newUrl.toString());
+		}
+	}, [currentPage, chapterId, loadingChapter, searchParams]);
 
 	// Long Strip Scroll Observer
 	useEffect(() => {
@@ -547,32 +614,49 @@ export const MangaReaderPage: React.FC = () => {
 			} else {
 				handleRequestNextChapter();
 			}
+		} else if (readingMode === "long_strip") {
+			if (currentPage < pages.length) {
+				jumpToPage(currentPage + 1);
+			} else {
+				handleRequestNextChapter();
+			}
 		}
 	}, [
 		readingMode,
 		currentPage,
 		pages.length,
 		getDoublePagePair,
-		nextChapter,
-		nextAltLanguageChapter,
+		handleRequestNextChapter,
 	]);
 
 	const handleTurnPrev = useCallback(() => {
 		if (readingMode === "single") {
 			if (currentPage > 1) {
 				setCurrentPage((prev) => prev - 1);
-			} else if (prevChapter) {
-				handleSafeGoToChapter(prevChapter);
+			} else {
+				handleRequestPrevChapter();
 			}
 		} else if (readingMode === "double_rtl" || readingMode === "double_ltr") {
 			const { firstPageNum } = getDoublePagePair(currentPage, pages.length);
 			if (firstPageNum - 2 >= 1) {
 				setCurrentPage(firstPageNum - 2);
-			} else if (prevChapter) {
-				handleSafeGoToChapter(prevChapter);
+			} else {
+				handleRequestPrevChapter();
+			}
+		} else if (readingMode === "long_strip") {
+			if (currentPage > 1) {
+				jumpToPage(currentPage - 1);
+			} else {
+				handleRequestPrevChapter();
 			}
 		}
-	}, [readingMode, currentPage, pages.length, getDoublePagePair, prevChapter]);
+	}, [
+		readingMode,
+		currentPage,
+		pages.length,
+		getDoublePagePair,
+		handleRequestPrevChapter,
+	]);
 
 	// Fullscreen toggle
 	const toggleFullscreen = () => {
@@ -1027,7 +1111,7 @@ export const MangaReaderPage: React.FC = () => {
 								type="button"
 								className="ml-3 underline"
 								onClick={() =>
-									chapterId && loadChapter(chapterId, initialPageParam)
+									chapterId && loadChapter(chapterId, initialPageTarget)
 								}
 							>
 								Thử lại
@@ -1063,32 +1147,60 @@ export const MangaReaderPage: React.FC = () => {
 						{/* Mode 1: Long Strip (Vertical Webtoon Scroll) */}
 						{readingMode === "long_strip" && (
 							<div className="flex flex-col items-center space-y-2 py-4 w-full">
-								{pages.map((page, idx) => (
-									<div
-										key={page.page_uid || page.page_number}
-										ref={(el) => {
-											pageRefs.current[idx] = el;
-										}}
-										className="relative w-full flex justify-center"
+								{/* Beginning of Chapter Navigation in Long Strip */}
+								<div className="py-2 px-4 w-full flex justify-center">
+									<button
+										onClick={handleRequestPrevChapter}
+										className="px-4 py-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white transition flex items-center space-x-2 cursor-pointer shadow-sm"
+										title={
+											prevChapter
+												? `Lùi về Chapter ${prevChapter.chapter_number} (Trang cuối)`
+												: "Quay về trang Manga (Đầu truyện)"
+										}
 									>
-										<TranslatedPageImage
-											page={page}
-											binding={
-												page.page_uid
-													? translation.bindings[page.page_uid]
-													: undefined
-											}
-											displayMode={translation.displayMode}
-											compareSplit={translation.compareSplit}
-											zoomLevel={zoomLevel}
-											imageFitClass={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
-											priority={idx < 3}
-											onTranslateRequest={(uid) =>
-												translation.translatePage(uid)
-											}
-										/>
-									</div>
-								))}
+										<ChevronLeft size={14} />
+										<span>
+											{prevChapter
+												? `Quay lại Chapter ${prevChapter.chapter_number} (Trang cuối)`
+												: "Về trang Manga (Bạn đang ở Chapter đầu tiên)"}
+										</span>
+									</button>
+								</div>
+
+								{pages.map((page, idx) => {
+									const pageNum = page.page_number;
+									const isTarget = pageNum === currentPage;
+									const isAdjacent = Math.abs(pageNum - currentPage) <= 1;
+									const isPriority =
+										isTarget || isAdjacent || (currentPage <= 2 && idx < 2);
+
+									return (
+										<div
+											key={page.page_uid || page.page_number}
+											ref={(el) => {
+												pageRefs.current[idx] = el;
+											}}
+											className="relative w-full flex justify-center"
+										>
+											<TranslatedPageImage
+												page={page}
+												binding={
+													page.page_uid
+														? translation.bindings[page.page_uid]
+														: undefined
+												}
+												displayMode={translation.displayMode}
+												compareSplit={translation.compareSplit}
+												zoomLevel={zoomLevel}
+												imageFitClass={`${getImageFitClass()} shadow-2xl transition duration-200 select-none`}
+												priority={isPriority}
+												onTranslateRequest={(uid) =>
+													translation.translatePage(uid)
+												}
+											/>
+										</div>
+									);
+								})}
 
 								{/* Chapter Complete Card in Long Strip */}
 								<div className="py-12 text-center space-y-4 max-w-md mx-auto p-6 bg-zinc-900/60 border border-zinc-800 rounded-3xl mt-8">
@@ -1176,14 +1288,21 @@ export const MangaReaderPage: React.FC = () => {
 										>
 											Danh sách chương
 										</button>
-										{nextChapter && (
+										{nextChapter ? (
 											<button
 												onClick={() => handleSafeGoToChapter(nextChapter)}
 												className="px-5 py-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-lg transition cursor-pointer"
 											>
 												Đọc Ch. {nextChapter.chapter_number} →
 											</button>
-										)}
+										) : !nextAltLanguageChapter ? (
+											<button
+												onClick={handleExit}
+												className="px-5 py-2 rounded-xl bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold shadow-lg transition cursor-pointer"
+											>
+												Hoàn thành manga! Trở về trang chi tiết →
+											</button>
+										) : null}
 									</div>
 								</div>
 							</div>
@@ -1811,8 +1930,9 @@ export const MangaReaderPage: React.FC = () => {
 							<button
 								onClick={() => {
 									const target = gapWarningModal.targetChapter;
+									const page = gapWarningModal.targetPage || 1;
 									setGapWarningModal(null);
-									goToChapter(target.id, 1);
+									goToChapter(target.id, page);
 								}}
 								className="w-full sm:flex-1 py-2.5 px-4 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl shadow transition cursor-pointer"
 							>

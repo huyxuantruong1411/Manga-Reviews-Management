@@ -59,7 +59,7 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 		expect(
 			hasOverflow,
 			"Manga list page should not suffer from horizontal overflow",
-		).toBeLessThanOrEqual(page.viewportSize()!.width);
+		).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
 
 		// Capture visual snapshot for QA inspection
 		const viewportTag = isMobile ? "mobile-375px" : "desktop-1440px";
@@ -179,7 +179,7 @@ test.describe("Manga Platform Visual & Responsive Audit", () => {
 		expect(
 			hasOverflow,
 			"Panel words detector must fit within viewport width without horizontal clipping",
-		).toBeLessThanOrEqual(page.viewportSize()!.width);
+		).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
 
 		// Capture visual snapshot of panel reader / OCR vocabulary UI
 		const viewportTag = isMobile ? "mobile-375px" : "desktop-1440px";
