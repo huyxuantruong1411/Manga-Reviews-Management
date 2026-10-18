@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
@@ -91,3 +91,34 @@ async def list_source_releases(
         return page
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch releases from '{provider_name}': {e}")
+
+
+class WarmupSessionRequest(BaseModel):
+    target_url: str = Field("https://comix.to", description="Target URL for session warmup")
+
+
+@router.post("/{provider_name}/warmup-session")
+async def warmup_provider_session(
+    provider_name: str = Path(..., description="Provider identifier, e.g. 'comix'"),
+    payload: Optional[WarmupSessionRequest] = None,
+):
+    """
+    Triggers an interactive or local AI session warmup for a provider requiring human/browser clearance.
+    """
+    try:
+        provider = get_datasource_provider(provider_name)
+    except DatasourceError:
+        raise HTTPException(status_code=404, detail=f"Datasource '{provider_name}' not found")
+
+    if not hasattr(provider, "warmup_session_interactive"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider '{provider_name}' does not support interactive session warmup",
+        )
+
+    target_url = payload.target_url if payload else "https://comix.to"
+    try:
+        result = await provider.warmup_session_interactive(target_url=target_url)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Session warmup failed: {e}")

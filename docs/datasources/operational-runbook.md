@@ -79,3 +79,58 @@ Mandatory indexes:
 - All long-running asynchronous and bulk mutation operations (bulk chapter deletion, metadata synchronization, batch editing) provide real-time visual progress feedback in the UI:
   - Deletion Tracker: calculates completion percentages per chapter and surfaces exact chapter identifiers and MinIO cleanup states.
   - Sync Banner: displays active provider polling progress and library reconciliation summaries.
+
+---
+
+## 5. Comix Datasource & Anti-Bot Stealth Pipeline
+
+[`ComixProvider`](../../backend/services/datasources/comix.py) integrates `comix.to` with anti-bot stealth transport, cookie/session persistence, and local AI CAPTCHA solving.
+
+### Configuration & Flags
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATASOURCE_COMIX_ENABLED` | `true` | Enables Comix provider registration and chapter downloading |
+| `DATASOURCE_COMIX_BASE_URL` | `https://comix.to` | Canonical root domain for Comix catalogue and media |
+| `DATASOURCE_COMIX_TRANSPORT` | `stealth_auto` | Transport mode: `stealth_auto`, `http_impersonate`, or `stealth_browser` |
+| `DATASOURCE_COMIX_MAX_CONCURRENT_CHAPTERS` | `1` | Max concurrent chapter downloads to avoid rate limits |
+| `DATASOURCE_COMIX_MAX_CONCURRENT_PAGES` | `2` | Max concurrent image streams per chapter |
+| `DATASOURCE_COMIX_RATE_LIMIT_RPM` | `30` | Requests per minute budget |
+| `DATASOURCE_CAPTCHA_AUTO_SOLVE_ENABLED` | `true` | Enables autonomous local AI CAPTCHA solving pipeline |
+| `DATASOURCE_CAPTCHA_MAX_ATTEMPTS` | `3` | Maximum retry attempts before escalating to HITL |
+| `DATASOURCE_CAPTCHA_VLM_PROVIDER` | `local_or_gemini` | Solver strategy: `none`, `ollama`, `gemini`, or `local_or_gemini` |
+| `DATASOURCE_SESSION_DIR` | `backend/data/datasource-sessions` | Storage directory for session cookies and storage state |
+
+### Session Store & State Persistence
+
+The anti-bot subsystem caches validated browser state in `backend/data/datasource-sessions/comix/storage_state.json`:
+- **Persisted Tokens**: Cookies (`cf_clearance`, session IDs, consent cookies), `localStorage`, and security tokens.
+- **TTL & Expiry**: Session records default to a 24-hour validity window. If a request receives HTTP 403 or Cloudflare challenge detection, the session is marked `expired` or `challenge_required`.
+- **Fast-Path Reuse**: Active downloads read directly from `storage_state.json` via HTTP impersonate headers without launching heavy browser instances.
+
+### Local AI CAPTCHA Auto-Solver
+
+When Cloudflare Turnstile or custom canvas puzzle challenges appear:
+1. **Detection**: [`ChallengeDetector`](../../backend/services/datasources/anti_bot/challenge_detector.py) flags `CHALLENGE_REQUIRED`.
+2. **Auto-Solve Pipeline**: [`LocalAiCaptchaSolver`](../../backend/services/datasources/anti_bot/local_ai_solver.py):
+   - Uses `RapidOCR` and OpenCV template/contour matching to detect target prompt icons and slide offset coordinates.
+   - Generates human-like curved cursor trajectories with non-linear velocity via [`BezierMouseHumanizer`](../../backend/services/datasources/anti_bot/mouse_humanizer.py).
+   - Simulates realistic drag-and-drop or checkbox interactions on the Playwright stealth page.
+3. **Escalation to HITL**: If 3 automated attempts fail or confidence is below threshold, status escalates to `needs_hitl`.
+
+### Human-in-the-Loop (HITL) Session Warmup
+
+When automated solving is challenged or a fresh session is required:
+- **One-Touch UI Warmup**:
+  In `SourceDownloadDialog`, the `SessionVerificationBanner` alerts operators if the Comix session requires attention. Clicking **"Warm Up Session"** calls `POST /api/datasources/comix/warmup-session`.
+  FastAPI launches a headed stealth browser context for the operator to complete the challenge. Upon completion, the new cookies and storage tokens are saved automatically to `storage_state.json`.
+- **CLI Session Status Inspection**:
+  ```bash
+  uv run --project backend python -c "from backend.services.datasources.anti_bot.session_store import SessionStore; store = SessionStore(); print(store.get_status('comix'))"
+  ```
+- **Session Reset**:
+  To clear a corrupted or rate-limited session:
+  ```bash
+  uv run --project backend python -c "from backend.services.datasources.anti_bot.session_store import SessionStore; store = SessionStore(); store.clear('comix')"
+  ```
+

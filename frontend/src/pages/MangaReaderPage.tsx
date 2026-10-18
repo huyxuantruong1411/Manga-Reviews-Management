@@ -780,11 +780,13 @@ export const MangaReaderPage: React.FC = () => {
 								{currentChapter.source && (
 									<span
 										className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 uppercase ${
-											currentChapter.source === "mangafire"
-												? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-												: currentChapter.source === "mangadex"
-													? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-													: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+											currentChapter.source === "comix"
+												? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+												: currentChapter.source === "mangafire"
+													? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+													: currentChapter.source === "mangadex"
+														? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+														: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
 										}`}
 									>
 										{currentChapter.source}

@@ -1548,13 +1548,15 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 										</option>
 										{availableSources.map((s) => (
 											<option key={s} value={s}>
-												{s === "mangafire"
-													? "MangaFire"
-													: s === "mangadex"
-														? "MangaDex"
-														: s === "local_import"
-															? "Local Import"
-															: s}
+												{s === "comix"
+													? "Comix"
+													: s === "mangafire"
+														? "MangaFire"
+														: s === "mangadex"
+															? "MangaDex"
+															: s === "local_import"
+																? "Local Import"
+																: s}
 											</option>
 										))}
 									</select>
@@ -1971,18 +1973,22 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 													{chap.source && (
 														<span
 															className={`px-2 py-0.5 rounded-md whitespace-nowrap font-mono text-[10px] ${
-																chap.source === "mangafire"
-																	? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-																	: chap.source === "mangadex"
-																		? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
-																		: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+																chap.source === "comix"
+																	? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+																	: chap.source === "mangafire"
+																		? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+																		: chap.source === "mangadex"
+																			? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+																			: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
 															}`}
 														>
-															{chap.source === "mangafire"
-																? "MangaFire"
-																: chap.source === "mangadex"
-																	? "MangaDex"
-																	: "Import"}
+															{chap.source === "comix"
+																? "Comix"
+																: chap.source === "mangafire"
+																	? "MangaFire"
+																	: chap.source === "mangadex"
+																		? "MangaDex"
+																		: "Import"}
 														</span>
 													)}
 												</div>

@@ -213,9 +213,30 @@ export const MetadataComparisonDrawer: React.FC<
 			return <span className="text-xs">{val.length} mục</span>;
 		}
 		if (typeof val === "object") {
+			if (val.score || val.rating || val.views || val.follows) {
+				return (
+					<div className="flex flex-wrap gap-2 text-xs">
+						{(val.score || val.rating) && (
+							<span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-500 font-bold">
+								⭐ {val.score || val.rating}
+							</span>
+						)}
+						{val.views !== undefined && (
+							<span className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-500 font-medium">
+								👁️ {Number(val.views).toLocaleString()} lượt xem
+							</span>
+						)}
+						{val.follows !== undefined && (
+							<span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-500 font-medium">
+								❤️ {Number(val.follows).toLocaleString()} theo dõi
+							</span>
+						)}
+					</div>
+				);
+			}
 			return (
 				<span className="text-xs font-mono">
-					{JSON.stringify(val).slice(0, 40)}...
+					{JSON.stringify(val).slice(0, 50)}
 				</span>
 			);
 		}
@@ -241,6 +262,8 @@ export const MetadataComparisonDrawer: React.FC<
 			original_language: "Ngôn ngữ gốc (Language)",
 			links: "Liên kết ngoài (Links)",
 			cover_url: "Ảnh bìa (Cover Art)",
+			tag_ids: "Thể loại & Chủ đề (Tags/Genres)",
+			source_metrics: "Chỉ số nguồn (Metrics & Ratings)",
 		};
 		return labels[field] || field;
 	};

@@ -3044,7 +3044,7 @@ export const MangaDetailPage: React.FC = () => {
 								type="button"
 								onClick={openDownloadModal}
 								className="flex items-center space-x-2 px-4 py-2 border border-[var(--brand-orange)]/40 text-[var(--brand-orange)] bg-[var(--brand-orange)]/5 hover:bg-[var(--brand-orange)]/15 rounded-xl font-bold text-xs transition shadow-sm whitespace-nowrap cursor-pointer"
-								title="Tải chương từ MangaDex hoặc MangaFire"
+								title="Tải chương từ MangaDex, MangaFire hoặc Comix"
 							>
 								<Download size={14} className="shrink-0" />
 								<span>Download Chapters</span>
@@ -3079,7 +3079,7 @@ export const MangaDetailPage: React.FC = () => {
 								type="button"
 								onClick={() => setIsMetadataComparisonOpen(true)}
 								className="flex items-center space-x-1.5 px-3 py-2 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/15 rounded-xl font-bold text-xs transition whitespace-nowrap shadow-sm cursor-pointer"
-								title="So sánh và làm giàu metadata từ nguồn dữ liệu (MangaDex hoặc MangaFire)"
+								title="So sánh và làm giàu metadata từ nguồn dữ liệu (MangaDex, MangaFire hoặc Comix)"
 							>
 								<Sparkles size={13} className="shrink-0" />
 								<span>So sánh Metadata</span>

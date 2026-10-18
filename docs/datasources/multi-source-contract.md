@@ -31,7 +31,7 @@ class MangaSourceProvider(ABC):
 ### URL Normalization & SSRF Defense
 All incoming URLs are sanitized via `validate_and_parse_source_url`:
 - **Allowed Schemes**: Strictly `http` and `https`. Schemes like `file://`, `ftp://`, or `data:` raise `SSRFSecurityError`.
-- **Domain Whitelist**: Hostnames must match registered provider origins exactly (`mangadex.org`, `mangafire.to`). Subdomain spoofing (e.g. `mangafire.to.attacker.com`) is rejected.
+- **Domain Whitelist**: Hostnames must match registered provider origins exactly (`mangadex.org`, `mangafire.to`, `comix.to`). Subdomain spoofing (e.g. `comix.to.attacker.com` or `mangafire.to.attacker.com`) is rejected.
 - **Private Network Blocking**: IP addresses pointing to loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), or private RFC-1918 networks are blocked.
 - **No Embedded Credentials**: Userinfo in URLs (`user:pass@host`) is rejected.
 
@@ -48,7 +48,7 @@ To prevent collisions between different sources that share identical external ID
 
 2. **`chapters` Collection**:
    - Internal Primary Key: `_id` (ObjectId).
-   - Source Identity: `source` (e.g., `mangadex`, `mangafire`), `source_id` (provider-specific release ID).
+   - Source Identity: `source` (e.g., `mangadex`, `mangafire`, `comix`), `source_id` (provider-specific release ID).
    - Unique Index: `(manga_id, source, source_id, language)` ensuring multiple releases of chapter 14 can coexist cleanly.
 
 3. **`chapter_slots` Collection**:

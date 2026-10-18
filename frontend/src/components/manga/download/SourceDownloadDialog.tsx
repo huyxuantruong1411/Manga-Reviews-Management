@@ -34,6 +34,7 @@ import type {
 	SourceRelease,
 	SourceWork,
 } from "../../../types/datasource";
+import { SessionVerificationBanner } from "./SessionVerificationBanner";
 
 export interface ResolveStepInfo {
 	id: number;
@@ -899,7 +900,7 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 								<span>Nguồn Cung Cấp (Datasource Provider)</span>
 							</div>
 							<span className="text-[11px] text-zinc-400">
-								Chuyển đổi linh hoạt giữa MangaDex và MangaFire
+								Chuyển đổi linh hoạt giữa MangaDex, MangaFire và Comix
 							</span>
 						</div>
 
@@ -938,9 +939,16 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 							})}
 						</div>
 
-						{/* MangaFire URL Input & Linking Banner */}
-						{selectedProvider === "mangafire" && (
+						{/* Custom Provider (MangaFire / Comix) URL Input & Session Banner */}
+						{(selectedProvider === "mangafire" ||
+							selectedProvider === "comix") && (
 							<div className="mt-3 space-y-3">
+								{selectedProvider === "comix" && (
+									<SessionVerificationBanner
+										providerId="comix"
+										providerDisplayName="Comix"
+									/>
+								)}
 								<div className="p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
 									{activeWork ? (
 										<div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -984,10 +992,13 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 									) : (
 										<div className="w-full space-y-2">
 											<p className="text-xs text-[var(--text-secondary)]">
-												Nhập đường dẫn truyện trên MangaFire để tải chương (Ví
-												dụ:{" "}
+												Nhập đường dẫn truyện trên{" "}
+												{selectedProvider === "comix" ? "Comix" : "MangaFire"}{" "}
+												để tải chương (Ví dụ:{" "}
 												<code className="text-zinc-400">
-													https://mangafire.to/manga/sheeply-horned-witch-romi.48y2
+													{selectedProvider === "comix"
+														? "https://comix.to/title/r9j5m-yajin"
+														: "https://mangafire.to/manga/sheeply-horned-witch-romi.48y2"}
 												</code>
 												):
 											</p>
@@ -1006,7 +1017,11 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 															handleResolveUrl();
 														}
 													}}
-													placeholder="https://mangafire.to/manga/..."
+													placeholder={
+														selectedProvider === "comix"
+															? "https://comix.to/title/..."
+															: "https://mangafire.to/manga/..."
+													}
 													className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] font-mono"
 												/>
 												<button
