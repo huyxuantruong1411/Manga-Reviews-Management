@@ -589,9 +589,11 @@ class DownloadService:
                     if provider and hasattr(provider, "fetch_page"):
                         from backend.models.datasource import SourcePage
 
-                        headers = (
-                            {"Referer": "https://mangafire.to/"} if getattr(provider, "name", "") == "mangafire" else {}
-                        )
+                        headers = {}
+                        if getattr(provider, "name", "") == "mangafire":
+                            headers = {"Referer": "https://mangafire.to/"}
+                        elif getattr(provider, "name", "") == "comix":
+                            headers = {"Referer": "https://comix.to/"}
                         page_obj = SourcePage(
                             page_number=idx + 1,
                             url=url,

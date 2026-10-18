@@ -114,7 +114,7 @@ class DownloadPlanService:
 
         # Build catalog map lookup if provider supports listing
         catalog_map: Dict[str, SourceRelease] = {}
-        if not client_hints and hasattr(provider, "list_releases") and source != "mangafire":
+        if not client_hints and hasattr(provider, "list_releases") and source not in ("mangafire", "comix"):
             try:
                 from backend.models.datasource import ReleaseQuery
 
