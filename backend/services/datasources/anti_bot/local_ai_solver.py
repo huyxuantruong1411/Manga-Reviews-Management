@@ -1,12 +1,10 @@
 import asyncio
-import io
 import logging
 import random
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict
 
 import cv2
 import numpy as np
-from PIL import Image
 
 from backend.models.datasource import SourceRequiresSessionError
 from backend.services.datasources.anti_bot.mouse_humanizer import generate_bezier_trajectory

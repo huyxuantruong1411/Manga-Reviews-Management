@@ -1,5 +1,7 @@
+export type DatasourceProviderId = "mangadex" | "mangafire" | "comix";
+
 export interface ProviderCapability {
-	name: string;
+	name: DatasourceProviderId | string;
 	display_name: string;
 	can_search: boolean;
 	can_resolve_url: boolean;

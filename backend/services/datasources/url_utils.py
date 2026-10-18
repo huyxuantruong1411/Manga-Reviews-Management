@@ -8,10 +8,12 @@ from backend.models.datasource import SSRFSecurityError
 ALLOWED_PROVIDERS = {
     "mangadex": {"mangadex.org", "api.mangadex.org"},
     "mangafire": {"mangafire.to", "www.mangafire.to"},
+    "comix": {"comix.to", "www.comix.to"},
 }
 
 UUID_PATTERN = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 MANGAFIRE_WORK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9]+$")
+COMIX_WORK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9]+$")
 
 
 def validate_and_parse_source_url(raw_url: str, allow_test_hosts: bool = False) -> Tuple[str, str, str]:
@@ -88,6 +90,20 @@ def validate_and_parse_source_url(raw_url: str, allow_test_hosts: bool = False) 
         slug_part = slug_match.group(1) if slug_match else work_id
         canonical_url = f"https://mangafire.to/title/{slug_part}"
         return ("mangafire", work_id, canonical_url)
+
+    elif matched_provider == "comix":
+        # Format: /title/{work_id}-{slug} or /title/{work_id} or /title/{work_id}-{slug}/...
+        match = re.search(r"^/title/([a-zA-Z0-9]+)(?:-([^/]+))?", path)
+        if match:
+            work_id = match.group(1).lower()
+            slug = match.group(2)
+        else:
+            raise SSRFSecurityError(f"Cannot extract valid Comix work ID from path '{path}'")
+        if slug:
+            canonical_url = f"https://comix.to/title/{work_id}-{slug}"
+        else:
+            canonical_url = f"https://comix.to/title/{work_id}"
+        return ("comix", work_id, canonical_url)
 
     raise SSRFSecurityError(f"Unsupported provider: {matched_provider}")
 

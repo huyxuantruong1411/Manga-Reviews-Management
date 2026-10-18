@@ -101,9 +101,7 @@ class SessionStore:
             json.dump(payload, f, indent=2)
 
         has_cf = any(c.get("name") == "cf_clearance" for c in cookies)
-        logger.info(
-            f"Saved storage_state for '{provider}' with {len(cookies)} cookies (cf_clearance={has_cf})"
-        )
+        logger.info(f"Saved storage_state for '{provider}' with {len(cookies)} cookies (cf_clearance={has_cf})")
         return session_file
 
     def get_cookie_value(self, provider: str, cookie_name: str) -> Optional[str]:

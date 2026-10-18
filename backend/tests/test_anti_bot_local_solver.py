@@ -3,23 +3,22 @@ Unit and integration tests for Anti-Bot, Stealth Session Store & Local AI CAPTCH
 Tests SessionStore, ChallengeDetector, MouseHumanizer, and LocalCaptchaSolver (OpenCV, RapidOCR, circuit breaker).
 """
 
-import json
-import os
 import shutil
 import tempfile
+
+import cv2
 import numpy as np
 import pytest
-import cv2
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from backend.models.datasource import SourceRequiresSessionError
-from backend.services.datasources.anti_bot.session_store import SessionStore
 from backend.services.datasources.anti_bot.challenge_detector import ChallengeDetector, ChallengeType
-from backend.services.datasources.anti_bot.mouse_humanizer import generate_bezier_trajectory
 from backend.services.datasources.anti_bot.local_ai_solver import LocalCaptchaSolver
-
+from backend.services.datasources.anti_bot.mouse_humanizer import generate_bezier_trajectory
+from backend.services.datasources.anti_bot.session_store import SessionStore
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def temp_session_dir():
@@ -29,6 +28,7 @@ def temp_session_dir():
 
 
 # ─── 1. Session Store Tests ──────────────────────────────────────────────────
+
 
 def test_session_store_save_load_and_clear(temp_session_dir):
     store = SessionStore(base_dir=temp_session_dir)
@@ -69,6 +69,7 @@ def test_session_store_save_load_and_clear(temp_session_dir):
 
 
 # ─── 2. Challenge Detector Tests ─────────────────────────────────────────────
+
 
 def test_challenge_detector_clean_html():
     detector = ChallengeDetector()
@@ -132,6 +133,7 @@ def test_challenge_detector_hard_blocked():
 
 # ─── 3. Mouse Humanizer (Bezier Curve) Tests ─────────────────────────────────
 
+
 def test_mouse_humanizer_trajectory_bounds():
     start = (100, 150)
     end = (450, 320)
@@ -154,6 +156,7 @@ def test_mouse_humanizer_trajectory_bounds():
 
 
 # ─── 4. Local AI Solver (OpenCV Puzzle & RapidOCR Text) Tests ─────────────────
+
 
 def test_local_ai_solver_slider_puzzle():
     solver = LocalCaptchaSolver()
@@ -186,6 +189,7 @@ def test_local_ai_solver_text_captcha():
     draw.text((30, 15), text, fill=(0, 0, 0))
 
     import io
+
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     captcha_bytes = buf.getvalue()
@@ -199,6 +203,7 @@ def test_local_ai_solver_text_captcha():
 
 # ─── 5. Circuit Breaker (Max 3 Attempts) Tests ────────────────────────────────
 
+
 @pytest.mark.anyio
 async def test_solver_circuit_breaker_max_attempts():
     solver = LocalCaptchaSolver(max_attempts=3)
@@ -209,7 +214,7 @@ async def test_solver_circuit_breaker_max_attempts():
         return False
 
     with pytest.raises(SourceRequiresSessionError) as exc_info:
-        for attempt in range(4):
+        for _attempt in range(4):
             await solver.execute_with_retry(provider, mock_failing_action)
 
     assert "SOURCE_REQUIRES_SESSION" in str(exc_info.value.code)

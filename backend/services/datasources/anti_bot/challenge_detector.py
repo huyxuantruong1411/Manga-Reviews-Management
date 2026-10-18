@@ -104,7 +104,7 @@ class ChallengeDetector:
         ) or ("<img" in content_lower and "captcha" in content_lower)
         has_text_input = bool(
             re.search(r"<input[^>]+type=[\"']text[\"'][^>]+(?:name|id)=[\"'][^\"']*captcha", content_lower)
-        ) or ("<form" in content_lower and "placeholder=\"enter characters\"" in content_lower)
+        ) or ("<form" in content_lower and 'placeholder="enter characters"' in content_lower)
 
         if has_captcha_img and has_text_input:
             return ChallengeType.TEXT_IMAGE_CAPTCHA

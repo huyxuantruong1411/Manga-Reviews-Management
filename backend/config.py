@@ -51,6 +51,27 @@ class Settings(BaseSettings):
     kibana_url: str = Field(default="http://127.0.0.1:5601")
     kibana_dashboard_id: str = Field(default="manga-system-overview")
 
+    # Comix Datasource & Anti-Bot / Local AI CAPTCHA Configuration
+    datasource_comix_enabled: bool = Field(default=True)
+    datasource_comix_base_url: str = Field(default="https://comix.to")
+    datasource_comix_transport: str = Field(
+        default="stealth_auto"
+    )  # "http_impersonate" | "stealth_browser" | "stealth_auto"
+    datasource_comix_max_concurrent_chapters: int = Field(default=1)
+    datasource_comix_max_concurrent_pages: int = Field(default=2)
+    datasource_comix_rate_limit_rpm: int = Field(default=30)
+
+    # Local AI CAPTCHA & Session Bypass
+    datasource_captcha_auto_solve_enabled: bool = Field(default=True)
+    datasource_captcha_max_attempts: int = Field(default=3)
+    datasource_captcha_vlm_provider: str = Field(
+        default="local_or_gemini"
+    )  # "none" | "ollama" | "gemini" | "local_or_gemini"
+    datasource_captcha_ollama_url: str = Field(default="http://127.0.0.1:11434")
+    datasource_captcha_ollama_model: str = Field(default="qwen2.5-vl:7b")
+    datasource_captcha_sidecar_url: Optional[str] = Field(default=None)
+    datasource_session_dir: str = Field(default="backend/data/datasource-sessions")
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
         env_file_encoding="utf-8",

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -157,9 +156,7 @@ class StealthTransport:
                     is_clean_title = "just a moment" not in cur_title and "security verification" not in cur_title
 
                     if has_cf_clearance or (is_clean_title and len(cookies) > 0):
-                        self.session_store.save_session(
-                            self.provider, cookies=cookies, user_agent=self.user_agent
-                        )
+                        self.session_store.save_session(self.provider, cookies=cookies, user_agent=self.user_agent)
                         self.solver.reset_failures(self.provider)
                         logger.info(f"HITL session warmup for '{self.provider}' succeeded with {len(cookies)} cookies!")
                         return {
