@@ -55,6 +55,7 @@ class DeletionTests(unittest.IsolatedAsyncioTestCase):
                     "cover_arts",
                     "reading_progress",
                     "reviews",
+                    "external_reviews",
                     "manga_recommendations",
                     "manga_panels",
                     "panel_scan_pages",

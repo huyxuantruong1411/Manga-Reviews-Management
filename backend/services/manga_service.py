@@ -899,7 +899,8 @@ class MangaService:
         await db.manga_recommendations.delete_many({"manga_id": manga_id})
 
         # Delete external reviews
-        await db.external_reviews.delete_many({"manga_id": manga_id})
+        if hasattr(db, "external_reviews"):
+            await db.external_reviews.delete_many({"manga_id": manga_id})
 
         # Delete reviews (or soft delete)
         await get_db().reviews.update_many(
