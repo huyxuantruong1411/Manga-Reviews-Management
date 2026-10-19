@@ -1,5 +1,7 @@
-import pytest
 from datetime import datetime
+
+import pytest
+
 from backend.services.search_ranking_service import calculate_relevance_score, rank_manga_search_results
 
 
@@ -160,6 +162,7 @@ def test_no_results_lost():
 @pytest.mark.anyio
 async def test_manga_service_search_relevance_ranking(monkeypatch):
     from unittest.mock import AsyncMock, MagicMock
+
     from backend.services.manga_service import manga_service
 
     # Mock collection

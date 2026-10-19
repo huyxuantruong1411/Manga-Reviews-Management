@@ -8,6 +8,7 @@ from backend.models.datasource import (
     ProviderCapability,
     ReleasePage,
     ReleaseQuery,
+    SourceRequiresSessionError,
     SourceWork,
     SSRFSecurityError,
 )
@@ -64,6 +65,8 @@ async def resolve_source_work(payload: ResolveSourceRequest) -> SourceWork:
         return work
     except SSRFSecurityError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except SourceRequiresSessionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to resolve source work: {e}")
 
@@ -89,6 +92,8 @@ async def list_source_releases(
     try:
         page = await provider.list_releases(work_id, query)
         return page
+    except SourceRequiresSessionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch releases from '{provider_name}': {e}")
 

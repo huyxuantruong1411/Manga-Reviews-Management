@@ -228,3 +228,90 @@ async def test_comix_fetch_page_http_error():
     provider = ComixProvider()
     with pytest.raises(SourceUnavailableError):
         await provider.fetch_page(page, client=mock_client)
+
+
+def test_comix_fetch_work_details_raises_source_requires_session_on_challenge():
+    from backend.models.datasource import SourceRequiresSessionError
+
+    challenge_html = (
+        "<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>Turnstile Challenge</body></html>"
+    )
+
+    mock_page = MagicMock()
+    mock_page.content.return_value = challenge_html
+
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    mock_browser = MagicMock()
+    mock_browser.new_context.return_value = mock_context
+
+    mock_playwright = MagicMock()
+    mock_playwright.chromium.launch.return_value = mock_browser
+
+    mock_pw_cm = MagicMock()
+    mock_pw_cm.__enter__.return_value = mock_playwright
+
+    provider = ComixProvider()
+    with patch("playwright.sync_api.sync_playwright", return_value=mock_pw_cm):
+        with pytest.raises(SourceRequiresSessionError) as exc_info:
+            provider._fetch_work_details_sync("r9j5m", "https://comix.to/title/r9j5m")
+        assert "challenge detected" in str(exc_info.value).lower()
+
+
+def test_comix_fetch_releases_raises_source_requires_session_on_challenge():
+    from backend.models.datasource import SourceRequiresSessionError
+
+    challenge_html = (
+        "<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>Turnstile Challenge</body></html>"
+    )
+
+    mock_page = MagicMock()
+    mock_page.content.return_value = challenge_html
+
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    mock_browser = MagicMock()
+    mock_browser.new_context.return_value = mock_context
+
+    mock_playwright = MagicMock()
+    mock_playwright.chromium.launch.return_value = mock_browser
+
+    mock_pw_cm = MagicMock()
+    mock_pw_cm.__enter__.return_value = mock_playwright
+
+    provider = ComixProvider()
+    with patch("playwright.sync_api.sync_playwright", return_value=mock_pw_cm):
+        with pytest.raises(SourceRequiresSessionError) as exc_info:
+            provider._fetch_releases_sync("r9j5m", "en", "desc")
+        assert "challenge detected" in str(exc_info.value).lower()
+
+
+def test_comix_fetch_pages_manifest_raises_source_requires_session_on_challenge():
+    from backend.models.datasource import SourceRequiresSessionError
+
+    challenge_html = (
+        "<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>Turnstile Challenge</body></html>"
+    )
+
+    mock_page = MagicMock()
+    mock_page.content.return_value = challenge_html
+
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    mock_browser = MagicMock()
+    mock_browser.new_context.return_value = mock_context
+
+    mock_playwright = MagicMock()
+    mock_playwright.chromium.launch.return_value = mock_browser
+
+    mock_pw_cm = MagicMock()
+    mock_pw_cm.__enter__.return_value = mock_playwright
+
+    provider = ComixProvider()
+    with patch("playwright.sync_api.sync_playwright", return_value=mock_pw_cm):
+        with pytest.raises(SourceRequiresSessionError) as exc_info:
+            provider._fetch_pages_manifest_sync("r9j5m", "rel-001")
+        assert "challenge detected" in str(exc_info.value).lower()

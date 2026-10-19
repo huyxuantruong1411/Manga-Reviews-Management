@@ -36,10 +36,10 @@ Total Endpoints Discovered: **201**
 | `POST` | `/api/creators/{creator_name}/tierlists` | `create_creator_tierlist` | Creator Tierlists | [`tierlists.py:118`](../../backend/routers/tierlists.py#L118) | Yes |
 | `GET` | `/api/creators/{creator_name}/tierlists/compare` | `compare_creator_tierlists` | Creator Tierlists | [`tierlists.py:83`](../../backend/routers/tierlists.py#L83) | Yes |
 | `GET` | `/api/creators/{name}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
-| `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:29`](../../backend/routers/datasources.py#L29) | Yes |
-| `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:38`](../../backend/routers/datasources.py#L38) | Yes |
-| `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:72`](../../backend/routers/datasources.py#L72) | Yes |
-| `POST` | `/api/datasources/{provider_name}/warmup-session` | `warmup_provider_session` | Datasources | [`datasources.py:101`](../../backend/routers/datasources.py#L101) | Yes |
+| `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:30`](../../backend/routers/datasources.py#L30) | Yes |
+| `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:39`](../../backend/routers/datasources.py#L39) | Yes |
+| `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:75`](../../backend/routers/datasources.py#L75) | Yes |
+| `POST` | `/api/datasources/{provider_name}/warmup-session` | `warmup_provider_session` | Datasources | [`datasources.py:106`](../../backend/routers/datasources.py#L106) | Yes |
 | `GET` | `/api/dictionary/define/{word}` | `define_word` | vision | [`vision.py:512`](../../backend/routers/vision.py#L512) | Yes |
 | `GET` | `/api/download-plans/{plan_id}` | `get_download_plan` | Downloads | [`downloads.py:338`](../../backend/routers/downloads.py#L338) | Yes |
 | `POST` | `/api/download-plans/{plan_id}/execute` | `execute_download_plan` | Downloads | [`downloads.py:349`](../../backend/routers/downloads.py#L349) | Yes |

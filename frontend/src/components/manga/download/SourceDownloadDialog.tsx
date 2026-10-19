@@ -947,6 +947,11 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 									<SessionVerificationBanner
 										providerId="comix"
 										providerDisplayName="Comix"
+										onWarmupSuccess={() => {
+											if (sourceUrlInput.trim()) {
+												handleResolveUrl();
+											}
+										}}
 									/>
 								)}
 								<div className="p-3.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-card)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
@@ -1205,10 +1210,13 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 										{/* Error Banner with Retry */}
 										{resolveProgress.status === "error" &&
 											resolveProgress.errorDetail && (
-												<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2">
-													<div className="flex items-center gap-2 min-w-0">
-														<AlertCircle size={14} className="shrink-0" />
-														<span className="truncate">
+												<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-start justify-between gap-3">
+													<div className="flex items-start gap-2 min-w-0 flex-1">
+														<AlertCircle
+															size={15}
+															className="shrink-0 mt-0.5"
+														/>
+														<span className="break-words leading-relaxed select-text">
 															{resolveProgress.errorDetail}
 														</span>
 													</div>

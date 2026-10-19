@@ -78,6 +78,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({
 					<div className="relative w-full max-w-md p-6 overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-2xl transform scale-100 transition-all duration-300 animate-in fade-in zoom-in-95 duration-200">
 						{/* Top Close Button */}
 						<button
+							type="button"
 							onClick={hideAlert}
 							className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
 						>
@@ -102,6 +103,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({
 						{/* Bottom Button */}
 						<div className="mt-6 flex justify-center">
 							<button
+								type="button"
 								onClick={hideAlert}
 								className="w-full sm:w-auto px-6 py-2.5 font-medium text-white bg-orange-600 hover:bg-orange-500 rounded-xl transition-all duration-200 shadow-md shadow-orange-650/10 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 dark:focus:ring-offset-neutral-900"
 							>
@@ -117,7 +119,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({
 				{toasts.map((toast) => (
 					<div
 						key={toast.id}
-						className={`pointer-events-auto flex items-center space-x-2.5 px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold animate-in slide-in-from-right duration-200 max-w-sm ${
+						className={`pointer-events-auto flex items-center space-x-2.5 px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold animate-in slide-in-from-right duration-200 max-w-md ${
 							toast.type === "success"
 								? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30 animate-pulse-subtle"
 								: toast.type === "error"
@@ -139,8 +141,11 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({
 						{toast.type === "info" && (
 							<Info className="w-4 h-4 text-blue-500 shrink-0" />
 						)}
-						<span className="flex-1 leading-normal pr-1">{toast.message}</span>
+						<span className="flex-1 leading-normal pr-1 break-words select-text">
+							{toast.message}
+						</span>
 						<button
+							type="button"
 							onClick={() =>
 								setToasts((prev) => prev.filter((t) => t.id !== toast.id))
 							}

@@ -17,9 +17,11 @@ from backend.models.datasource import (
     SourcePage,
     SourcePageManifest,
     SourceRelease,
+    SourceRequiresSessionError,
     SourceUnavailableError,
     SourceWork,
 )
+from backend.services.datasources.anti_bot.challenge_detector import ChallengeDetector, ChallengeType
 from backend.services.datasources.anti_bot.local_ai_solver import LocalCaptchaSolver
 from backend.services.datasources.anti_bot.session_store import SessionStore
 from backend.services.datasources.anti_bot.stealth_transport import (
@@ -264,6 +266,42 @@ class ComixProvider(MangaSourceProvider):
     # Synchronous Playwright execution helpers
     # ──────────────────────────────────────────────────────────────────────────
 
+    def _create_sync_browser_and_context(self, p: Any):
+        """Creates an evasion-hardened browser and context with storage_state if present."""
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+            ],
+        )
+        session_file = self.session_store.get_session_file("comix")
+        storage_state = str(session_file) if session_file.exists() else None
+
+        context = browser.new_context(
+            user_agent=DEFAULT_COMIX_USER_AGENT,
+            viewport={"width": 1280, "height": 720},
+            storage_state=storage_state,
+        )
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        """)
+        return browser, context
+
+    def _assert_page_clean_sync(self, page: Any, context_desc: str = ""):
+        """Checks if the page is blocked by Cloudflare Turnstile or other challenges."""
+        html = page.content()
+        challenge = ChallengeDetector().detect(200, html)
+        if challenge != ChallengeType.CLEAN:
+            raise SourceRequiresSessionError(
+                f"Comix anti-bot challenge detected ({challenge.value}){f' for {context_desc}' if context_desc else ''}. Interactive session verification is required."
+            )
+
     def _fetch_work_details_sync(self, work_id: str, canonical_url: str) -> Optional[Dict[str, Any]]:
         """
         Visits Comix title page via Playwright and captures metadata from JSON hydration or DOM.
@@ -286,26 +324,16 @@ class ComixProvider(MangaSourceProvider):
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=["--disable-blink-features=AutomationControlled"],
-                )
+                browser, context = self._create_sync_browser_and_context(p)
                 try:
-                    # Apply storage_state if available
-                    session_file = self.session_store.get_session_file("comix")
-                    storage_state = str(session_file) if session_file.exists() else None
-
-                    context = browser.new_context(
-                        user_agent=DEFAULT_COMIX_USER_AGENT,
-                        viewport={"width": 1280, "height": 720},
-                        storage_state=storage_state,
-                    )
                     page = context.new_page()
                     page.on("response", on_response)
 
                     url = f"https://comix.to/title/{work_id}"
-                    page.goto(url, wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                    page.wait_for_timeout(1500)
+
+                    self._assert_page_clean_sync(page, f"work '{work_id}'")
 
                     # 1. Check API capture
                     if captured_api_data.get("api"):
@@ -321,6 +349,8 @@ class ComixProvider(MangaSourceProvider):
                     return dom_data
                 finally:
                     browser.close()
+        except SourceRequiresSessionError:
+            raise
         except Exception as e:
             logger.error(f"Playwright error resolving Comix work '{work_id}': {e}")
             raise SourceUnavailableError(f"Playwright navigation failed for Comix work '{work_id}': {e}")
@@ -349,25 +379,16 @@ class ComixProvider(MangaSourceProvider):
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=["--disable-blink-features=AutomationControlled"],
-                )
+                browser, context = self._create_sync_browser_and_context(p)
                 try:
-                    session_file = self.session_store.get_session_file("comix")
-                    storage_state = str(session_file) if session_file.exists() else None
-
-                    context = browser.new_context(
-                        user_agent=DEFAULT_COMIX_USER_AGENT,
-                        viewport={"width": 1280, "height": 720},
-                        storage_state=storage_state,
-                    )
                     page = context.new_page()
                     page.on("response", on_response)
 
                     url = f"https://comix.to/title/{work_id}"
-                    page.goto(url, wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                    page.wait_for_timeout(1500)
+
+                    self._assert_page_clean_sync(page, f"releases for work '{work_id}'")
 
                     # Iterate through pagination pages
                     for p_num in range(2, 20):
@@ -389,6 +410,8 @@ class ComixProvider(MangaSourceProvider):
 
                 finally:
                     browser.close()
+        except SourceRequiresSessionError:
+            raise
         except Exception as e:
             logger.error(f"Playwright error fetching chapters for Comix work '{work_id}': {e}")
             raise SourceUnavailableError(f"Failed to fetch Comix chapters: {e}")
@@ -441,19 +464,8 @@ class ComixProvider(MangaSourceProvider):
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=["--disable-blink-features=AutomationControlled"],
-                )
+                browser, context = self._create_sync_browser_and_context(p)
                 try:
-                    session_file = self.session_store.get_session_file("comix")
-                    storage_state = str(session_file) if session_file.exists() else None
-
-                    context = browser.new_context(
-                        user_agent=DEFAULT_COMIX_USER_AGENT,
-                        viewport={"width": 1280, "height": 720},
-                        storage_state=storage_state,
-                    )
                     page = context.new_page()
 
                     def on_response(res):
@@ -465,8 +477,10 @@ class ComixProvider(MangaSourceProvider):
                     page.on("response", on_response)
 
                     url = f"https://comix.to/title/{work_id}/{release_id}"
-                    page.goto(url, wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(3000)
+                    page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                    page.wait_for_timeout(1500)
+
+                    self._assert_page_clean_sync(page, f"release '{release_id}'")
 
                     # Extract images directly from DOM as well
                     dom_imgs = page.evaluate("""() => {
@@ -479,6 +493,8 @@ class ComixProvider(MangaSourceProvider):
 
                 finally:
                     browser.close()
+        except SourceRequiresSessionError:
+            raise
         except Exception as e:
             logger.error(f"Playwright error fetching pages for Comix release '{release_id}': {e}")
             raise SourceUnavailableError(f"Failed to resolve pages for Comix release '{release_id}': {e}")

@@ -206,3 +206,49 @@ async def test_datasources_router_endpoints():
         )
         assert len(res_page.items) == 1
         assert res_page.items[0].id == "rel-uuid-001"
+
+
+@pytest.mark.anyio
+async def test_resolve_source_work_requires_session_raises_403():
+    from fastapi import HTTPException
+
+    from backend.models.datasource import SourceRequiresSessionError
+    from backend.routers.datasources import ResolveSourceRequest, resolve_source_work
+
+    mock_provider = AsyncMock()
+    mock_provider.name = "comix"
+    mock_provider.resolve_work = AsyncMock(side_effect=SourceRequiresSessionError("Anti-bot verification required"))
+
+    with patch("backend.routers.datasources.get_datasource_provider", return_value=mock_provider):
+        req = ResolveSourceRequest(
+            url_or_id="https://comix.to/title/r9j5m-yajin",
+            provider_hint="comix",
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await resolve_source_work(req)
+        assert exc_info.value.status_code == 403
+        assert "Anti-bot verification required" in exc_info.value.detail
+
+
+@pytest.mark.anyio
+async def test_list_source_releases_requires_session_raises_403():
+    from fastapi import HTTPException
+
+    from backend.models.datasource import SourceRequiresSessionError
+    from backend.routers.datasources import list_source_releases
+
+    mock_provider = AsyncMock()
+    mock_provider.name = "comix"
+    mock_provider.list_releases = AsyncMock(side_effect=SourceRequiresSessionError("Session expired, warmup required"))
+
+    with patch("backend.routers.datasources.get_datasource_provider", return_value=mock_provider):
+        with pytest.raises(HTTPException) as exc_info:
+            await list_source_releases(
+                provider_name="comix",
+                work_id="r9j5m",
+                lang="en",
+                limit=500,
+                offset=0,
+            )
+        assert exc_info.value.status_code == 403
+        assert "Session expired, warmup required" in exc_info.value.detail

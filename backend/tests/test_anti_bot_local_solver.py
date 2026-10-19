@@ -62,6 +62,12 @@ def test_session_store_save_load_and_clear(temp_session_dir):
         if c["name"] == "cf_clearance":
             assert c["value"] == "sec***123"
 
+    # Session file and path getters
+    session_file = store.get_session_file(provider)
+    assert session_file.name == "storage_state.json"
+    assert session_file.exists()
+    assert store.get_session_path(provider) == str(session_file)
+
     # Clear session
     store.clear_session(provider)
     assert not store.has_valid_session(provider)

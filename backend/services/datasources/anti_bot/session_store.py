@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,14 @@ class SessionStore:
 
     def _get_session_path(self, provider: str) -> str:
         return os.path.join(self._get_provider_dir(provider), "storage_state.json")
+
+    def get_session_file(self, provider: str = "comix") -> Path:
+        """Returns the Path to the session storage_state.json for the given provider."""
+        return Path(self._get_session_path(provider))
+
+    def get_session_path(self, provider: str = "comix") -> str:
+        """Returns the string path to the session storage_state.json for the given provider."""
+        return self._get_session_path(provider)
 
     def has_valid_session(self, provider: str) -> bool:
         """
