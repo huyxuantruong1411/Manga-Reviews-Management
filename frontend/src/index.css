@@ -154,6 +154,12 @@ svg.recharts-surface:focus {
 }
 
 /* Editor utilities and Tiptap custom styling */
+.editor-content-wrapper .ProseMirror {
+	outline: none;
+	min-height: 380px;
+	padding-top: 0.5rem;
+}
+
 .editor-content-wrapper .ProseMirror p.is-editor-empty:first-child::before {
 	content: attr(data-placeholder);
 	float: left;
@@ -272,6 +278,11 @@ svg.recharts-surface:focus {
 	border-color: rgba(2, 132, 199, 0.6);
 	text-decoration-color: #0284c7;
 	box-shadow: 0 0 8px rgba(2, 132, 199, 0.15);
+}
+
+/* Floating toolbars & Bubble menus */
+.floating-toolbar {
+	z-index: 50;
 }
 
 /* Animations */

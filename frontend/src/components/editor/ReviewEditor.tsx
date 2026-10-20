@@ -1809,7 +1809,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 
 				{/* Toolbar */}
 				<div
-					className="sticky z-30 py-2 bg-[var(--bg-card)]"
+					className="sticky z-30 py-2.5 bg-[var(--bg-card)] mb-4 border-b border-[var(--border-primary)]/40"
 					style={{ top: `${64 + headerHeight}px` }}
 				>
 					<EditorToolbar
@@ -1826,7 +1826,7 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 				</div>
 
 				{/* Editor Area with slash command support */}
-				<div className="relative prose prose-zinc dark:prose-invert max-w-none text-base leading-relaxed editor-content-wrapper pb-12">
+				<div className="relative prose prose-zinc dark:prose-invert max-w-none text-base leading-relaxed editor-content-wrapper pb-12 pt-2">
 					<SlashCommandMenu
 						editor={editor}
 						onImageUpload={() => fileInputRef.current?.click()}
@@ -1842,7 +1842,13 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 					{editor && (
 						<BubbleMenu
 							editor={editor}
+							pluginKey="tableBubbleMenu"
 							shouldShow={({ editor }) => editor.isActive("table")}
+							options={{
+								placement: "bottom",
+								offset: 10,
+							}}
+							className="z-50"
 						>
 							<div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-xl px-2 py-1.5 text-xs font-semibold text-[var(--text-secondary)] floating-toolbar animate-in fade-in zoom-in-95 duration-100">
 								<button
@@ -2012,7 +2018,13 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 					{editor && (
 						<BubbleMenu
 							editor={editor}
+							pluginKey="linkBubbleMenu"
 							shouldShow={({ editor }) => editor.isActive("link")}
+							options={{
+								placement: "bottom",
+								offset: 10,
+							}}
+							className="z-50"
 						>
 							<div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-2xl p-1.5 text-xs text-[var(--text-primary)] floating-toolbar animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md">
 								<a
