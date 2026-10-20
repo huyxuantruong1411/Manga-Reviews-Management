@@ -213,6 +213,67 @@ svg.recharts-surface:focus {
 	text-decoration: none !important;
 }
 
+/* Review Editor: Distinctive URL Highlight & Links */
+.editor-content-wrapper .ProseMirror a:not(.manga-reference-link),
+.editor-content-wrapper .ProseMirror .editor-url-link,
+.editor-content-wrapper .ProseMirror .editor-url-highlight {
+	color: #38bdf8;
+	background: rgba(56, 189, 248, 0.12);
+	border: 1px solid rgba(56, 189, 248, 0.32);
+	padding: 1px 7px;
+	margin: 0 1px;
+	border-radius: 6px;
+	font-weight: 500;
+	text-decoration: underline;
+	text-decoration-color: rgba(56, 189, 248, 0.55);
+	text-underline-offset: 3px;
+	text-decoration-thickness: 1.5px;
+	transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+	cursor: pointer;
+	word-break: break-all;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+}
+
+.editor-content-wrapper .ProseMirror a:not(.manga-reference-link):hover,
+.editor-content-wrapper .ProseMirror .editor-url-link:hover,
+.editor-content-wrapper .ProseMirror .editor-url-highlight:hover {
+	color: #e0f2fe;
+	background: rgba(56, 189, 248, 0.24);
+	border-color: rgba(56, 189, 248, 0.65);
+	text-decoration-color: #38bdf8;
+	box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+/* Light mode adjustments for URL highlight */
+:root:not(.dark)
+	.editor-content-wrapper
+	.ProseMirror
+	a:not(.manga-reference-link),
+:root:not(.dark) .editor-content-wrapper .ProseMirror .editor-url-link,
+:root:not(.dark) .editor-content-wrapper .ProseMirror .editor-url-highlight {
+	color: #0284c7;
+	background: rgba(2, 132, 199, 0.08);
+	border-color: rgba(2, 132, 199, 0.28);
+	text-decoration-color: rgba(2, 132, 199, 0.5);
+}
+
+:root:not(.dark)
+	.editor-content-wrapper
+	.ProseMirror
+	a:not(.manga-reference-link):hover,
+:root:not(.dark) .editor-content-wrapper .ProseMirror .editor-url-link:hover,
+:root:not(.dark)
+	.editor-content-wrapper
+	.ProseMirror
+	.editor-url-highlight:hover {
+	color: #0369a1;
+	background: rgba(2, 132, 199, 0.16);
+	border-color: rgba(2, 132, 199, 0.6);
+	text-decoration-color: #0284c7;
+	box-shadow: 0 0 8px rgba(2, 132, 199, 0.15);
+}
+
 /* Animations */
 @keyframes pulse-subtle {
 	0%,

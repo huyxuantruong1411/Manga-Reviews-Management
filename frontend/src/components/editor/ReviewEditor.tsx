@@ -25,11 +25,15 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import {
 	BookOpen,
+	Copy,
+	ExternalLink,
 	FileText,
 	HelpCircle,
 	Loader2,
+	Pen,
 	Search,
 	Trash2,
+	Unlink,
 	X,
 	PlayCircle as YoutubeIcon,
 } from "lucide-react";
@@ -49,6 +53,7 @@ import { MangaReferenceExtension } from "./MangaReferenceExtension.ts";
 import { MangaReferenceTooltip } from "./MangaReferenceTooltip.tsx";
 import { ResizableImageExtension } from "./ResizableImageExtension.ts";
 import { SlashCommandMenu } from "./SlashCommandMenu.tsx";
+import { UrlHighlightExtension } from "./UrlHighlightExtension";
 import { VideoExtension } from "./VideoExtension.tsx";
 
 export type EditorWidth = "compact" | "standard" | "wide" | "full";
@@ -457,7 +462,18 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 			Underline,
 			TextStyle,
 			Highlight.configure({ multicolor: true }),
-			Link.configure({ openOnClick: false, autolink: true }),
+			Link.configure({
+				openOnClick: false,
+				autolink: true,
+				linkOnPaste: true,
+				defaultProtocol: "https",
+				HTMLAttributes: {
+					class: "editor-url-link",
+					target: "_blank",
+					rel: "noopener noreferrer",
+				},
+			}),
+			UrlHighlightExtension,
 			TaskList,
 			TaskItem.configure({ nested: true }),
 			MangaReferenceExtension,
@@ -1987,6 +2003,78 @@ export const ReviewEditor: React.FC<ReviewEditorProps> = ({
 								>
 									<Trash2 size={14} />
 									<span className="text-[10px] font-bold">Xóa Bảng</span>
+								</button>
+							</div>
+						</BubbleMenu>
+					)}
+
+					{/* Floating Bubble Menu for Links */}
+					{editor && (
+						<BubbleMenu
+							editor={editor}
+							shouldShow={({ editor }) => editor.isActive("link")}
+						>
+							<div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-2xl p-1.5 text-xs text-[var(--text-primary)] floating-toolbar animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md">
+								<a
+									href={editor.getAttributes("link").href}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="px-2 py-1 max-w-[200px] sm:max-w-[260px] truncate text-sky-400 hover:text-sky-300 font-mono text-[11px] font-semibold hover:underline flex items-center gap-1.5 cursor-pointer"
+									title="Mở liên kết trong tab mới"
+								>
+									<ExternalLink size={12} className="shrink-0" />
+									<span className="truncate">
+										{editor.getAttributes("link").href}
+									</span>
+								</a>
+
+								<div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
+
+								<button
+									type="button"
+									onClick={() => {
+										const href = editor.getAttributes("link").href;
+										if (href) {
+											navigator.clipboard.writeText(href);
+											showToast("Đã sao chép liên kết!", "success");
+										}
+									}}
+									className="p-1.5 hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition cursor-pointer"
+									title="Sao chép URL"
+								>
+									<Copy size={13} />
+								</button>
+
+								<button
+									type="button"
+									onClick={() => {
+										const currentHref = editor.getAttributes("link").href || "";
+										const newUrl = window.prompt("Nhập URL mới:", currentHref);
+										if (newUrl !== null) {
+											if (newUrl.trim()) {
+												editor
+													.chain()
+													.focus()
+													.setLink({ href: newUrl.trim() })
+													.run();
+											} else {
+												editor.chain().focus().unsetLink().run();
+											}
+										}
+									}}
+									className="p-1.5 hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition cursor-pointer"
+									title="Chỉnh sửa liên kết"
+								>
+									<Pen size={13} />
+								</button>
+
+								<button
+									type="button"
+									onClick={() => editor.chain().focus().unsetLink().run()}
+									className="p-1.5 hover:bg-rose-500/15 text-rose-500 rounded-lg transition cursor-pointer"
+									title="Gỡ bỏ liên kết"
+								>
+									<Unlink size={13} />
 								</button>
 							</div>
 						</BubbleMenu>
