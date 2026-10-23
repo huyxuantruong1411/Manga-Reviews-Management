@@ -2,6 +2,7 @@ import {
 	BarChart3,
 	BookOpen,
 	Compass,
+	Database,
 	DownloadCloud,
 	History,
 	Info,
@@ -256,6 +257,20 @@ export const Layout: React.FC = () => {
 					>
 						<RefreshCw size={20} />
 						<span>Sync Manager</span>
+					</NavLink>
+
+					<NavLink
+						to="/datalake-pool"
+						className={({ isActive }) =>
+							`flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+								isActive
+									? "bg-[var(--brand-orange)] text-white"
+									: "text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
+							}`
+						}
+					>
+						<Database size={20} />
+						<span>Storage Pool (ETL)</span>
 					</NavLink>
 
 					<NavLink

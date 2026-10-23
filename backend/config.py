@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     mongodb_uri: str = Field(default="mongodb://localhost:27017")
     database_name: str = Field(default="manga_library")
+    pool_database_name: str = Field(default="manga_datalake_pool")
 
     minio_endpoint: str = Field(default="localhost:9000")
     minio_access_key: str = Field(default="admin")

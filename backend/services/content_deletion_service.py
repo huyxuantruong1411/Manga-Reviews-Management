@@ -4,7 +4,10 @@ These operations are idempotent, but not a transaction across MongoDB and S3.
 Concurrent import/scanner writes still require a durable deletion fence.
 """
 
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 class DeletionBusyError(RuntimeError):
@@ -28,6 +31,27 @@ async def source_object_is_shared(db, key: str, *, chapter_id=None, manga_id=Non
     for collection, query in ((db.chapters, chapters), (db.mangas, mangas), (db.cover_arts, covers)):
         if await collection.find_one(query, {"_id": 1}):
             return True
+
+    # Check pool database to protect data lake / reader pool media references
+    try:
+        from backend.database.connection import get_pool_db
+
+        pool_db = get_pool_db()
+        if await pool_db.pool_chapters.find_one({"pages.object_key": key}, {"_id": 1}):
+            return True
+        if await pool_db.pool_mangas.find_one(
+            {"$or": [{"primary_cover.object_key": key}, {"cover_arts.object_key": key}]},
+            {"_id": 1},
+        ):
+            return True
+    except RuntimeError:
+        # Pool DB connection not initialized (e.g. running in isolated test mock)
+        pass
+    except Exception as e:
+        # Fail closed on storage protection if pool query errors
+        logger.warning(f"Error checking pool DB references for key {key}, failing closed: {e}")
+        return True
+
     return False
 
 

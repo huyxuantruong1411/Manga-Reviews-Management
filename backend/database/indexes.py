@@ -315,7 +315,20 @@ async def init_db_indexes():
         )
 
         await ensure_deletion_reference_indexes(db)
+        await init_pool_db_indexes()
 
         logger.info("Database indexes initialized successfully.")
     except Exception as e:
         logger.error(f"Error initializing indexes: {e}")
+
+
+async def init_pool_db_indexes():
+    """Initialize indexes on the data lake pool database."""
+    logger.info("Initializing pool database indexes...")
+    try:
+        from backend.database.migrations.m_20261024_datalake_pool_indexes import upgrade as upgrade_pool_indexes
+
+        await upgrade_pool_indexes()
+        logger.info("Pool database indexes initialized successfully.")
+    except Exception as e:
+        logger.error(f"Error initializing pool database indexes: {e}")

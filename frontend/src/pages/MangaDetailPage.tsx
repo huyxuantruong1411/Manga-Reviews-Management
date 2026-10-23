@@ -34,6 +34,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import { publishToPool } from "../api/datalakePool";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
@@ -914,6 +915,35 @@ export const MangaDetailPage: React.FC = () => {
 	const [detailError, setDetailError] = useState("");
 	const detailRequestRef = useRef<AbortController | null>(null);
 	const [zoomedCoverUrl, setZoomedCoverUrl] = useState<string | null>(null);
+	const [pushingToPool, setPushingToPool] = useState(false);
+
+	const handlePushToPool = async () => {
+		if (!manga?._id) return;
+		try {
+			setPushingToPool(true);
+			const res = await publishToPool({
+				source_manga_ids: [manga._id],
+				auto_deduplicate_pages: false,
+				mark_etl_ready: true,
+			});
+			if (res.success_count > 0) {
+				showToast(
+					"Đã đóng gói và đẩy manga vào Storage Pool thành công!",
+					"success",
+				);
+			} else {
+				showToast(
+					res.results[0]?.error || "Không thể đẩy vào Storage Pool",
+					"warning",
+				);
+			}
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : "Đẩy vào Pool thất bại";
+			showToast(msg, "error");
+		} finally {
+			setPushingToPool(false);
+		}
+	};
 
 	// Parallel Tab States & URL sync
 	const tabParam = searchParams.get("tab");
@@ -3083,6 +3113,21 @@ export const MangaDetailPage: React.FC = () => {
 							>
 								<Sparkles size={13} className="shrink-0" />
 								<span>So sánh Metadata</span>
+							</button>
+
+							<button
+								type="button"
+								onClick={handlePushToPool}
+								disabled={pushingToPool}
+								className="flex items-center space-x-1.5 px-3 py-2 border border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-500/5 hover:bg-orange-500/15 rounded-xl font-bold text-xs transition disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
+								title="Đóng gói và đẩy bộ truyện này vào Storage Pool (Data Lake)"
+							>
+								<Database size={13} className="shrink-0" />
+								<span>
+									{pushingToPool
+										? "Đang đẩy vào Pool..."
+										: "Đẩy vào Storage Pool"}
+								</span>
 							</button>
 
 							<button

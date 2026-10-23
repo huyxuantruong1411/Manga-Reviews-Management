@@ -19,6 +19,7 @@ const PanelWordsDetectorPage = lazy(
 const TranslationStudioPage = lazy(
 	() => import("./pages/TranslationStudioPage"),
 );
+const DataLakePoolPage = lazy(() => import("./pages/DataLakePoolPage"));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "./components/common/ErrorBoundary";
@@ -67,6 +68,11 @@ export const App: React.FC = () => {
 											element={<TranslationStudioPage />}
 										/>
 										<Route path="studio" element={<TranslationStudioPage />} />
+										<Route
+											path="datalake-pool"
+											element={<DataLakePoolPage />}
+										/>
+										<Route path="reader-pool" element={<DataLakePoolPage />} />
 										<Route
 											path="*"
 											element={

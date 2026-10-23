@@ -16,6 +16,7 @@ from backend.routers import (
     chapters,
     cover_arts,
     creators,
+    datalake_pool,
     datasources,
     downloads,
     external_reviews,
@@ -117,6 +118,7 @@ app.include_router(recommendations.router)
 app.include_router(sync_manager.router)
 app.include_router(audit_logs.router)
 app.include_router(chapters.router)
+app.include_router(datalake_pool.router)
 app.include_router(vision.router)
 app.include_router(tasks.router)
 app.include_router(translation.router)
