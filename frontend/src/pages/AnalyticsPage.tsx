@@ -42,6 +42,10 @@ import {
 	type OverviewVelocity,
 	StorytellingKPIDeck,
 } from "../components/analytics/StorytellingKPIDeck";
+import {
+	ChartPanelSkeleton,
+	TableRowsSkeleton,
+} from "../components/loading/PageSkeletons";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 
 interface Tag {
@@ -173,14 +177,7 @@ const DeferredChartsWrapper: React.FC<DeferredChartsWrapperProps> = ({
 	}, [delay]);
 
 	if (!isReady) {
-		return (
-			<div className="flex flex-col items-center justify-center py-12 space-y-3 w-full">
-				<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
-				<span className="text-xs text-[var(--text-secondary)] font-medium animate-pulse">
-					Analyzing distributions and rendering visualizations...
-				</span>
-			</div>
-		);
+		return <ChartPanelSkeleton height="h-72" />;
 	}
 
 	return <>{children}</>;
@@ -3097,9 +3094,11 @@ export const AnalyticsPage: React.FC = () => {
 								</div>
 							) : /* Show All & Analyze Distributions layout */
 							creatorsDetailsLoading ? (
-								<div className="flex justify-center items-center py-16">
-									<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
-								</div>
+								<TableRowsSkeleton
+									rows={6}
+									cols={4}
+									label="Đang tải danh sách tác giả và họa sĩ..."
+								/>
 							) : (
 								(() => {
 									const list =
@@ -3826,9 +3825,11 @@ export const AnalyticsPage: React.FC = () => {
 							)
 						) : /* Render detailed interactive tag dashboard */
 						tagDetailsLoading ? (
-							<div className="flex justify-center items-center py-16">
-								<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
-							</div>
+							<TableRowsSkeleton
+								rows={6}
+								cols={3}
+								label="Đang tải dữ liệu phân tích tag..."
+							/>
 						) : (
 							(() => {
 								const filteredTagDetails = tagDetails.filter((t) =>

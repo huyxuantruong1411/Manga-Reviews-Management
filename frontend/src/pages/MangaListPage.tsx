@@ -22,6 +22,11 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import client, { apiErrorMessage } from "../api/client";
+import {
+	MangaDetailedCardsSkeleton,
+	MangaGridSkeleton,
+	MangaListRowsSkeleton,
+} from "../components/loading/PageSkeletons";
 import { BlurredCover } from "../components/ui/BlurredCover";
 import { Button } from "../components/ui/button";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
@@ -1843,9 +1848,13 @@ export const MangaListPage: React.FC = () => {
 
 			{/* Manga Grid/List/Card List */}
 			{loading ? (
-				<div className="flex justify-center items-center py-24">
-					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
-				</div>
+				viewMode === "list" ? (
+					<MangaListRowsSkeleton count={8} />
+				) : viewMode === "card" ? (
+					<MangaDetailedCardsSkeleton count={6} />
+				) : (
+					<MangaGridSkeleton count={8} />
+				)
 			) : libraryError ? (
 				<div
 					role="alert"

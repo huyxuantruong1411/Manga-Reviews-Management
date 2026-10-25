@@ -17,12 +17,13 @@ import {
 	X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import { type BlurSettings, useMangaBlur } from "../../hooks/useMangaBlur";
 import { requestDesktopNotificationPermission } from "../../services/notificationService";
+import { DefaultPageSkeleton } from "../loading/PageSkeletons";
 import DownloadWidget from "../ui/DownloadWidget";
 import { GroupedTagSelector } from "../ui/GroupedTagSelector";
 import { ScrollToTopButton } from "../ui/ScrollToTopButton";
@@ -334,7 +335,9 @@ export const Layout: React.FC = () => {
 
 				{/* Page View */}
 				<main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-8">
-					<Outlet />
+					<Suspense fallback={<DefaultPageSkeleton />}>
+						<Outlet />
+					</Suspense>
 				</main>
 			</div>
 

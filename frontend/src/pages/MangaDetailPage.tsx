@@ -36,6 +36,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { publishToPool } from "../api/datalakePool";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
+import { MangaDetailSkeleton } from "../components/loading/PageSkeletons";
 import { ChapterStorageManager } from "../components/manga/ChapterStorageManager";
 import { CoverArtGallery } from "../components/manga/CoverArtGallery";
 import { SourceDownloadDialog } from "../components/manga/download/SourceDownloadDialog";
@@ -47,6 +48,7 @@ import { RecommendationsPanel } from "../components/manga/RecommendationsPanel";
 import { BlurredCover } from "../components/ui/BlurredCover";
 import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 import { useDownload } from "../hooks/useDownload";
 import { useMangaBlur } from "../hooks/useMangaBlur";
@@ -2572,11 +2574,7 @@ export const MangaDetailPage: React.FC = () => {
 	}
 
 	if (loading || !manga) {
-		return (
-			<div className="flex justify-center items-center h-96">
-				<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
-			</div>
-		);
+		return <MangaDetailSkeleton />;
 	}
 
 	const isEditingReview = !!selectedReview || isCreatingReview;
@@ -5523,14 +5521,20 @@ export const MangaDetailPage: React.FC = () => {
 
 								{/* Chapter Cards Grid */}
 								{loadingChapters ? (
-									<div className="flex flex-col justify-center items-center py-16 space-y-3">
-										<Loader2
-											size={32}
-											className="animate-spin text-[var(--brand-orange)]"
-										/>
-										<p className="text-xs text-[var(--text-secondary)] font-medium">
+									<div
+										role="status"
+										aria-busy="true"
+										className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[340px] p-1 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]/50"
+									>
+										<span className="sr-only">
 											Đang tải danh sách chương từ MangaDex...
-										</p>
+										</span>
+										{Array.from(
+											{ length: 6 },
+											(_, i) => `skel-chap-load-${i}`,
+										).map((k) => (
+											<Skeleton key={k} className="h-16 rounded-xl" />
+										))}
 									</div>
 								) : filteredChapters.length > 0 ? (
 									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[340px] overflow-y-auto p-1 border border-[var(--border-primary)] rounded-2xl bg-[var(--bg-primary)]/50">

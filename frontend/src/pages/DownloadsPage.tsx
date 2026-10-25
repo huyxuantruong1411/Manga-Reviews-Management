@@ -18,12 +18,14 @@ import {
 import type React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Skeleton } from "../components/ui/skeleton";
 import { useDownload } from "../hooks/useDownload";
 
 export const DownloadsPage: React.FC = () => {
 	const navigate = useNavigate();
 	const {
 		tasks,
+		initialLoading,
 		cancelTask,
 		resumeTask,
 		deleteTask,
@@ -183,7 +185,40 @@ export const DownloadsPage: React.FC = () => {
 
 			{/* Main List */}
 			<div className="space-y-4">
-				{filteredTasks.length === 0 ? (
+				{initialLoading ? (
+					<div role="status" aria-busy="true" className="space-y-4">
+						<span className="sr-only">
+							Đang tải danh sách tác vụ tải xuống...
+						</span>
+						{Array.from({ length: 3 }, (_, i) => `skel-download-${i}`).map(
+							(k) => (
+								<div
+									key={k}
+									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col lg:flex-row gap-6 justify-between"
+								>
+									<div className="flex-1 space-y-3">
+										<div className="flex items-center gap-3">
+											<Skeleton className="h-6 w-56 rounded-lg" />
+											<Skeleton className="h-6 w-20 rounded-full" />
+										</div>
+										<Skeleton className="h-4 w-72 rounded" />
+										<Skeleton className="h-8 w-full max-w-xl rounded-xl" />
+									</div>
+									<div className="w-full lg:w-72 flex flex-col justify-between gap-4">
+										<div className="space-y-2">
+											<div className="flex justify-between">
+												<Skeleton className="h-3 w-20 rounded" />
+												<Skeleton className="h-3 w-10 rounded" />
+											</div>
+											<Skeleton className="h-2.5 w-full rounded-full" />
+										</div>
+										<Skeleton className="h-8 w-full rounded-xl" />
+									</div>
+								</div>
+							),
+						)}
+					</div>
+				) : filteredTasks.length === 0 ? (
 					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl py-16 flex flex-col items-center justify-center text-center space-y-3">
 						<div className="p-4 bg-zinc-100 dark:bg-zinc-850 rounded-full text-zinc-400">
 							<Download size={36} />

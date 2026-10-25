@@ -35,6 +35,7 @@ export interface DownloadTask {
 interface DownloadContextType {
 	tasks: DownloadTask[];
 	activeTasksCount: number;
+	initialLoading: boolean;
 	cancelTask: (taskId: string) => Promise<boolean>;
 	resumeTask: (taskId: string) => Promise<boolean>;
 	deleteTask: (taskId: string) => Promise<boolean>;
@@ -52,6 +53,7 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({
 	children,
 }) => {
 	const [tasks, setTasks] = useState<DownloadTask[]>([]);
+	const [initialLoading, setInitialLoading] = useState(true);
 	const [isWidgetOpen, setIsWidgetOpen] = useState(false);
 	const { showToast } = useAlert();
 
@@ -105,6 +107,10 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({
 		} catch (err) {
 			console.error("Error fetching download tasks:", err);
 			return null;
+		} finally {
+			if (isMountedRef.current) {
+				setInitialLoading(false);
+			}
 		}
 	};
 
@@ -245,6 +251,7 @@ export const DownloadProvider: React.FC<{ children: ReactNode }> = ({
 			value={{
 				tasks,
 				activeTasksCount,
+				initialLoading,
 				cancelTask,
 				resumeTask,
 				deleteTask,

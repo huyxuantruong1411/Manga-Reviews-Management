@@ -31,6 +31,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { ApplicationLogsTab } from "../components/logs/ApplicationLogsTab";
 import { KibanaEmbedTab } from "../components/logs/KibanaEmbedTab";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 
 interface AuditLogItem {
@@ -574,9 +575,11 @@ export const AuditLogsPage: React.FC = () => {
 							</div>
 							<div className="flex items-baseline space-x-2">
 								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading
-										? "..."
-										: (stats?.total_logs ?? total).toLocaleString()}
+									{statsLoading ? (
+										<Skeleton className="h-7 w-20 inline-block rounded" />
+									) : (
+										(stats?.total_logs ?? total).toLocaleString()
+									)}
 								</span>
 								<span className="text-[11px] text-[var(--text-secondary)]">
 									audit records
@@ -600,9 +603,11 @@ export const AuditLogsPage: React.FC = () => {
 							</div>
 							<div className="flex items-baseline space-x-2">
 								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading
-										? "..."
-										: (stats?.manga_logs ?? 0).toLocaleString()}
+									{statsLoading ? (
+										<Skeleton className="h-7 w-16 inline-block rounded" />
+									) : (
+										(stats?.manga_logs ?? 0).toLocaleString()
+									)}
 								</span>
 								<span className="text-[11px] text-[var(--text-secondary)]">
 									actions
@@ -623,9 +628,11 @@ export const AuditLogsPage: React.FC = () => {
 							</div>
 							<div className="flex items-baseline space-x-2">
 								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading
-										? "..."
-										: (stats?.review_logs ?? 0).toLocaleString()}
+									{statsLoading ? (
+										<Skeleton className="h-7 w-16 inline-block rounded" />
+									) : (
+										(stats?.review_logs ?? 0).toLocaleString()
+									)}
 								</span>
 								<span className="text-[11px] text-[var(--text-secondary)]">
 									entries
@@ -646,9 +653,11 @@ export const AuditLogsPage: React.FC = () => {
 							</div>
 							<div className="flex items-baseline space-x-2">
 								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading
-										? "..."
-										: (stats?.last_24h_count ?? 0).toLocaleString()}
+									{statsLoading ? (
+										<Skeleton className="h-7 w-16 inline-block rounded" />
+									) : (
+										(stats?.last_24h_count ?? 0).toLocaleString()
+									)}
 								</span>
 								<span className="text-[11px] text-purple-400 font-medium">
 									recent actions
@@ -792,22 +801,34 @@ export const AuditLogsPage: React.FC = () => {
 								</thead>
 								<tbody className="divide-y divide-[var(--border-primary)]">
 									{loading ? (
-										<tr>
-											<td
-												colSpan={6}
-												className="py-16 text-center text-zinc-400"
-											>
-												<div className="flex flex-col items-center justify-center space-y-2">
-													<RefreshCw
-														size={24}
-														className="animate-spin text-[var(--brand-orange)]"
-													/>
-													<span className="text-xs">
-														Loading audit stream...
-													</span>
-												</div>
-											</td>
-										</tr>
+										Array.from(
+											{ length: 6 },
+											(_, i) => `skel-audit-row-${i}`,
+										).map((k) => (
+											<tr key={k} className="hover:bg-muted/10">
+												<td className="py-3 px-4">
+													<Skeleton className="h-4 w-28 rounded" />
+												</td>
+												<td className="py-3 px-4">
+													<Skeleton className="h-6 w-16 rounded-full" />
+												</td>
+												<td className="py-3 px-4">
+													<Skeleton className="h-5 w-24 rounded-md" />
+												</td>
+												<td className="py-3 px-4">
+													<div className="space-y-1">
+														<Skeleton className="h-4 w-40 rounded" />
+														<Skeleton className="h-3 w-24 rounded" />
+													</div>
+												</td>
+												<td className="py-3 px-4">
+													<Skeleton className="h-4 w-full max-w-sm rounded" />
+												</td>
+												<td className="py-3 px-4 text-right">
+													<Skeleton className="h-7 w-12 rounded-lg ml-auto" />
+												</td>
+											</tr>
+										))
 									) : logs.length === 0 ? (
 										<tr>
 											<td

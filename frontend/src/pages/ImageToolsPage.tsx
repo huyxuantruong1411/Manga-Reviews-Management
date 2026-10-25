@@ -20,6 +20,7 @@ import {
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 
 interface Manga {
@@ -719,9 +720,13 @@ export const ImageToolsPage: React.FC = () => {
 								isMangaLoading ? "opacity-50 cursor-not-allowed" : ""
 							}`}
 						>
-							<span className="truncate">
-								{mangas.find((m) => m._id === selectedMangaId)?.title ||
-									"-- Custom Path / All Directories --"}
+							<span className="truncate flex-1">
+								{isMangaLoading ? (
+									<Skeleton className="h-4 w-44 rounded" />
+								) : (
+									mangas.find((m) => m._id === selectedMangaId)?.title ||
+									"-- Custom Path / All Directories --"
+								)}
 							</span>
 							<span className="text-[var(--text-secondary)] flex-shrink-0 ml-2">
 								{isMangaDropdownOpen ? (
@@ -847,9 +852,9 @@ export const ImageToolsPage: React.FC = () => {
 						</div>
 
 						{isLoadingPath && (
-							<p className="text-xs text-[var(--text-secondary)] mt-1 animate-pulse">
-								Resolving stored download path...
-							</p>
+							<div className="flex items-center gap-2 mt-2">
+								<Skeleton className="h-4 w-52 rounded" />
+							</div>
 						)}
 					</div>
 				</div>

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import client from "../../api/client";
+import { Skeleton } from "./skeleton";
 
 interface CreatorMultiSelectProps {
 	label: string;
@@ -171,8 +172,11 @@ export const CreatorMultiSelect: React.FC<CreatorMultiSelectProps> = ({
 					{/* Suggestions list */}
 					<div className="overflow-y-auto flex-1 max-h-48 space-y-0.5 pr-1">
 						{loading ? (
-							<div className="flex justify-center items-center py-4">
-								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[var(--brand-orange)]"></div>
+							<div className="p-2 space-y-1.5" role="status" aria-busy="true">
+								<span className="sr-only">Đang tìm gợi ý...</span>
+								<Skeleton className="h-6 w-full rounded-md" />
+								<Skeleton className="h-6 w-4/5 rounded-md" />
+								<Skeleton className="h-6 w-2/3 rounded-md" />
 							</div>
 						) : suggestions.length === 0 && !showAddCustomOption ? (
 							<div className="text-zinc-500 text-xs py-2 text-center">

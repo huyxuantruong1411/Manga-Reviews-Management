@@ -1,9 +1,10 @@
-import { BookOpen, Loader2, Star, User } from "lucide-react";
+import { BookOpen, Star, User } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import client from "../../api/client";
 import { useMangaBlur } from "../../hooks/useMangaBlur";
 import { BlurredCover } from "../ui/BlurredCover";
+import { Skeleton } from "../ui/skeleton";
 
 interface MangaReferenceTooltipProps {
 	mangaId: string;
@@ -88,8 +89,14 @@ export const MangaReferenceTooltip: React.FC<MangaReferenceTooltipProps> = ({
 			}}
 		>
 			{loading && (
-				<div className="flex items-center justify-center py-4 w-48">
-					<Loader2 className="w-5 height-5 animate-spin text-[var(--brand-orange)]" />
+				<div role="status" aria-busy="true" className="flex space-x-3 w-64">
+					<span className="sr-only">Đang tải thông tin manga...</span>
+					<Skeleton className="w-16 h-24 rounded-lg shrink-0" />
+					<div className="space-y-2 flex-1 pt-1">
+						<Skeleton className="h-4 w-full rounded" />
+						<Skeleton className="h-3 w-3/4 rounded" />
+						<Skeleton className="h-3 w-1/2 rounded" />
+					</div>
 				</div>
 			)}
 

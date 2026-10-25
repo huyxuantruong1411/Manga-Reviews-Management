@@ -23,6 +23,10 @@ const DataLakePoolPage = lazy(() => import("./pages/DataLakePoolPage"));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import {
+	DefaultPageSkeleton,
+	ReaderPageSkeleton,
+} from "./components/loading/PageSkeletons";
 import { AlertProvider } from "./hooks/useAlert";
 import { DownloadProvider } from "./hooks/useDownload";
 
@@ -33,18 +37,16 @@ export const App: React.FC = () => {
 				<DownloadProvider>
 					<TooltipProvider>
 						<ErrorBoundary>
-							<Suspense
-								fallback={
-									<div role="status" className="p-8 text-center">
-										Đang tải trang...
-									</div>
-								}
-							>
+							<Suspense fallback={<DefaultPageSkeleton />}>
 								<Routes>
 									{/* Dedicated full-screen MangaDex-style reader route */}
 									<Route
 										path="manga/:id/read/:chapterId"
-										element={<MangaReaderPage />}
+										element={
+											<Suspense fallback={<ReaderPageSkeleton />}>
+												<MangaReaderPage />
+											</Suspense>
+										}
 									/>
 
 									<Route path="/" element={<Layout />}>

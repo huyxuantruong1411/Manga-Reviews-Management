@@ -30,6 +30,7 @@ import { FullPageModal } from "../components/manga/FullPageModal";
 import { PanelCard } from "../components/manga/PanelCard";
 import { PanelDetailModal } from "../components/manga/PanelDetailModal";
 import { WordPopover } from "../components/manga/WordPopover";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 import { notifyTaskCompleted } from "../services/notificationService";
 import type { Chapter } from "../types/chapter";
@@ -900,23 +901,30 @@ export const PanelWordsDetectorPage: React.FC = () => {
 
 				{/* Loading State Skeleton */}
 				{loading && (
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+					<div
+						role="status"
+						aria-busy="true"
+						className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+					>
+						<span className="sr-only">
+							Đang tìm kiếm các khung tranh manga...
+						</span>
 						{SKELETON_SLOTS.map((slotId) => (
 							<div
 								key={slotId}
-								className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-card)]/50 p-4 space-y-4 animate-pulse"
+								className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-card)] p-4 space-y-4"
 							>
 								<div className="flex items-center gap-3">
-									<div className="w-8 h-11 bg-zinc-800 rounded-md" />
+									<Skeleton className="w-8 h-11 rounded-md" />
 									<div className="space-y-1.5 flex-1">
-										<div className="h-3 w-3/4 bg-zinc-800 rounded" />
-										<div className="h-2.5 w-1/2 bg-zinc-800/60 rounded" />
+										<Skeleton className="h-3.5 w-3/4 rounded" />
+										<Skeleton className="h-2.5 w-1/2 rounded" />
 									</div>
 								</div>
-								<div className="w-full aspect-[4/3] bg-zinc-800 rounded-xl" />
+								<Skeleton className="w-full aspect-[4/3] rounded-xl" />
 								<div className="space-y-2">
-									<div className="h-3 w-full bg-zinc-800 rounded" />
-									<div className="h-3 w-4/5 bg-zinc-800 rounded" />
+									<Skeleton className="h-3 w-full rounded" />
+									<Skeleton className="h-3 w-4/5 rounded" />
 								</div>
 							</div>
 						))}

@@ -7,7 +7,6 @@ import {
 	ChevronRight,
 	Download,
 	Globe,
-	Loader2,
 	Maximize,
 	Minimize,
 	Minus,
@@ -24,6 +23,7 @@ import client, { apiErrorMessage } from "../api/client";
 import { saveReadingProgress } from "../api/readingProgress";
 import { ReaderTranslationPanel } from "../components/manga/ReaderTranslationPanel";
 import { TranslatedPageImage } from "../components/manga/TranslatedPageImage";
+import { Skeleton } from "../components/ui/skeleton";
 import { useMangaPreloadQueue } from "../hooks/useMangaPreloadQueue";
 import { useTranslation } from "../hooks/useTranslation";
 import type { Chapter, PageItem } from "../types/chapter";
@@ -1122,14 +1122,13 @@ export const MangaReaderPage: React.FC = () => {
 					</div>
 				)}
 				{loadingChapter ? (
-					<div className="py-32 flex flex-col items-center justify-center space-y-3">
-						<Loader2
-							size={36}
-							className="animate-spin text-[var(--brand-orange)]"
-						/>
-						<p className="text-xs text-zinc-400 font-semibold tracking-wide uppercase">
-							Đang nạp các trang truyện...
-						</p>
+					<div
+						role="status"
+						aria-busy="true"
+						className="py-12 flex flex-col items-center justify-center space-y-4 w-full"
+					>
+						<span className="sr-only">Đang nạp các trang truyện...</span>
+						<Skeleton className="w-full max-w-2xl aspect-[2/3] max-h-[75vh] rounded-md bg-zinc-900 border border-zinc-800" />
 					</div>
 				) : pages.length === 0 ? (
 					<div className="py-32 text-center space-y-3">

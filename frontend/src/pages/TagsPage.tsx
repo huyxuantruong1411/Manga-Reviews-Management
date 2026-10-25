@@ -2,6 +2,7 @@ import { Edit2, Plus, Search, Tag as TagIcon, Trash2, X } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import client from "../api/client";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 
 interface Tag {
@@ -495,8 +496,24 @@ export const TagsPage: React.FC = () => {
 					</div>
 
 					{loading ? (
-						<div className="flex justify-center items-center py-12 flex-1">
-							<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-orange)]"></div>
+						<div
+							role="status"
+							aria-busy="true"
+							className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1"
+						>
+							<span className="sr-only">Đang tải danh sách tag...</span>
+							{Array.from({ length: 6 }, (_, i) => `skel-tag-${i}`).map((k) => (
+								<div
+									key={k}
+									className="p-4 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl space-y-3"
+								>
+									<div className="flex items-center gap-2">
+										<Skeleton className="h-5 w-24 rounded" />
+										<Skeleton className="h-4 w-16 rounded" />
+									</div>
+									<Skeleton className="h-3.5 w-3/4 rounded" />
+								</div>
+							))}
 						</div>
 					) : (
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[680px] overflow-y-auto pr-2 pb-0 flex-1">

@@ -10,6 +10,7 @@ import React, { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiUrl } from "../../api/client";
 import type { PanelResult } from "../../types/panel";
+import { MediaImage } from "../ui/MediaImage";
 
 interface PanelCardProps {
 	panel: PanelResult;
@@ -81,10 +82,11 @@ export const PanelCard: React.FC<PanelCardProps> = ({
 						title={`Đi đến trang manga ${panel.manga_title}`}
 					>
 						{panel.manga_cover_url ? (
-							<img
+							<MediaImage
 								src={panel.manga_cover_url}
 								alt={panel.manga_title}
 								className="w-full h-full object-cover"
+								containerClassName="w-full h-full"
 								loading="lazy"
 							/>
 						) : (
@@ -130,11 +132,13 @@ export const PanelCard: React.FC<PanelCardProps> = ({
 
 			{/* 2. Panel Image Container with Crop */}
 			<div className="relative w-full aspect-[4/3] bg-zinc-950/80 overflow-hidden flex items-center justify-center border-b border-[var(--border-primary)]/60">
-				<img
+				<MediaImage
 					src={cropUrl}
 					alt={`Panel ${panel.panel_index + 1} page ${panel.page_number} of ${panel.manga_title}`}
 					loading="lazy"
 					className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.03]"
+					containerClassName="w-full h-full"
+					fallbackText="Không tải được khung tranh"
 				/>
 
 				{/* Hover Quick Actions Overlay */}

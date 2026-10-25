@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import client from "../../api/client";
+import { Skeleton } from "./skeleton";
 
 interface CreatorLiveSearchInputProps {
 	label: string;
@@ -87,8 +88,11 @@ export const CreatorLiveSearchInput: React.FC<CreatorLiveSearchInputProps> = ({
 			{isOpen && (suggestions.length > 0 || loading) && (
 				<div className="absolute z-50 left-0 right-0 mt-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-xl max-h-48 overflow-y-auto">
 					{loading ? (
-						<div className="flex justify-center items-center py-2">
-							<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[var(--brand-orange)]"></div>
+						<div className="p-2 space-y-1.5" role="status" aria-busy="true">
+							<span className="sr-only">Đang tìm gợi ý...</span>
+							<Skeleton className="h-6 w-full rounded-md" />
+							<Skeleton className="h-6 w-3/4 rounded-md" />
+							<Skeleton className="h-6 w-5/6 rounded-md" />
 						</div>
 					) : (
 						suggestions.map((name) => (

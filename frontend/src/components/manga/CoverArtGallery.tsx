@@ -11,6 +11,7 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+import { Skeleton } from "../ui/skeleton";
 
 /** Maps ISO 639-1 / BCP-47 locale codes to human-readable labels */
 const LOCALE_LABELS: Record<string, string> = {
@@ -184,18 +185,18 @@ export const CoverArtGallery: React.FC<CoverArtGalleryProps> = ({
 
 	if (loading) {
 		return (
-			<div className="space-y-6">
+			<div role="status" aria-busy="true" className="space-y-6">
+				<span className="sr-only">Đang tải bộ sưu tập ảnh bìa...</span>
 				<div className="flex justify-between items-center">
-					<div className="h-6 w-32 bg-[var(--border-primary)] rounded animate-pulse" />
-					<div className="h-10 w-36 bg-[var(--border-primary)] rounded-lg animate-pulse" />
+					<Skeleton className="h-6 w-32 rounded" />
+					<Skeleton className="h-10 w-36 rounded-lg" />
 				</div>
 				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-					{Array.from({ length: 6 }).map((_, i) => (
-						<div
-							key={i}
-							className="aspect-[2/3] w-full bg-[var(--border-primary)] rounded-xl animate-pulse"
-						/>
-					))}
+					{Array.from({ length: 6 }, (_, i) => `skel-cover-art-${i}`).map(
+						(k) => (
+							<Skeleton key={k} className="aspect-[2/3] w-full rounded-xl" />
+						),
+					)}
 				</div>
 			</div>
 		);

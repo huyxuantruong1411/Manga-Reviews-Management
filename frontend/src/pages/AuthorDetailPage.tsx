@@ -12,6 +12,7 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import { AuthorDetailSkeleton } from "../components/loading/PageSkeletons";
 import { CreatorTierlistWorkspace } from "../components/tierlist/CreatorTierlistWorkspace";
 import { ConfirmModal } from "../components/tierlist/TierlistFeedbackModal";
 import { BlurredCover } from "../components/ui/BlurredCover";
@@ -319,11 +320,7 @@ export const AuthorDetailPage: React.FC = () => {
 	};
 
 	if (loading) {
-		return (
-			<div className="flex justify-center items-center py-32">
-				<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-orange)]"></div>
-			</div>
-		);
+		return <AuthorDetailSkeleton />;
 	}
 
 	if (error && !author) {

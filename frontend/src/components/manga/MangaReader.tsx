@@ -8,7 +8,6 @@ import {
 	Columns,
 	HelpCircle,
 	Layers,
-	Loader2,
 	Maximize,
 	Minimize,
 	Square,
@@ -18,6 +17,8 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import client from "../../api/client";
 import type { Chapter, PageItem } from "../../types/chapter";
+import { MediaImage } from "../ui/MediaImage";
+import { Skeleton } from "../ui/skeleton";
 
 interface MangaReaderProps {
 	mangaId: string;
@@ -524,14 +525,13 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
 			{/* Main Reading Viewport */}
 			<div className="min-h-[600px] flex items-center justify-center p-4">
 				{loadingPages ? (
-					<div className="py-32 flex flex-col items-center justify-center space-y-3">
-						<Loader2
-							size={36}
-							className="animate-spin text-[var(--brand-orange)]"
-						/>
-						<p className="text-xs text-zinc-400 font-semibold">
-							Đang tải các trang truyện...
-						</p>
+					<div
+						role="status"
+						aria-busy="true"
+						className="py-16 flex flex-col items-center justify-center space-y-4 w-full"
+					>
+						<span className="sr-only">Đang tải các trang truyện...</span>
+						<Skeleton className="w-full max-w-xl aspect-[2/3] max-h-[70vh] rounded-md bg-zinc-900 border border-zinc-800" />
 					</div>
 				) : pages.length === 0 ? (
 					<div className="py-24 text-center space-y-2">
@@ -555,11 +555,13 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
 								className="relative w-full flex justify-center"
 							>
 								{page.url ? (
-									<img
+									<MediaImage
 										src={page.url}
 										alt={`Page ${page.page_number}`}
-										loading="lazy"
 										className={`${getImageFitClass()} shadow-xl rounded-sm`}
+										containerClassName="relative max-w-full flex justify-center"
+										loading="lazy"
+										fallbackText={`Trang #${page.page_number} không tải được`}
 									/>
 								) : (
 									<div className="w-96 h-[600px] bg-zinc-900 flex items-center justify-center text-xs text-zinc-600">
@@ -616,10 +618,13 @@ export const MangaReader: React.FC<MangaReaderProps> = ({
 						{/* Centered Image */}
 						<div className="relative z-10">
 							{pages[currentPage - 1]?.url ? (
-								<img
+								<MediaImage
 									src={pages[currentPage - 1].url!}
 									alt={`Page ${currentPage}`}
 									className={`${getImageFitClass()} shadow-2xl rounded-sm`}
+									containerClassName="relative flex justify-center max-w-full"
+									priority
+									fallbackText={`Trang #${currentPage} không tải được`}
 								/>
 							) : (
 								<div className="w-96 h-[650px] bg-zinc-900 flex items-center justify-center text-zinc-500">

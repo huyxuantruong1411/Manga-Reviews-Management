@@ -25,7 +25,9 @@ import {
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import { TableRowsSkeleton } from "../components/loading/PageSkeletons";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
+import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 
 interface SyncPool {
@@ -1286,11 +1288,33 @@ export const SyncManagerPage: React.FC = () => {
 				</div>
 
 				{loadingPools ? (
-					<div className="flex justify-center py-12">
-						<Loader2
-							className="animate-spin text-[var(--brand-orange)]"
-							size={32}
-						/>
+					<div
+						role="status"
+						aria-busy="true"
+						className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+					>
+						<span className="sr-only">Đang tải danh sách pool đồng bộ...</span>
+						{Array.from({ length: 3 }, (_, i) => `skel-sync-pool-${i}`).map(
+							(k) => (
+								<div
+									key={k}
+									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4"
+								>
+									<div className="flex justify-between items-start">
+										<div className="space-y-2">
+											<Skeleton className="h-6 w-40 rounded-lg" />
+											<Skeleton className="h-4 w-28 rounded" />
+										</div>
+										<Skeleton className="h-6 w-12 rounded-full" />
+									</div>
+									<Skeleton className="h-16 w-full rounded-xl" />
+									<div className="flex gap-2 pt-2">
+										<Skeleton className="h-9 flex-1 rounded-xl" />
+										<Skeleton className="h-9 w-9 rounded-xl" />
+									</div>
+								</div>
+							),
+						)}
 					</div>
 				) : pools.length === 0 ? (
 					<div className="text-center py-12 text-[var(--text-secondary)] italic">
@@ -1919,12 +1943,11 @@ export const SyncManagerPage: React.FC = () => {
 				{activeHistoryTab === "items" && (
 					<>
 						{loadingLogs ? (
-							<div className="flex justify-center py-12">
-								<Loader2
-									className="animate-spin text-[var(--brand-orange)]"
-									size={28}
-								/>
-							</div>
+							<TableRowsSkeleton
+								rows={5}
+								cols={5}
+								label="Đang tải lịch sử đồng bộ..."
+							/>
 						) : logs.length === 0 ? (
 							<div className="text-center py-12 text-[var(--text-secondary)] italic">
 								No single item synchronization logs recorded yet.
@@ -2062,12 +2085,11 @@ export const SyncManagerPage: React.FC = () => {
 				{activeHistoryTab === "runs" && (
 					<>
 						{loadingRuns ? (
-							<div className="flex justify-center py-12">
-								<Loader2
-									className="animate-spin text-[var(--brand-orange)]"
-									size={28}
-								/>
-							</div>
+							<TableRowsSkeleton
+								rows={5}
+								cols={6}
+								label="Đang tải danh sách các lần chạy đồng bộ..."
+							/>
 						) : syncRuns.length === 0 ? (
 							<div className="text-center py-12 text-[var(--text-secondary)] italic">
 								No pool or batch sync runs recorded yet.
@@ -2279,11 +2301,24 @@ export const SyncManagerPage: React.FC = () => {
 
 						<div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2">
 							{loadingPreview ? (
-								<div className="flex justify-center py-8">
-									<Loader2
-										className="animate-spin text-[var(--brand-orange)]"
-										size={24}
-									/>
+								<div role="status" aria-busy="true" className="space-y-2 py-2">
+									<span className="sr-only">
+										Đang nạp danh sách xem trước manga...
+									</span>
+									{Array.from({ length: 4 }, (_, i) => `skel-prev-${i}`).map(
+										(k) => (
+											<div
+												key={k}
+												className="p-3 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl flex items-center gap-3"
+											>
+												<Skeleton className="w-10 h-14 rounded-lg shrink-0" />
+												<div className="space-y-1.5 flex-1">
+													<Skeleton className="h-4 w-3/4 rounded" />
+													<Skeleton className="h-3 w-1/2 rounded" />
+												</div>
+											</div>
+										),
+									)}
 								</div>
 							) : previewMangas.length === 0 ? (
 								<div className="text-center py-8 text-xs text-zinc-400 italic">
