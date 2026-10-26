@@ -1,3 +1,7 @@
 # Ensure shell scripts and infra configs use LF line endings even on Windows
 *.sh text eol=lf
 infra/elk/** text eol=lf
+
+# Windows-native scripts need CRLF (cmd.exe / Windows PowerShell 5.1)
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

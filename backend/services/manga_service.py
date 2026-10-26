@@ -384,8 +384,12 @@ class MangaService:
         return serialize_doc(doc)
 
     async def add_manga_by_dex(self, dex_data: MangaCreateDex) -> Dict[str, Any]:
-        # 1. Fetch metadata from MangaDex
+        # 1. Fetch metadata from MangaDex (try backend first)
         details = await mangadex_service.get_manga_details(dex_data.mangadex_id)
+        if not details and dex_data.fallback_details:
+            logger.info(f"Using client fallback details for MangaDex ID {dex_data.mangadex_id}")
+            details = dex_data.fallback_details
+
         if not details:
             raise ValueError(f"Could not find manga details on MangaDex for ID {dex_data.mangadex_id}")
 
@@ -448,14 +452,22 @@ class MangaService:
         manga_id = ObjectId()
         minio_cover_key = f"covers/{manga_id}.jpg"
 
-        # Download and upload cover
+        # Download and upload cover (support client base64 fallback)
         cover_url = details.get("cover_url")
-        if cover_url:
+        cover_bytes = None
+        if dex_data.cover_base64:
+            try:
+                import base64
+
+                cover_bytes = base64.b64decode(dex_data.cover_base64)
+            except Exception as b64_err:
+                logger.warning(f"Failed decoding client cover_base64: {b64_err}")
+
+        if not cover_bytes and cover_url:
             cover_bytes = await mangadex_service.download_image_bytes(cover_url)
-            if cover_bytes:
-                minio_service.upload_cover(minio_cover_key, cover_bytes)
-            else:
-                minio_cover_key = None
+
+        if cover_bytes:
+            minio_service.upload_cover(minio_cover_key, cover_bytes)
         else:
             minio_cover_key = None
 
@@ -552,9 +564,13 @@ class MangaService:
         return serialize_doc(manga_doc)
 
     async def import_manga_by_dex_stream(self, dex_data: MangaCreateDex):
-        # Step 1: Metadata
+        # Step 1: Metadata (try backend first)
         yield {"step": "metadata", "message": "Fetching metadata from MangaDex...", "progress": 10}
         details = await mangadex_service.get_manga_details(dex_data.mangadex_id)
+        if not details and dex_data.fallback_details:
+            logger.info(f"Using client fallback details for MangaDex ID {dex_data.mangadex_id} in stream import")
+            details = dex_data.fallback_details
+
         if not details:
             raise ValueError(f"Could not find manga details on MangaDex for ID {dex_data.mangadex_id}")
 
@@ -617,12 +633,20 @@ class MangaService:
         minio_cover_key = f"covers/{manga_id}.jpg"
 
         cover_url = details.get("cover_url")
-        if cover_url:
+        cover_bytes = None
+        if dex_data.cover_base64:
+            try:
+                import base64
+
+                cover_bytes = base64.b64decode(dex_data.cover_base64)
+            except Exception as b64_err:
+                logger.warning(f"Failed decoding client cover_base64: {b64_err}")
+
+        if not cover_bytes and cover_url:
             cover_bytes = await mangadex_service.download_image_bytes(cover_url)
-            if cover_bytes:
-                minio_service.upload_cover(minio_cover_key, cover_bytes)
-            else:
-                minio_cover_key = None
+
+        if cover_bytes:
+            minio_service.upload_cover(minio_cover_key, cover_bytes)
         else:
             minio_cover_key = None
 

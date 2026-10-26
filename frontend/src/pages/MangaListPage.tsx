@@ -34,6 +34,10 @@ import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useAlert } from "../hooks/useAlert";
 import { useMangaBlur } from "../hooks/useMangaBlur";
+import {
+	fetchMangadexDetailsForImportClientSide,
+	searchMangadexClientSide,
+} from "../services/mangadexClientFallback";
 
 interface Tag {
 	_id: string;
@@ -581,10 +585,31 @@ export const MangaListPage: React.FC = () => {
 		try {
 			setDexSearching(true);
 			const resolvedQuery = extractMangaDexUuid(dexQuery.trim());
-			const res = await client.get("/api/mangadex/search", {
-				params: { query: resolvedQuery },
-			});
-			setDexResults(res.data);
+			let searchResults: any[] = [];
+			try {
+				const res = await client.get("/api/mangadex/search", {
+					params: { query: resolvedQuery },
+				});
+				searchResults = res.data || [];
+			} catch (backendErr) {
+				console.warn(
+					"Backend MangaDex search failed, attempting client fallback:",
+					backendErr,
+				);
+			}
+
+			if (searchResults.length === 0) {
+				try {
+					const clientResults = await searchMangadexClientSide(resolvedQuery);
+					if (clientResults.length > 0) {
+						searchResults = clientResults;
+					}
+				} catch (clientErr) {
+					console.error("Client fallback search failed:", clientErr);
+				}
+			}
+
+			setDexResults(searchResults);
 		} catch (err) {
 			console.error("MangaDex search failed:", err);
 			showAlert({
@@ -598,20 +623,27 @@ export const MangaListPage: React.FC = () => {
 	};
 
 	// Import MangaDex Manga
-	const handleImportManga = async (dexId: string) => {
+	// Import MangaDex Manga with Automatic Client Fallback
+	const handleImportManga = async (
+		dexId: string,
+		isRetryWithFallback = false,
+		fallbackPayload?: Record<string, unknown>,
+	) => {
 		try {
 			setImportingManga(dexId);
-			setImportProgressStep("metadata");
-			setImportProgressMessage("Initializing import...");
-			setImportProgressPercent(0);
-			setFailedStep(null);
+			if (!isRetryWithFallback) {
+				setImportProgressStep("metadata");
+				setImportProgressMessage("Initializing import...");
+				setImportProgressPercent(0);
+				setFailedStep(null);
+			}
 
-			const payload: any = {
+			const payload: Record<string, unknown> = fallbackPayload || {
 				mangadex_id: dexId,
 				read_status: importStatus,
 				tag_ids: importTags,
+				personal_rating: importRating !== "" ? Number(importRating) : undefined,
 			};
-			if (importRating !== "") payload.personal_rating = Number(importRating);
 
 			const baseUrl = client.defaults.baseURL || "";
 			const url = `${baseUrl}/api/manga/dex`;
@@ -653,6 +685,43 @@ export const MangaListPage: React.FC = () => {
 						try {
 							const data = JSON.parse(dataStr);
 							if (data.step === "error") {
+								// Check if backend failed to fetch details from MangaDex
+								const isNetworkOrNotFound =
+									data.message?.includes(
+										"Could not find manga details on MangaDex",
+									) ||
+									data.message?.includes("All fallbacks failed for MangaDex");
+
+								if (isNetworkOrNotFound && !isRetryWithFallback) {
+									try {
+										setImportProgressMessage(
+											"Backend bị chặn mạng MangaDex. Đang tự động nạp thông tin qua trình duyệt (Client Fallback)...",
+										);
+										setImportProgressPercent(25);
+										showToast(
+											"Đang lấy dữ liệu MangaDex qua trình duyệt (Client Fallback)...",
+											"info",
+										);
+
+										const { fallback_details, cover_base64 } =
+											await fetchMangadexDetailsForImportClientSide(dexId);
+
+										setImportProgressMessage(
+											"Đang nhập manga vào cơ sở dữ liệu...",
+										);
+										setImportProgressPercent(60);
+
+										// Retry import with client-provided fallback metadata
+										return await handleImportManga(dexId, true, {
+											...payload,
+											fallback_details,
+											cover_base64,
+										});
+									} catch (fbErr: unknown) {
+										console.error("Client fallback import also failed:", fbErr);
+									}
+								}
+
 								setImportProgressStep("error");
 								setFailedStep(data.failed_step || "metadata");
 								setImportProgressMessage(data.message);

@@ -1,0 +1,11 @@
+{
+  "name": "manga-reviews-management",
+  "private": true,
+  "description": "Root helper scripts. Frontend lives in ./frontend (pnpm), backend in ./backend (uv).",
+  "scripts": {
+    "dpi:install": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/goodbyedpi/install-dpi.ps1",
+    "dpi:start": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/goodbyedpi/start-dpi.ps1",
+    "dpi:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/goodbyedpi/stop-dpi.ps1",
+    "dpi:status": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/goodbyedpi/status-dpi.ps1"
+  }
+}

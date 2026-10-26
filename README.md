@@ -35,7 +35,7 @@
 
 ## 🌟 Overview
 
-**Manga Reviews Management** is a personal manga management ecosystem designed for manga readers, collectors, reviewers, and language learners. It combines **local object storage (MinIO S3)**, **automated MangaDex synchronization**, a **distraction-free reader with side-by-side AI translation comparison**, a **dedicated Translation Studio**, a **rich TipTap review editor with Gemini AI assistance**, a **Redis caching & ARQ async queue**, and an innovative **Panel Words Detector** that indexes comic dialogues directly from page artwork using Computer Vision and NLP.
+**Manga Reviews Management** is a self-hosted manga platform combining **local S3 storage (MinIO)**, **MangaDex sync**, a **reader with side-by-side AI translation preview**, a **rich review editor**, a **Redis/ARQ task queue**, and an innovative **Panel Words Detector** that indexes comic dialogue via Computer Vision and NLP.
 
 ---
 
@@ -227,3 +227,13 @@ pnpm --dir frontend dev
 ```
 
 The application will be running at `http://localhost:5173`.
+
+---
+
+### 5. Bypass ISP Blocking (Windows)
+
+If MangaDex is blocked by your ISP:
+- **Start**: `npm run dpi:start` or run `tools/goodbyedpi/start-dpi.cmd` (Admin).
+- **Check**: `npm run dpi:status`
+- **Stop**: `npm run dpi:stop` or `tools/goodbyedpi/stop-dpi.cmd`.
+

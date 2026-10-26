@@ -144,7 +144,9 @@ class MangaDexService:
                 fallback_data = await self._request_via_playwright(endpoint, params)
                 if fallback_data is not None:
                     return fallback_data
-                logger.error(f"All fallbacks failed for MangaDex ({endpoint}).")
+                logger.warning(
+                    f"All backend fallbacks exhausted for MangaDex ({endpoint}). Deferring to Client-Side Fallback."
+                )
                 return None
             except Exception as e:
                 logger.error(f"Error calling MangaDex ({endpoint}): {e}")
@@ -223,17 +225,35 @@ class MangaDexService:
                 if proxy_url:
                     context_options["proxy"] = {"server": proxy_url}
 
+                browser = None
+                is_cdp = False
+                cdp_port = os.environ.get("MANGADEX_CDP_PORT", "9222")
+
+                # Option 1 Fallback probe: Check if real browser has remote debugging enabled
                 try:
-                    browser = p.chromium.launch(headless=True)
-                except Exception as launch_err:
-                    logger.error(
-                        f"Failed to launch Playwright Chromium: {launch_err}. "
-                        "Make sure you have run 'playwright install' or 'playwright install chromium'."
-                    )
-                    return None
+                    import socket
+
+                    with socket.create_connection(("127.0.0.1", int(cdp_port)), timeout=0.2):
+                        logger.info(f"CDP port {cdp_port} detected. Connecting over CDP...")
+                        browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}", timeout=2000)
+                        is_cdp = True
+                except Exception:
+                    browser = None
+
+                if not browser:
+                    try:
+                        browser = p.chromium.launch(headless=True)
+                    except Exception as launch_err:
+                        logger.error(
+                            f"Failed to launch Playwright Chromium: {launch_err}. "
+                            "Make sure you have run 'playwright install' or 'playwright install chromium'."
+                        )
+                        return None
 
                 try:
-                    context = browser.new_context(**context_options)
+                    context = (
+                        browser.contexts[0] if (is_cdp and browser.contexts) else browser.new_context(**context_options)
+                    )
                     page = context.new_page()
 
                     response = page.goto(url, wait_until="commit", timeout=15000)
@@ -253,9 +273,21 @@ class MangaDexService:
 
                     return json.loads(content)
                 finally:
-                    browser.close()
+                    if is_cdp:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+                    else:
+                        browser.close()
         except Exception as e:
-            logger.error(f"Playwright sync browser simulation failed: {e}")
+            err_msg = str(e)
+            if "net::ERR_CONNECTION_RESET" in err_msg or "net::ERR_CONNECTION_REFUSED" in err_msg:
+                logger.warning(
+                    f"Playwright browser simulation blocked by ISP DPI ({err_msg.splitlines()[0]}). Deferring to Client-Side Fallback."
+                )
+            else:
+                logger.error(f"Playwright sync browser simulation failed: {e}")
             return None
 
     async def _request_via_playwright(
@@ -310,17 +342,34 @@ class MangaDexService:
                 if proxy_url:
                     context_options["proxy"] = {"server": proxy_url}
 
-                try:
-                    browser = p.chromium.launch(headless=True)
-                except Exception as launch_err:
-                    logger.error(
-                        f"Failed to launch Playwright Chromium: {launch_err}. "
-                        "Make sure you have run 'playwright install' or 'playwright install chromium'."
-                    )
-                    return None
+                browser = None
+                is_cdp = False
+                cdp_port = os.environ.get("MANGADEX_CDP_PORT", "9222")
 
                 try:
-                    context = browser.new_context(**context_options)
+                    import socket
+
+                    with socket.create_connection(("127.0.0.1", int(cdp_port)), timeout=0.2):
+                        logger.info(f"CDP port {cdp_port} detected. Connecting over CDP for download...")
+                        browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}", timeout=2000)
+                        is_cdp = True
+                except Exception:
+                    browser = None
+
+                if not browser:
+                    try:
+                        browser = p.chromium.launch(headless=True)
+                    except Exception as launch_err:
+                        logger.error(
+                            f"Failed to launch Playwright Chromium: {launch_err}. "
+                            "Make sure you have run 'playwright install' or 'playwright install chromium'."
+                        )
+                        return None
+
+                try:
+                    context = (
+                        browser.contexts[0] if (is_cdp and browser.contexts) else browser.new_context(**context_options)
+                    )
                     page = context.new_page()
 
                     response = page.goto(url, wait_until="commit", timeout=20000)
@@ -333,9 +382,21 @@ class MangaDexService:
 
                     return response.body()
                 finally:
-                    browser.close()
+                    if is_cdp:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+                    else:
+                        browser.close()
         except Exception as e:
-            logger.error(f"Playwright sync image download failed: {e}")
+            err_msg = str(e)
+            if "net::ERR_CONNECTION_RESET" in err_msg or "net::ERR_CONNECTION_REFUSED" in err_msg:
+                logger.warning(
+                    f"Playwright image download blocked by ISP DPI ({err_msg.splitlines()[0]}). Deferring to Client-Side Fallback."
+                )
+            else:
+                logger.error(f"Playwright sync image download failed: {e}")
             return None
 
     async def _download_via_playwright(self, url: str) -> Optional[bytes]:

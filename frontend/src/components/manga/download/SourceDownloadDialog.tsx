@@ -26,6 +26,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import client from "../../../api/client";
 import { useAlert } from "../../../hooks/useAlert";
 import { useDownload } from "../../../hooks/useDownload";
+import {
+	extractMangadexId,
+	fetchMangadexReleasesClientSide,
+	fetchMangadexWorkClientSide,
+} from "../../../services/mangadexClientFallback";
 import type {
 	DownloadPlan,
 	DownloadSelectionPolicy,
@@ -298,11 +303,31 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 						setSelectedLang(res.data.available_languages[0]);
 					}
 				} catch (err: unknown) {
-					console.error("Failed to resolve MangaDex work:", err);
-					const error = err as { response?: { data?: { detail?: string } } };
-					setReleaseError(
-						error.response?.data?.detail || "Không thể kết nối với MangaDex",
+					console.error(
+						"Failed to resolve MangaDex work on backend, attempting client fallback:",
+						err,
 					);
+					try {
+						// Fallback: Direct browser fetch to MangaDex API
+						const fallbackWork = await fetchMangadexWorkClientSide(mangadexId);
+						setActiveWork(fallbackWork);
+						setAvailableLangs(fallbackWork.available_languages || ["en"]);
+						if (fallbackWork.available_languages?.includes("en")) {
+							setSelectedLang("en");
+						} else if (fallbackWork.available_languages?.[0]) {
+							setSelectedLang(fallbackWork.available_languages[0]);
+						}
+						showToast(
+							"Đã kết nối dữ liệu MangaDex qua trình duyệt (Client Fallback)",
+							"info",
+						);
+					} catch (fallbackErr: unknown) {
+						console.error("All resolution mechanisms failed:", fallbackErr);
+						const error = err as { response?: { data?: { detail?: string } } };
+						setReleaseError(
+							error.response?.data?.detail || "Không thể kết nối với MangaDex",
+						);
+					}
 				} finally {
 					setResolvingWork(false);
 				}
@@ -457,6 +482,92 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				"success",
 			);
 		} catch (err: unknown) {
+			const isMangadex =
+				selectedProvider === "mangadex" ||
+				Boolean(extractMangadexId(trimmedUrl));
+
+			if (isMangadex) {
+				try {
+					setResolveProgress({
+						step: 3,
+						percent: 65,
+						status: "running",
+						message:
+							"Backend bị chặn kết nối. Đang kích hoạt kết nối MangaDex qua trình duyệt...",
+					});
+
+					const fallbackWork = await fetchMangadexWorkClientSide(trimmedUrl);
+					clearProgressTimers();
+
+					setResolveProgress({
+						step: 4,
+						percent: 90,
+						status: "running",
+						message: `Đang liên kết "${fallbackWork.title}" vào manga và nạp danh sách chương...`,
+					});
+
+					setActiveWork(fallbackWork);
+					setAvailableLangs(fallbackWork.available_languages || ["en"]);
+					if (fallbackWork.available_languages?.includes("en")) {
+						setSelectedLang("en");
+					} else if (fallbackWork.available_languages?.[0]) {
+						setSelectedLang(fallbackWork.available_languages[0]);
+					}
+
+					try {
+						await client.post(`/api/manga/${mangaId}/sources`, {
+							source: fallbackWork.source,
+							source_work_id: fallbackWork.source_work_id,
+							canonical_url: fallbackWork.url,
+							title: fallbackWork.title,
+						});
+						setMangaSources((prev) => [
+							...prev.filter((s) => s.source !== fallbackWork.source),
+							{
+								source: fallbackWork.source,
+								source_work_id: fallbackWork.source_work_id,
+								canonical_url: fallbackWork.url,
+								title: fallbackWork.title,
+							},
+						]);
+					} catch (linkErr: unknown) {
+						const linkError = linkErr as {
+							response?: { status?: number; data?: { detail?: string } };
+						};
+						if (linkError.response?.status === 409) {
+							const msg =
+								linkError.response?.data?.detail ||
+								"Nguồn này đã được liên kết với một manga khác trong hệ thống!";
+							setReleaseError(msg);
+							setResolveProgress({
+								step: 4,
+								percent: 90,
+								status: "error",
+								message: "Lỗi xung đột liên kết nguồn",
+								errorDetail: msg,
+							});
+							showToast(msg, "error");
+							return;
+						}
+					}
+
+					setResolveProgress({
+						step: 5,
+						percent: 100,
+						status: "success",
+						message: `Đã nhận diện thành công: "${fallbackWork.title}" (Client Fallback)`,
+					});
+
+					showToast(
+						`Đã nhận diện & liên kết: "${fallbackWork.title}" từ MangaDex qua trình duyệt`,
+						"success",
+					);
+					return;
+				} catch (fallbackErr: unknown) {
+					console.error("Client fallback resolution failed:", fallbackErr);
+				}
+			}
+
 			clearProgressTimers();
 			const error = err as { response?: { data?: { detail?: string } } };
 			const msg =
@@ -492,7 +603,22 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 						},
 					},
 				);
-				const items = res.data.items || [];
+				let items = res.data.items || [];
+
+				if (items.length === 0 && activeWork.source === "mangadex") {
+					try {
+						const fallbackPage = await fetchMangadexReleasesClientSide(
+							activeWork.source_work_id,
+							selectedLang,
+						);
+						if (fallbackPage.items.length > 0) {
+							items = fallbackPage.items;
+						}
+					} catch (fbErr) {
+						console.warn("Client fallback for empty releases failed:", fbErr);
+					}
+				}
+
 				setReleases(items);
 
 				// Auto-select based on one-per-chapter mode
@@ -511,7 +637,39 @@ export const SourceDownloadDialog: React.FC<SourceDownloadDialogProps> = ({
 				}
 				setSelectedReleaseIds(initialSelected);
 			} catch (err: unknown) {
-				console.error("Failed to load releases:", err);
+				console.error("Failed to load releases from backend:", err);
+				if (activeWork.source === "mangadex") {
+					try {
+						const fallbackPage = await fetchMangadexReleasesClientSide(
+							activeWork.source_work_id,
+							selectedLang,
+						);
+						const items = fallbackPage.items || [];
+						setReleases(items);
+
+						const initialSelected = new Set<string>();
+						const seenNumbers = new Set<string>();
+
+						for (const rel of items) {
+							if (onePerChapterMode) {
+								if (!seenNumbers.has(rel.chapter_number)) {
+									seenNumbers.add(rel.chapter_number);
+									initialSelected.add(rel.id);
+								}
+							} else {
+								initialSelected.add(rel.id);
+							}
+						}
+						setSelectedReleaseIds(initialSelected);
+						showToast(
+							"Đã tải danh sách chương qua trình duyệt (Client Fallback)",
+							"info",
+						);
+						return;
+					} catch (fallbackErr: unknown) {
+						console.error("Client fallback for releases failed:", fallbackErr);
+					}
+				}
 				const error = err as { response?: { data?: { detail?: string } } };
 				setReleaseError(
 					error.response?.data?.detail || "Không thể tải danh sách chương",

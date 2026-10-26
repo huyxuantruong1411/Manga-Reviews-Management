@@ -82,6 +82,8 @@ class MangaCreateDex(BaseModel):
     read_status: ReadStatus = ReadStatus.UNREAD
     personal_rating: Optional[float] = Field(None, ge=0, le=10, multiple_of=0.5, allow_inf_nan=False)
     tag_ids: List[str] = Field(default_factory=list)
+    fallback_details: Optional[Dict[str, Any]] = None
+    cover_base64: Optional[str] = None
 
 
 class MangaUpdate(BaseModel):

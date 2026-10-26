@@ -52,6 +52,10 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 import { useDownload } from "../hooks/useDownload";
 import { useMangaBlur } from "../hooks/useMangaBlur";
+import {
+	fetchMangadexChaptersClientSide,
+	fetchMangadexLanguagesClientSide,
+} from "../services/mangadexClientFallback";
 import type { MALExtendedMetadata } from "../types/externalReview";
 
 interface Tag {
@@ -2360,15 +2364,27 @@ export const MangaDetailPage: React.FC = () => {
 
 			// Fetch available languages
 			const currentMangadexId = manga.mangadex_id;
-			const langRes = await client.get(
-				`/api/mangadex/manga/${currentMangadexId}/languages`,
-			);
-			setLanguages(langRes.data);
+			let langData: string[] = [];
+			try {
+				const langRes = await client.get(
+					`/api/mangadex/manga/${currentMangadexId}/languages`,
+				);
+				langData = langRes.data || [];
+			} catch (langErr) {
+				console.warn(
+					"Backend languages fetch failed, attempting client fallback:",
+					langErr,
+				);
+				try {
+					langData = await fetchMangadexLanguagesClientSide(currentMangadexId);
+				} catch {
+					langData = ["en"];
+				}
+			}
+			setLanguages(langData);
 
 			// Set English default if available
-			const defaultLang = langRes.data.includes("en")
-				? "en"
-				: langRes.data[0] || "en";
+			const defaultLang = langData.includes("en") ? "en" : langData[0] || "en";
 			setSelectedLang(defaultLang);
 			await fetchChapters(defaultLang, currentMangadexId);
 		} catch (err) {
@@ -2383,12 +2399,29 @@ export const MangaDetailPage: React.FC = () => {
 		if (!mdId) return;
 		try {
 			setLoadingChapters(true);
-			const res = await client.get(`/api/mangadex/manga/${mdId}/chapters`, {
-				params: { lang },
-			});
+			let fetchedChapters: any[] = [];
+			try {
+				const res = await client.get(`/api/mangadex/manga/${mdId}/chapters`, {
+					params: { lang },
+				});
+				fetchedChapters = res.data || [];
+			} catch (fetchErr) {
+				console.warn(
+					"Backend chapters fetch failed, attempting client fallback:",
+					fetchErr,
+				);
+			}
+
+			if (fetchedChapters.length === 0) {
+				try {
+					fetchedChapters = await fetchMangadexChaptersClientSide(mdId, lang);
+				} catch (clientErr) {
+					console.error("Client fallback for chapters also failed:", clientErr);
+				}
+			}
+
 			// Guard against race conditions: verify MangaDex ID is still active
 			if (manga?.mangadex_id === mdId) {
-				const fetchedChapters = res.data;
 				setChapters(fetchedChapters);
 				setSelectedChapters([]); // Reset selections
 				setChapterSearch("");
