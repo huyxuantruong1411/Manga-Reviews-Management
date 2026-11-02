@@ -85,9 +85,15 @@ class TestDatalakePool(unittest.IsolatedAsyncioTestCase):
             "color": "#FF5722",
         }
         creator_doc = {
+            "_id": ObjectId(),
+            "creator_id": "7918d851-d77f-4ad6-9ec5-2c097320dc7e",
+            "mangadex_id": "7918d851-d77f-4ad6-9ec5-2c097320dc7e",
             "name": creator_name,
+            "slug": "oda-eiichiro",
             "role": "author",
             "biography": {"en": "Legendary mangaka"},
+            "twitter": "https://twitter.com/Eiichiro_Staff",
+            "website": "https://one-piece.com",
         }
 
         self.review_db.mangas.find_one = AsyncMock(return_value=manga_doc)
@@ -111,9 +117,12 @@ class TestDatalakePool(unittest.IsolatedAsyncioTestCase):
 
         self.pool_db.pool_mangas.find_one = AsyncMock(return_value=None)
         self.pool_db.pool_mangas.update_one = AsyncMock()
+        self.pool_db.pool_mangas.find = MagicMock(return_value=AsyncCursor([]))
         self.pool_db.pool_chapters.delete_many = AsyncMock()
         self.pool_db.pool_chapters.insert_many = AsyncMock()
         self.pool_db.pool_audit_logs.insert_one = AsyncMock()
+        self.pool_db.pool_creators.delete_many = AsyncMock()
+        self.pool_db.pool_creators.update_one = AsyncMock()
 
         with (
             patch("backend.services.minio_service.minio_service.upload_cover") as mock_up_cov,
@@ -137,6 +146,173 @@ class TestDatalakePool(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set_doc["tags"][0]["name"]["vi"], "Phiêu lưu")
         self.assertEqual(set_doc["primary_cover"]["object_key"], "covers/one_piece.jpg")
         self.assertEqual(set_doc["stats"]["total_pages"], 2)
+        # Creators must be encapsulated with both author and artist roles, creator_id, slug, and social links
+        self.assertEqual(len(set_doc["creators"]), 2)
+        roles = {c["role"] for c in set_doc["creators"]}
+        self.assertEqual(roles, {"author", "artist"})
+        for c in set_doc["creators"]:
+            self.assertEqual(c["creator_id"], "7918d851-d77f-4ad6-9ec5-2c097320dc7e")
+            self.assertEqual(c["slug"], "oda-eiichiro")
+            self.assertEqual(c["links"].get("twitter"), "https://twitter.com/Eiichiro_Staff")
+            self.assertEqual(c["links"].get("website"), "https://one-piece.com")
+
+    async def test_publish_splits_multiple_creators_and_preserves_homonyms_in_pool_creators(self):
+        manga_1_id = str(ObjectId())
+        manga_2_id = str(ObjectId())
+        uuid_nakamura_1 = "7918d851-d77f-4ad6-9ec5-2c097320dc7e"
+        uuid_nakamura_2 = "88888888-d77f-4ad6-9ec5-2c097320dc7e"
+
+        manga_1 = {
+            "_id": ObjectId(manga_1_id),
+            "title": "Manga By Nakamura 1 & CoArtist",
+            "author": "Nakamura Moto",
+            "artist": "Nakamura Moto, Tsukasa Abe",
+            "creators": [
+                {
+                    "creator_id": uuid_nakamura_1,
+                    "mangadex_id": uuid_nakamura_1,
+                    "name": "Nakamura Moto",
+                    "slug": "nakamura-moto",
+                    "role": "author",
+                },
+                {
+                    "creator_id": uuid_nakamura_1,
+                    "mangadex_id": uuid_nakamura_1,
+                    "name": "Nakamura Moto",
+                    "slug": "nakamura-moto",
+                    "role": "artist",
+                },
+            ],
+            "tag_ids": [],
+            "status": "ongoing",
+            "minio_cover_key": "covers/m1.jpg",
+        }
+        manga_2 = {
+            "_id": ObjectId(manga_2_id),
+            "title": "Manga By Homonym Nakamura 2",
+            "author": "Nakamura Moto",
+            "artist": "Tsukasa Abe",
+            "creators": [
+                {
+                    "creator_id": uuid_nakamura_2,
+                    "mangadex_id": uuid_nakamura_2,
+                    "name": "Nakamura Moto",
+                    "slug": "nakamura-moto",
+                    "role": "author",
+                },
+            ],
+            "tag_ids": [],
+            "status": "completed",
+            "minio_cover_key": "covers/m2.jpg",
+        }
+        ch_template = [
+            {
+                "_id": ObjectId(),
+                "chapter_number": "1",
+                "chapter_numeric": 1.0,
+                "language": "en",
+                "pages": [
+                    {
+                        "page_uid": "p1",
+                        "page_number": 1,
+                        "filename": "01.jpg",
+                        "object_key": "chapters/c1/01.jpg",
+                        "file_size": 1000,
+                    }
+                ],
+            }
+        ]
+
+        class AsyncCursor:
+            def __init__(self, docs):
+                self.docs = docs
+
+            def __aiter__(self):
+                async def gen():
+                    for d in self.docs:
+                        yield d
+
+                return gen()
+
+        async def find_manga_side_effect(query):
+            _id = str(query.get("_id"))
+            if _id == manga_1_id:
+                return manga_1
+            if _id == manga_2_id:
+                return manga_2
+            return None
+
+        self.review_db.mangas.find_one = AsyncMock(side_effect=find_manga_side_effect)
+        self.review_db.chapters.find = MagicMock(return_value=AsyncMock(to_list=AsyncMock(return_value=ch_template)))
+        self.review_db.tags.find = MagicMock(return_value=AsyncCursor([]))
+        self.review_db.cover_arts.find = MagicMock(return_value=AsyncCursor([]))
+        self.review_db.creators.find = MagicMock(
+            return_value=AsyncCursor(
+                [
+                    {
+                        "_id": ObjectId(),
+                        "creator_id": uuid_nakamura_1,
+                        "mangadex_id": uuid_nakamura_1,
+                        "name": "Nakamura Moto",
+                        "slug": "nakamura-moto",
+                        "biography": {"en": "Nakamura 1 bio"},
+                        "twitter": "https://twitter.com/naka1",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "creator_id": uuid_nakamura_2,
+                        "mangadex_id": uuid_nakamura_2,
+                        "name": "Nakamura Moto",
+                        "slug": "nakamura-moto",
+                        "biography": {"en": "Nakamura 2 bio"},
+                        "pixiv": "https://pixiv.net/naka2",
+                    },
+                ]
+            )
+        )
+
+        stored_pool_mangas = {}
+        stored_pool_creators = {}
+
+        async def pool_mangas_update_one(filt, update, upsert=False):
+            doc = dict(update["$set"])
+            pmid = filt.get("pool_manga_id") or doc.get("pool_manga_id") or filt.get("source_manga_id")
+            stored_pool_mangas[pmid] = doc
+
+        async def pool_creators_update_one(filt, update, upsert=False):
+            cid = filt["creator_id"]
+            stored_pool_creators[cid] = dict(update["$set"])
+
+        self.pool_db.pool_mangas.find_one = AsyncMock(return_value=None)
+        self.pool_db.pool_mangas.update_one = AsyncMock(side_effect=pool_mangas_update_one)
+        self.pool_db.pool_mangas.find = MagicMock(
+            side_effect=lambda *a, **kw: AsyncCursor(list(stored_pool_mangas.values()))
+        )
+        self.pool_db.pool_chapters.delete_many = AsyncMock()
+        self.pool_db.pool_chapters.insert_many = AsyncMock()
+        self.pool_db.pool_audit_logs.insert_one = AsyncMock()
+        self.pool_db.pool_creators.delete_many = AsyncMock()
+        self.pool_db.pool_creators.update_one = AsyncMock(side_effect=pool_creators_update_one)
+
+        req = PublishToPoolRequest(source_manga_ids=[manga_1_id, manga_2_id])
+        res = await self.service.publish_mangas_to_pool(req)
+        self.assertEqual(res.success_count, 2)
+
+        # Verify distinct pool_creators has 3 distinct creators:
+        # 1) Nakamura Moto #1 (uuid_nakamura_1)
+        # 2) Nakamura Moto #2 (uuid_nakamura_2)
+        # 3) Tsukasa Abe (shared across both manga_1 and manga_2 -> manga_count == 2!)
+        self.assertEqual(len(stored_pool_creators), 3)
+        self.assertIn(uuid_nakamura_1, stored_pool_creators)
+        self.assertIn(uuid_nakamura_2, stored_pool_creators)
+        self.assertEqual(stored_pool_creators[uuid_nakamura_1]["biography"]["en"], "Nakamura 1 bio")
+        self.assertEqual(stored_pool_creators[uuid_nakamura_1]["links"]["twitter"], "https://twitter.com/naka1")
+        self.assertEqual(stored_pool_creators[uuid_nakamura_2]["biography"]["en"], "Nakamura 2 bio")
+        self.assertEqual(stored_pool_creators[uuid_nakamura_2]["links"]["pixiv"], "https://pixiv.net/naka2")
+
+        abe_creator = next(v for k, v in stored_pool_creators.items() if v["name"] == "Tsukasa Abe")
+        self.assertEqual(abe_creator["manga_count"], 2)
+        self.assertEqual(abe_creator["slug"], "tsukasa-abe")
 
     async def test_pool_crud_and_page_deletion_never_deletes_minio_objects(self):
         pool_chapter_id = "pch_123"

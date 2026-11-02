@@ -130,6 +130,8 @@ async def init_db_indexes():
         await db.mangas.create_index("mangadex_id", sparse=True)
         await db.mangas.create_index("read_status")
         await db.mangas.create_index("tag_ids")
+        await db.mangas.create_index("creators.creator_id", sparse=True)
+        await db.mangas.create_index("creators.mangadex_id", sparse=True)
         await db.mangas.create_index("added_at")
         await db.mangas.create_index("personal_rating", sparse=True)
         await db.mangas.create_index("unread_at", sparse=True)
@@ -158,7 +160,9 @@ async def init_db_indexes():
         await db.tags.create_index("source")
 
         # creators
+        await db.creators.create_index("creator_id", unique=True, sparse=True)
         await db.creators.create_index("mangadex_id", sparse=True)
+        await db.creators.create_index("slug", sparse=True)
         await db.creators.create_index("name")
 
         # cover_arts

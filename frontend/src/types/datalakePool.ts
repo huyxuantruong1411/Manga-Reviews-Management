@@ -30,11 +30,45 @@ export interface PoolTagEmbedded {
 }
 
 export interface PoolCreatorEmbedded {
+	creator_id: string;
+	slug?: string;
+	source_creator_id?: string | null;
 	name: string;
 	role: string;
 	mangadex_id?: string | null;
 	biography: Record<string, string>;
 	links: Record<string, string>;
+}
+
+export interface PoolCreatorCatalogItem {
+	creator_id: string;
+	slug: string;
+	name: string;
+	mangadex_id?: string | null;
+	source_creator_id?: string | null;
+	roles: string[];
+	biography: Record<string, string>;
+	links: Record<string, string>;
+	manga_count: number;
+	pool_manga_ids: string[];
+	sample_mangas: Array<{
+		pool_manga_id: string;
+		title: string;
+		slug: string;
+	}>;
+	updated_at?: string | null;
+}
+
+export interface PoolCreatorListResponse {
+	items: PoolCreatorCatalogItem[];
+	total: number;
+	page: number;
+	page_size: number;
+}
+
+export interface PoolCreatorDetailResponse {
+	creator: PoolCreatorCatalogItem;
+	mangas: PoolMangaItem[];
 }
 
 export interface PoolCoverArtEmbedded {
@@ -142,6 +176,7 @@ export interface PoolCandidateItem {
 export interface PoolStatsResponse {
 	total_mangas: number;
 	total_etl_ready: number;
+	total_creators?: number;
 	total_chapters: number;
 	total_pages: number;
 	total_size_bytes: number;

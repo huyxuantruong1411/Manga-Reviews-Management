@@ -1,11 +1,13 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from backend.models.datalake_pool import (
     PoolBatchChapterUpdateRequest,
     PoolChapterUpdateRequest,
+    PoolCreatorDetailResponse,
+    PoolCreatorListResponse,
     PoolDeletePagesRequest,
     PoolDuplicateCleanupRequest,
     PoolDuplicateGroup,
@@ -16,16 +18,52 @@ from backend.models.datalake_pool import (
     PublishToPoolResponse,
 )
 from backend.services.datalake_pool_service import datalake_pool_service
+from backend.services.reader_contract_service import build_reader_contract_template
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/datalake-pool", tags=["Data Lake & Storage Pool"])
 
 
+@router.get("/contract/template")
+async def get_contract_template(response: Response):
+    """
+    Export universal JSON Schema template (Draft 2020-12) for reader system integration.
+    Includes full schema definitions and valid example data.
+    """
+    response.headers["Content-Disposition"] = 'attachment; filename="manga_reader_contract_v2.schema.json"'
+    return build_reader_contract_template()
+
+
 @router.get("/stats", response_model=PoolStatsResponse)
 async def get_pool_stats():
     """Retrieve overall KPI statistics for the publication pool."""
     return await datalake_pool_service.get_pool_stats()
+
+
+@router.get("/creators", response_model=PoolCreatorListResponse)
+async def list_pool_creators(
+    search: Optional[str] = Query(None, description="Search creator by name, slug, or UUID"),
+    role: Optional[str] = Query(None, description="Filter by role: 'author' or 'artist'"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    """List distinct creators (authors/artists) encapsulated across all mangas in the Data Lake Pool."""
+    return await datalake_pool_service.list_pool_creators(
+        search=search,
+        role=role,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/creators/{creator_id}", response_model=PoolCreatorDetailResponse)
+async def get_pool_creator_detail(creator_id: str):
+    """Get full profile of a pooled creator by UUID (creator_id / mangadex_id) and their pooled mangas."""
+    detail = await datalake_pool_service.get_pool_creator_detail(creator_id)
+    if not detail:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pooled creator not found")
+    return detail
 
 
 @router.get("/candidates")
@@ -61,6 +99,7 @@ async def list_pool_mangas(
     pool_state: Optional[str] = Query(None, description="'published' | 'draft' | 'archived'"),
     is_etl_ready: Optional[bool] = Query(None),
     language: Optional[str] = Query(None),
+    creator_id: Optional[str] = Query(None, description="Filter pooled mangas by creator_id UUID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: str = Query("lineage.updated_at"),
@@ -72,6 +111,7 @@ async def list_pool_mangas(
         pool_state=pool_state,
         is_etl_ready=is_etl_ready,
         language=language,
+        creator_id=creator_id,
         page=page,
         page_size=page_size,
         sort_by=sort_by,

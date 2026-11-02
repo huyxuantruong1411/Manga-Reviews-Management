@@ -750,6 +750,76 @@ export const PoolMangaWorkspaceModal: React.FC<
 										</div>
 									</div>
 
+									{/* Denormalized creators display (Author / Artist with UUID) */}
+									<div className="space-y-2.5 pt-3 border-t border-[var(--border-primary)]">
+										<label className="text-xs font-semibold text-[var(--text-secondary)]">
+											Creators Đã Đóng Gói — Author / Artist (
+											{manga?.creators?.length || 0})
+										</label>
+										{manga?.creators && manga.creators.length > 0 ? (
+											<div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+												{manga.creators.map((c, idx) => (
+													<div
+														key={`${c.creator_id}-${c.role}-${idx}`}
+														className="p-3 rounded-xl bg-zinc-900/60 border border-[var(--border-primary)] flex flex-col justify-between gap-2"
+													>
+														<div className="flex items-center justify-between gap-2">
+															<div className="flex items-center gap-2 min-w-0">
+																<span className="font-bold text-xs text-[var(--text-primary)] truncate">
+																	{c.name}
+																</span>
+																<Badge
+																	className={
+																		c.role === "author"
+																			? "bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px]"
+																			: "bg-pink-500/20 text-pink-400 border border-pink-500/30 text-[10px]"
+																	}
+																>
+																	{c.role.toUpperCase()}
+																</Badge>
+															</div>
+															{c.slug && (
+																<span className="text-[11px] font-mono text-zinc-400 truncate">
+																	/{c.slug}
+																</span>
+															)}
+														</div>
+														<div className="text-[11px] font-mono text-zinc-400 flex flex-wrap items-center justify-between gap-1">
+															<span title="Canonical Creator UUID">
+																UUID: {c.creator_id}
+															</span>
+															{c.biography?.en && (
+																<span className="text-emerald-400">
+																	• Có tiểu sử
+																</span>
+															)}
+														</div>
+														{c.links && Object.keys(c.links).length > 0 && (
+															<div className="flex flex-wrap gap-1.5 pt-1">
+																{Object.entries(c.links).map(([k, url]) => (
+																	<a
+																		key={k}
+																		href={url}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[10px] text-orange-300 font-medium transition"
+																	>
+																		{k}
+																	</a>
+																))}
+															</div>
+														)}
+													</div>
+												))}
+											</div>
+										) : (
+											<p className="text-xs text-zinc-500 italic">
+												Chưa có danh sách creators đóng gói. Hãy bấm "Sync từ
+												Thư viện" để cập nhật.
+											</p>
+										)}
+									</div>
+
 									{/* Denormalized tags display */}
 									<div className="space-y-2 pt-2 border-t border-[var(--border-primary)]">
 										<label className="text-xs font-semibold text-[var(--text-secondary)]">
@@ -759,10 +829,7 @@ export const PoolMangaWorkspaceModal: React.FC<
 											{manga?.tags?.map((t, idx) => (
 												<span
 													key={t.source_tag_id || idx}
-													style={{
-														borderColor: t.color || "rgba(255,255,255,0.1)",
-													}}
-													className="px-2.5 py-1 text-xs rounded-full border bg-zinc-800/80 text-zinc-200"
+													className="px-2.5 py-1 text-xs rounded-full border border-zinc-700 bg-zinc-800/80 text-zinc-200"
 												>
 													{t.name?.en ||
 														(typeof t.name === "string"
@@ -1108,7 +1175,7 @@ export const PoolMangaWorkspaceModal: React.FC<
 									<div className="space-y-3">
 										<div className="flex items-center justify-between">
 											<h4 className="font-bold text-sm text-[var(--text-primary)]">
-												Gói Hợp Đồng ETL Manifest (Data Contract v1.0)
+												Gói Hợp Đồng ETL Manifest (Reader Data Contract v2.0)
 											</h4>
 											<div className="flex items-center space-x-2">
 												<Button

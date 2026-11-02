@@ -16,6 +16,11 @@ from backend.services.content_deletion_service import (
     delete_vision_metadata,
     source_object_is_shared,
 )
+from backend.services.creator_service import (
+    deterministic_creator_uuid,
+    slugify_creator_name,
+    split_creator_names,
+)
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
 from backend.services.search_ranking_service import rank_manga_search_results
@@ -24,12 +29,71 @@ from backend.services.tracker_service import fetch_tracker_metadata
 logger = logging.getLogger(__name__)
 
 
+def _build_fallback_creator_refs(
+    author_str: Optional[str] = None,
+    artist_str: Optional[str] = None,
+    authors_meta: Optional[List[Dict[str, Any]]] = None,
+    artists_meta: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    refs: List[Dict[str, Any]] = []
+    seen_id_role: set[tuple[str, str]] = set()
+    covered_by_role: Dict[str, set[str]] = {"author": set(), "artist": set()}
+
+    for role, meta_list in (("author", authors_meta or []), ("artist", artists_meta or [])):
+        for meta in meta_list:
+            if not isinstance(meta, dict):
+                continue
+            name = str(meta.get("name") or "").strip()
+            if not name:
+                continue
+            dex_id = str(meta.get("id") or meta.get("mangadex_id") or meta.get("creator_id") or "").strip() or None
+            cid = deterministic_creator_uuid(name, dex_id)
+            if (cid, role) in seen_id_role:
+                continue
+            seen_id_role.add((cid, role))
+            covered_by_role[role].add(name.lower())
+            refs.append(
+                {
+                    "creator_id": cid,
+                    "slug": slugify_creator_name(name),
+                    "name": name,
+                    "role": role,
+                    "mangadex_id": dex_id,
+                }
+            )
+
+    for role, raw in (("author", author_str), ("artist", artist_str)):
+        for name in split_creator_names(raw):
+            if name.lower() in covered_by_role[role]:
+                continue
+            cid = deterministic_creator_uuid(name, None)
+            if (cid, role) in seen_id_role:
+                continue
+            seen_id_role.add((cid, role))
+            covered_by_role[role].add(name.lower())
+            refs.append(
+                {
+                    "creator_id": cid,
+                    "slug": slugify_creator_name(name),
+                    "name": name,
+                    "role": role,
+                    "mangadex_id": None,
+                }
+            )
+    return refs
+
+
 def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not doc:
         return doc
     doc = dict(doc)
     if "_id" in doc:
         doc["_id"] = str(doc["_id"])
+    if not doc.get("creators"):
+        doc["creators"] = _build_fallback_creator_refs(
+            author_str=doc.get("author"),
+            artist_str=doc.get("artist"),
+        )
     return doc
 
 
@@ -70,6 +134,33 @@ class MangaService:
 
     def _get_audit_collection(self):
         return get_db().audit_logs
+
+    async def _resolve_manga_creators(
+        self,
+        author_str: Optional[str] = None,
+        artist_str: Optional[str] = None,
+        authors_meta: Optional[List[Dict[str, Any]]] = None,
+        artists_meta: Optional[List[Dict[str, Any]]] = None,
+        existing_creators: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        try:
+            from backend.services.creator_service import creator_service
+
+            return await creator_service.resolve_or_create_creators_for_manga(
+                author_str=author_str,
+                artist_str=artist_str,
+                authors_meta=authors_meta,
+                artists_meta=artists_meta,
+                existing_creators=existing_creators,
+            )
+        except Exception as e:
+            logger.debug(f"Fallback in-memory creator resolution: {e}")
+            return _build_fallback_creator_refs(
+                author_str=author_str,
+                artist_str=artist_str,
+                authors_meta=authors_meta,
+                artists_meta=artists_meta,
+            )
 
     async def log_action(
         self,
@@ -114,6 +205,7 @@ class MangaService:
         artist: Optional[str] = None,
         authors: Optional[List[str]] = None,
         artists: Optional[List[str]] = None,
+        creator_id: Optional[str] = None,
         rating_min: Optional[float] = None,
         rating_max: Optional[float] = None,
         year: Optional[str] = None,
@@ -236,10 +328,6 @@ class MangaService:
         if authors:
             all_authors.extend(authors)
         all_authors = list(set([a.strip() for a in all_authors if a and a.strip()]))
-        if all_authors:
-            clause = build_creator_match_clause("author", all_authors)
-            if clause:
-                clauses.append(clause)
 
         # Artists
         all_artists = []
@@ -248,10 +336,73 @@ class MangaService:
         if artists:
             all_artists.extend(artists)
         all_artists = list(set([a.strip() for a in all_artists if a and a.strip()]))
-        if all_artists:
-            clause = build_creator_match_clause("artist", all_artists)
-            if clause:
-                clauses.append(clause)
+
+        if creator_id and creator_id.strip():
+            clean_cid = creator_id.strip()
+            id_match_or: List[Dict[str, Any]] = [
+                {"creators.creator_id": clean_cid},
+                {"creators.mangadex_id": clean_cid},
+            ]
+            # Resolve creator name from db.creators if not explicitly passed via author/artist
+            fallback_names: List[str] = list(set(all_authors + all_artists))
+            try:
+                db = get_db()
+                creator_doc = await db.creators.find_one(
+                    {
+                        "$or": [
+                            {"creator_id": clean_cid},
+                            {"mangadex_id": clean_cid},
+                            {"slug": clean_cid.lower()},
+                        ]
+                    }
+                )
+                if creator_doc and creator_doc.get("name"):
+                    cname = str(creator_doc["name"]).strip()
+                    if cname and cname not in fallback_names:
+                        fallback_names.append(cname)
+                    # Also match deterministic UUID if manga was created before MangaDex sync
+                    det_uuid = deterministic_creator_uuid(cname)
+                    if det_uuid != clean_cid:
+                        # Only match deterministic UUID when no homonym exists in db.creators
+                        homonym_count = await db.creators.count_documents(
+                            {"name": {"$regex": f"^{re.escape(cname)}$", "$options": "i"}}
+                        )
+                        if homonym_count <= 1:
+                            id_match_or.append({"creators.creator_id": det_uuid})
+            except Exception as e:
+                logger.warning(f"Failed to lookup creator name for creator_id={clean_cid}: {e}")
+
+            # For legacy mangas that do not yet have a populated `creators` array in DB,
+            # allow matching by author/artist name ONLY when `creators` is absent/empty
+            # so homonymous creators with different creator_ids are never mixed!
+            legacy_name_clauses: List[Dict[str, Any]] = []
+            if fallback_names:
+                c_auth = build_creator_match_clause("author", fallback_names)
+                if c_auth:
+                    legacy_name_clauses.append(c_auth)
+                c_art = build_creator_match_clause("artist", fallback_names)
+                if c_art:
+                    legacy_name_clauses.append(c_art)
+            if legacy_name_clauses:
+                name_cond = legacy_name_clauses[0] if len(legacy_name_clauses) == 1 else {"$or": legacy_name_clauses}
+                id_match_or.append(
+                    {
+                        "$and": [
+                            {"$or": [{"creators": {"$exists": False}}, {"creators": {"$size": 0}}]},
+                            name_cond,
+                        ]
+                    }
+                )
+            clauses.append({"$or": id_match_or})
+        else:
+            if all_authors:
+                clause = build_creator_match_clause("author", all_authors)
+                if clause:
+                    clauses.append(clause)
+            if all_artists:
+                clause = build_creator_match_clause("artist", all_artists)
+                if clause:
+                    clauses.append(clause)
 
         if rating_min is not None or rating_max is not None:
             rating_query = {}
@@ -475,6 +626,13 @@ class MangaService:
         if init_status.startswith("readstatus."):
             init_status = init_status.split(".", 1)[1]
 
+        resolved_creators = await self._resolve_manga_creators(
+            author_str=details.get("author"),
+            artist_str=details.get("artist"),
+            authors_meta=details.get("authors_meta"),
+            artists_meta=details.get("artists_meta"),
+        )
+
         manga_doc = {
             "_id": manga_id,
             "mangadex_id": dex_data.mangadex_id,
@@ -483,6 +641,7 @@ class MangaService:
             "description": details["description"],
             "author": details["author"],
             "artist": details["artist"],
+            "creators": resolved_creators,
             "year": details["year"],
             "status": details["status"],
             "minio_cover_key": minio_cover_key,
@@ -656,6 +815,13 @@ class MangaService:
         if init_status.startswith("readstatus."):
             init_status = init_status.split(".", 1)[1]
 
+        resolved_creators = await self._resolve_manga_creators(
+            author_str=details.get("author"),
+            artist_str=details.get("artist"),
+            authors_meta=details.get("authors_meta"),
+            artists_meta=details.get("artists_meta"),
+        )
+
         manga_doc = {
             "_id": manga_id,
             "mangadex_id": dex_data.mangadex_id,
@@ -664,6 +830,7 @@ class MangaService:
             "description": details["description"],
             "author": details["author"],
             "artist": details["artist"],
+            "creators": resolved_creators,
             "year": details["year"],
             "status": details["status"],
             "minio_cover_key": minio_cover_key,
@@ -763,6 +930,12 @@ class MangaService:
         if init_status.startswith("readstatus."):
             init_status = init_status.split(".", 1)[1]
 
+        resolved_creators = await self._resolve_manga_creators(
+            author_str=manual_data.author,
+            artist_str=manual_data.artist,
+            existing_creators=[c.model_dump() for c in (manual_data.creators or [])],
+        )
+
         manga_doc = {
             "_id": manga_id,
             "mangadex_id": None,
@@ -771,6 +944,7 @@ class MangaService:
             "description": manual_data.description,
             "author": manual_data.author,
             "artist": manual_data.artist,
+            "creators": resolved_creators,
             "year": manual_data.year,
             "status": manual_data.status,
             "minio_cover_key": minio_cover_key,
@@ -902,6 +1076,14 @@ class MangaService:
             if existing.get("minio_cover_key"):
                 existing["cover_url"] = minio_service.get_presigned_url(existing["minio_cover_key"])
             return serialize_doc(existing)
+
+        if "author" in update_dict or "artist" in update_dict:
+            if "creators" not in update_dict:
+                update_dict["creators"] = await self._resolve_manga_creators(
+                    author_str=update_dict.get("author", existing.get("author")),
+                    artist_str=update_dict.get("artist", existing.get("artist")),
+                    existing_creators=existing.get("creators") or [],
+                )
 
         update_dict["updated_at"] = datetime.utcnow()
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_dict})
@@ -1065,12 +1247,21 @@ class MangaService:
         provenance = dict(manga.get("metadata_provenance") or {})
         now_iso = datetime.now(timezone.utc).isoformat()
 
+        resolved_creators = await self._resolve_manga_creators(
+            author_str=details["author"] if not locks.get("author", False) else manga.get("author"),
+            artist_str=details["artist"] if not locks.get("artist", False) else manga.get("artist"),
+            authors_meta=details.get("authors_meta") if not locks.get("author", False) else None,
+            artists_meta=details.get("artists_meta") if not locks.get("artist", False) else None,
+            existing_creators=manga.get("creators") or [],
+        )
+
         candidate_updates = {
             "title": details["title"],
             "alt_titles": merged_alts,
             "description": details["description"],
             "author": details["author"],
             "artist": details["artist"],
+            "creators": resolved_creators,
             "year": details["year"],
             "status": details["status"],
             "tag_ids": local_tag_ids,

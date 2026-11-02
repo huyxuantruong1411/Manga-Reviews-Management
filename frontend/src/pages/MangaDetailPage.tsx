@@ -124,6 +124,14 @@ export interface TrackerMetadataPayload {
 	combined?: TrackerMetadataCombined;
 }
 
+export interface MangaCreatorRef {
+	creator_id: string;
+	slug?: string;
+	name: string;
+	role: string;
+	mangadex_id?: string | null;
+}
+
 export interface Manga {
 	_id: string;
 	mangadex_id: string | null;
@@ -132,6 +140,7 @@ export interface Manga {
 	description: string;
 	author: string;
 	artist: string;
+	creators?: MangaCreatorRef[];
 	year: string;
 	status: string;
 	read_status: string;
@@ -1028,8 +1037,11 @@ export const MangaDetailPage: React.FC = () => {
 	const [coversCount, setCoversCount] = useState<number>(0);
 	const [recsCount, setRecsCount] = useState<number>(0);
 
-	// Creator links helper with middle-click support
-	const renderCreatorLinks = (creatorString: string) => {
+	// Creator links helper with middle-click support and MangaDex-style UUID/slug routing
+	const renderCreatorLinks = (
+		creatorString: string,
+		role?: "author" | "artist",
+	) => {
 		if (
 			!creatorString ||
 			creatorString === "Unknown" ||
@@ -1043,35 +1055,57 @@ export const MangaDetailPage: React.FC = () => {
 			.filter(Boolean);
 		return (
 			<>
-				{creators.map((name, index) => (
-					<React.Fragment key={name}>
-						{index > 0 && (
-							<span className="text-[var(--text-secondary)]">, </span>
-						)}
-						<a
-							href={`/author/${encodeURIComponent(name)}`}
-							onClick={(e) => {
-								if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
-									return;
+				{creators.map((name, index) => {
+					const matchedRef =
+						manga?.creators?.find(
+							(c) =>
+								c.name.toLowerCase() === name.toLowerCase() &&
+								(!role || c.role === role),
+						) ||
+						manga?.creators?.find(
+							(c) => c.name.toLowerCase() === name.toLowerCase(),
+						);
+					const href = matchedRef?.creator_id
+						? `/author/${encodeURIComponent(matchedRef.creator_id)}${
+								matchedRef.slug ? `/${encodeURIComponent(matchedRef.slug)}` : ""
+							}`
+						: `/author/${encodeURIComponent(name)}`;
+
+					return (
+						<React.Fragment key={`${name}-${index}`}>
+							{index > 0 && (
+								<span className="text-[var(--text-secondary)]">, </span>
+							)}
+							<a
+								href={href}
+								title={
+									matchedRef?.creator_id
+										? `${name} (${matchedRef.creator_id})`
+										: name
 								}
-								e.stopPropagation();
-								e.preventDefault();
-								navigate(`/author/${encodeURIComponent(name)}`);
-							}}
-							onMouseDown={(e) => {
-								if (e.button === 1) e.preventDefault();
-							}}
-							onAuxClick={(e) => {
-								if (e.button === 1) {
-									window.open(`/author/${encodeURIComponent(name)}`, "_blank");
-								}
-							}}
-							className="hover:text-[var(--brand-orange)] hover:underline cursor-pointer transition duration-150"
-						>
-							{name}
-						</a>
-					</React.Fragment>
-				))}
+								onClick={(e) => {
+									if (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey) {
+										return;
+									}
+									e.stopPropagation();
+									e.preventDefault();
+									navigate(href);
+								}}
+								onMouseDown={(e) => {
+									if (e.button === 1) e.preventDefault();
+								}}
+								onAuxClick={(e) => {
+									if (e.button === 1) {
+										window.open(href, "_blank");
+									}
+								}}
+								className="hover:text-[var(--brand-orange)] hover:underline cursor-pointer transition duration-150"
+							>
+								{name}
+							</a>
+						</React.Fragment>
+					);
+				})}
 			</>
 		);
 	};
@@ -3012,13 +3046,15 @@ export const MangaDetailPage: React.FC = () => {
 							<div className="flex items-center space-x-2">
 								<User size={16} className="text-[var(--brand-orange)]" />
 								<span>
-									<strong>Author:</strong> {renderCreatorLinks(manga.author)}
+									<strong>Author:</strong>{" "}
+									{renderCreatorLinks(manga.author, "author")}
 								</span>
 							</div>
 							<div className="flex items-center space-x-2">
 								<User size={16} className="text-[var(--brand-coral)]" />
 								<span>
-									<strong>Artist:</strong> {renderCreatorLinks(manga.artist)}
+									<strong>Artist:</strong>{" "}
+									{renderCreatorLinks(manga.artist, "artist")}
 								</span>
 							</div>
 							<div className="flex items-center space-x-2">

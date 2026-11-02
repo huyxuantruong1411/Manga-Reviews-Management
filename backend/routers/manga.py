@@ -54,6 +54,10 @@ async def list_mangas(
     artist: Optional[str] = Query(None, description="Filter by artist name"),
     authors: Optional[List[str]] = Query(None, description="Filter by multiple author names"),
     artists: Optional[List[str]] = Query(None, description="Filter by multiple artist names"),
+    creator_id: Optional[str] = Query(
+        None,
+        description="Filter by canonical Creator UUID (creator_id / mangadex_id) to disambiguate homonymous creators",
+    ),
     rating_min: Optional[float] = Query(None, description="Min rating"),
     rating_max: Optional[float] = Query(None, description="Max rating"),
     year: Optional[str] = Query(None, description="Filter by year"),
@@ -90,6 +94,7 @@ async def list_mangas(
         artist=artist,
         authors=authors,
         artists=artists,
+        creator_id=creator_id,
         rating_min=rating_min,
         rating_max=rating_max,
         year=year,
@@ -160,7 +165,6 @@ async def add_manga_from_dex(data: MangaCreateDex):
 
 @router.post("/manual", response_model=MangaResponse, status_code=status.HTTP_201_CREATED)
 async def add_manga_manually(
-    # Receive JSON payload as a Form field because of Multipart upload support
     metadata: str = Form(..., description="MangaCreate JSON string"),
     cover: Optional[UploadFile] = File(None),
 ):

@@ -1,6 +1,8 @@
 import type {
 	PoolCandidateItem,
 	PoolChapterItem,
+	PoolCreatorDetailResponse,
+	PoolCreatorListResponse,
 	PoolDuplicateGroup,
 	PoolIntegrityReport,
 	PoolMangaItem,
@@ -12,6 +14,25 @@ import client from "./client";
 
 export const getPoolStats = async (): Promise<PoolStatsResponse> => {
 	const res = await client.get("/api/datalake-pool/stats");
+	return res.data;
+};
+
+export const listPoolCreators = async (params: {
+	search?: string;
+	role?: string;
+	page?: number;
+	page_size?: number;
+}): Promise<PoolCreatorListResponse> => {
+	const res = await client.get("/api/datalake-pool/creators", { params });
+	return res.data;
+};
+
+export const getPoolCreatorDetail = async (
+	creatorId: string,
+): Promise<PoolCreatorDetailResponse> => {
+	const res = await client.get(
+		`/api/datalake-pool/creators/${encodeURIComponent(creatorId)}`,
+	);
 	return res.data;
 };
 
@@ -43,6 +64,7 @@ export const listPoolMangas = async (params: {
 	pool_state?: string;
 	is_etl_ready?: boolean;
 	language?: string;
+	creator_id?: string;
 	page?: number;
 	page_size?: number;
 	sort_by?: string;
@@ -203,5 +225,12 @@ export const exportEtlManifest = async (
 	const res = await client.get(
 		`/api/datalake-pool/mangas/${poolMangaId}/etl-manifest`,
 	);
+	return res.data;
+};
+
+export const getContractTemplate = async (): Promise<
+	Record<string, unknown>
+> => {
+	const res = await client.get("/api/datalake-pool/contract/template");
 	return res.data;
 };

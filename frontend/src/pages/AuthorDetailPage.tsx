@@ -2,6 +2,7 @@ import {
 	ArrowLeft,
 	BookOpen,
 	ExternalLink,
+	Fingerprint,
 	Grid,
 	Layers,
 	LayoutGrid,
@@ -37,7 +38,12 @@ interface AuthorWork {
 }
 
 export const AuthorDetailPage: React.FC = () => {
-	const { name } = useParams<{ name: string }>();
+	const { id, slug, name } = useParams<{
+		id?: string;
+		slug?: string;
+		name?: string;
+	}>();
+	const identifier = id || name || "";
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { settings, shouldBlur } = useMangaBlur();
@@ -72,10 +78,10 @@ export const AuthorDetailPage: React.FC = () => {
 		applyTabChange(nextTab);
 	};
 
-	const handleSelectTierlistId = (id: string) => {
+	const handleSelectTierlistId = (idVal: string) => {
 		const newParams = new URLSearchParams(searchParams);
 		newParams.set("tab", "tierlist");
-		newParams.set("tierlistId", id);
+		newParams.set("tierlistId", idVal);
 		setSearchParams(newParams);
 	};
 
@@ -121,8 +127,6 @@ export const AuthorDetailPage: React.FC = () => {
 	const renderMarkdown = (text: string) => {
 		if (!text) return null;
 
-		// Matches bold: **text**
-		// Matches links: [label](url)
 		const tokenRegex = /(\*\*.*?\*\*|\[.*?\]\(.*?\))/g;
 		const parts = text.split(tokenRegex);
 
@@ -159,35 +163,82 @@ export const AuthorDetailPage: React.FC = () => {
 	};
 
 	const fetchAuthorAndWorks = async () => {
-		if (!name) return;
+		if (!identifier) return;
 		try {
 			setLoading(true);
 			setError(null);
 
-			// 1. Fetch Author from backend creators endpoint
+			// 1. Fetch Author from backend creators endpoint (supports UUID, slug, or name)
 			const authorRes = await client.get(
-				`/api/creators/${encodeURIComponent(name)}`,
+				`/api/creators/${encodeURIComponent(identifier)}`,
 			);
 			const matchedAuthor = authorRes.data;
 			setAuthor(matchedAuthor);
 
-			// 2. Fetch local works (both as author and as artist) and tags list
-			const [authorWorksRes, artistWorksRes, tagsRes] = await Promise.all([
-				client.get("/api/manga/", { params: { author: name, limit: 10000 } }),
-				client.get("/api/manga/", { params: { artist: name, limit: 10000 } }),
+			const resolvedCreatorId =
+				matchedAuthor?.creator_id || matchedAuthor?.mangadex_id || null;
+			const resolvedName = matchedAuthor?.name || identifier;
+
+			// 2. Fetch local works (by creator_id AND by author/artist name for legacy records, disambiguating homonyms)
+			const requests: Promise<any>[] = [
+				client.get("/api/manga/", {
+					params: { author: resolvedName, limit: 10000 },
+				}),
+				client.get("/api/manga/", {
+					params: { artist: resolvedName, limit: 10000 },
+				}),
 				client.get("/api/tags/"),
-			]);
+			];
+			if (resolvedCreatorId) {
+				requests.push(
+					client.get("/api/manga/", {
+						params: { creator_id: resolvedCreatorId, limit: 10000 },
+					}),
+				);
+			}
 
-			const authorWorks = authorWorksRes.data.items || [];
-			const artistWorks = artistWorksRes.data.items || [];
-			const tagsList = tagsRes.data || [];
+			const responses = await Promise.all(requests);
+			const authorWorks = responses[0]?.data?.items || [];
+			const artistWorks = responses[1]?.data?.items || [];
+			const tagsList: any[] = responses[2]?.data || [];
+			const creatorIdWorks = resolvedCreatorId
+				? responses[3]?.data?.items || []
+				: [];
 
-			// Merge and deduplicate works by local _id
 			const mergedMap: Record<string, any> = {};
-			[...authorWorks, ...artistWorks].forEach((manga) => {
+			// Always include works explicitly matched by creator_id
+			for (const manga of creatorIdWorks) {
 				mergedMap[manga._id] = manga;
-			});
-			const uniqueWorks = Object.values(mergedMap);
+			}
+			// Include works matched by author/artist name unless they explicitly belong to a homonymous creator with a different mangadex_id
+			const resolvedNameLower = resolvedName.trim().toLowerCase();
+			for (const manga of [...authorWorks, ...artistWorks]) {
+				if (mergedMap[manga._id]) continue;
+				const mangaCreators: any[] = Array.isArray(manga.creators)
+					? manga.creators
+					: [];
+				if (resolvedCreatorId && mangaCreators.length > 0) {
+					const matchingNameEntries = mangaCreators.filter(
+						(c) =>
+							String(c?.name || "")
+								.trim()
+								.toLowerCase() === resolvedNameLower,
+					);
+					const hasExactIdMatch = matchingNameEntries.some(
+						(c) =>
+							c.creator_id === resolvedCreatorId ||
+							c.mangadex_id === resolvedCreatorId,
+					);
+					const hasConflictingDexId = matchingNameEntries.some(
+						(c) => c.mangadex_id && c.mangadex_id !== resolvedCreatorId,
+					);
+					if (hasConflictingDexId && !hasExactIdMatch) {
+						continue;
+					}
+				}
+				mergedMap[manga._id] = manga;
+			}
+			const uniqueWorks: any[] = Object.values(mergedMap);
 
 			if (uniqueWorks.length === 0) {
 				setWorks([]);
@@ -238,7 +289,7 @@ export const AuthorDetailPage: React.FC = () => {
 
 	useEffect(() => {
 		fetchAuthorAndWorks();
-	}, [name]);
+	}, [identifier]);
 
 	// Sort works
 	const getSortedWorks = () => {
@@ -266,11 +317,22 @@ export const AuthorDetailPage: React.FC = () => {
 
 	// Social handles
 	const socials = {
-		twitter: author?.twitter || author?.attributes?.twitter,
-		pixiv: author?.pixiv || author?.attributes?.pixiv,
-		youtube: author?.youtube || author?.attributes?.youtube,
-		website: author?.website || author?.attributes?.website,
+		twitter:
+			author?.twitter || author?.links?.twitter || author?.attributes?.twitter,
+		pixiv: author?.pixiv || author?.links?.pixiv || author?.attributes?.pixiv,
+		youtube:
+			author?.youtube || author?.links?.youtube || author?.attributes?.youtube,
+		website:
+			author?.website || author?.links?.website || author?.attributes?.website,
 	};
+
+	const displayAuthorName =
+		author?.name || slug || name || id || "Unknown Creator";
+	const displayCreatorId = author?.creator_id || author?.mangadex_id || null;
+	const displaySlug = author?.slug || slug || null;
+	const mangadexUrl = author?.mangadex_id
+		? `https://mangadex.org/author/${author.mangadex_id}${displaySlug ? `/${displaySlug}` : ""}`
+		: null;
 
 	const getReadStatusBadge = (manga: AuthorWork) => {
 		const status = manga.read_status.toLowerCase();
@@ -355,9 +417,36 @@ export const AuthorDetailPage: React.FC = () => {
 				<div className="absolute top-0 right-0 w-72 h-72 bg-[var(--brand-orange)]/5 rounded-full blur-[80px] pointer-events-none" />
 
 				<div className="space-y-4 relative z-10">
-					<h1 className="text-3xl md:text-4xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)]">
-						{name}
-					</h1>
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<h1 className="text-3xl md:text-4xl font-spartan font-extrabold tracking-tight text-[var(--text-primary)]">
+							{displayAuthorName}
+						</h1>
+						<div className="flex flex-wrap items-center gap-2">
+							{displayCreatorId && (
+								<span
+									className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-[var(--border-primary)] text-xs font-mono text-[var(--text-secondary)]"
+									title="Canonical Creator UUID (MangaDex / Deterministic)"
+								>
+									<Fingerprint
+										size={13}
+										className="text-[var(--brand-orange)]"
+									/>
+									<span>{displayCreatorId}</span>
+								</span>
+							)}
+							{mangadexUrl && (
+								<a
+									href={mangadexUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[var(--brand-orange)]/10 hover:bg-[var(--brand-orange)]/20 border border-[var(--brand-orange)]/30 text-xs font-bold text-[var(--brand-orange)] transition"
+								>
+									<ExternalLink size={12} />
+									<span>MangaDex Profile</span>
+								</a>
+							)}
+						</div>
+					</div>
 
 					{nativeName && (
 						<div className="text-sm">
@@ -858,9 +947,9 @@ export const AuthorDetailPage: React.FC = () => {
 			)}
 
 			{/* Tierlist Maker Tab */}
-			{activeTab === "tierlist" && name && (
+			{activeTab === "tierlist" && identifier && (
 				<CreatorTierlistWorkspace
-					creatorName={name}
+					creatorName={displayAuthorName}
 					activeTierlistId={tierlistId}
 					onSelectTierlistId={handleSelectTierlistId}
 					onDirtyChange={setIsTierlistDirty}

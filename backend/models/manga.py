@@ -22,6 +22,14 @@ class MangaLink(BaseModel):
     url: str
 
 
+class MangaCreatorRef(BaseModel):
+    creator_id: str = Field(..., description="Canonical Creator UUID (MangaDex UUID or deterministic UUIDv5)")
+    slug: str = Field(default="creator", description="URL-friendly creator slug (e.g. nakamura-moto)")
+    name: str = Field(..., description="Creator display name")
+    role: str = Field(default="author", description="author or artist")
+    mangadex_id: Optional[str] = None
+
+
 class MangaBase(BaseModel):
     mangadex_id: Optional[str] = None
     title: str
@@ -29,6 +37,7 @@ class MangaBase(BaseModel):
     description: Optional[str] = None
     author: Optional[str] = None
     artist: Optional[str] = None
+    creators: List[MangaCreatorRef] = Field(default_factory=list)
     year: Optional[str] = None
     status: Optional[str] = None  # MangaDex publishing status
     read_status: ReadStatus = ReadStatus.UNREAD
@@ -100,6 +109,7 @@ class MangaUpdate(BaseModel):
     description: Optional[str] = None
     author: Optional[str] = None
     artist: Optional[str] = None
+    creators: Optional[List[MangaCreatorRef]] = None
     year: Optional[str] = None
     status: Optional[str] = None
     read_status: Optional[ReadStatus] = None

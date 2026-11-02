@@ -1,6 +1,10 @@
 import {
 	AlertTriangle,
 	Database,
+	ExternalLink,
+	FileCode,
+	Filter,
+	Fingerprint,
 	HardDrive,
 	Layers,
 	Loader2,
@@ -11,17 +15,22 @@ import {
 	ShieldCheck,
 	Trash2,
 	Upload,
+	Users,
+	X,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
 	getPoolStats,
 	listPoolCandidates,
+	listPoolCreators,
 	listPoolMangas,
 	publishToPool,
 	removeMangaFromPool,
 	syncPoolManga,
 } from "../api/datalakePool";
+import { ContractTemplateModal } from "../components/datalake/ContractTemplateModal";
 import { PoolMangaWorkspaceModal } from "../components/datalake/PoolMangaWorkspaceModal";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -29,15 +38,17 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
 import type {
 	PoolCandidateItem,
+	PoolCreatorCatalogItem,
 	PoolMangaItem,
 	PoolStatsResponse,
 } from "../types/datalakePool";
 
 export const DataLakePoolPage: React.FC = () => {
+	const navigate = useNavigate();
 	const { showToast } = useAlert();
-	const [activeTab, setActiveTab] = useState<"repository" | "candidates">(
-		"repository",
-	);
+	const [activeTab, setActiveTab] = useState<
+		"repository" | "creators" | "candidates"
+	>("repository");
 
 	// Stats KPI
 	const [stats, setStats] = useState<PoolStatsResponse | null>(null);
@@ -50,8 +61,22 @@ export const DataLakePoolPage: React.FC = () => {
 	const [repoSearch, setRepoSearch] = useState("");
 	const [repoStateFilter, setRepoStateFilter] = useState("all");
 	const [repoEtlFilter, setRepoEtlFilter] = useState("all");
+	const [repoCreatorFilter, setRepoCreatorFilter] = useState<{
+		creator_id: string;
+		name: string;
+	} | null>(null);
 	const [repoPage, setRepoPage] = useState(1);
 	const [repoTotal, setRepoTotal] = useState(0);
+
+	// Creators Catalog Tab State
+	const [creators, setCreators] = useState<PoolCreatorCatalogItem[]>([]);
+	const [loadingCreators, setLoadingCreators] = useState(false);
+	const [creatorError, setCreatorError] = useState<string | null>(null);
+	const [creatorSearch, setCreatorSearch] = useState("");
+	const [creatorRoleFilter, setCreatorRoleFilter] = useState<
+		"all" | "author" | "artist"
+	>("all");
+	const [creatorsTotal, setCreatorsTotal] = useState(0);
 
 	// Candidates Tab State
 	const [candidates, setCandidates] = useState<PoolCandidateItem[]>([]);
@@ -70,6 +95,7 @@ export const DataLakePoolPage: React.FC = () => {
 	const [selectedPoolMangaId, setSelectedPoolMangaId] = useState<string | null>(
 		null,
 	);
+	const [showTemplateModal, setShowTemplateModal] = useState(false);
 
 	// Load Stats
 	const loadStats = async () => {
@@ -97,6 +123,9 @@ export const DataLakePoolPage: React.FC = () => {
 			if (repoStateFilter !== "all") params.pool_state = repoStateFilter;
 			if (repoEtlFilter === "ready") params.is_etl_ready = true;
 			if (repoEtlFilter === "not_ready") params.is_etl_ready = false;
+			if (repoCreatorFilter?.creator_id) {
+				params.creator_id = repoCreatorFilter.creator_id;
+			}
 
 			const res = await listPoolMangas(params);
 			setMangas(res.items);
@@ -109,6 +138,30 @@ export const DataLakePoolPage: React.FC = () => {
 			setMangaError(msg);
 		} finally {
 			setLoadingMangas(false);
+		}
+	};
+
+	// Load Distinct Pool Creators
+	const loadPoolCreators = async () => {
+		try {
+			setLoadingCreators(true);
+			setCreatorError(null);
+			const res = await listPoolCreators({
+				page: 1,
+				page_size: 100,
+				search: creatorSearch.trim() || undefined,
+				role: creatorRoleFilter !== "all" ? creatorRoleFilter : undefined,
+			});
+			setCreators(res.items);
+			setCreatorsTotal(res.total);
+		} catch (err: unknown) {
+			const msg =
+				err instanceof Error
+					? err.message
+					: "Không thể tải danh mục Creators trong Pool";
+			setCreatorError(msg);
+		} finally {
+			setLoadingCreators(false);
 		}
 	};
 
@@ -143,6 +196,8 @@ export const DataLakePoolPage: React.FC = () => {
 	useEffect(() => {
 		if (activeTab === "repository") {
 			void loadRepositoryMangas();
+		} else if (activeTab === "creators") {
+			void loadPoolCreators();
 		} else {
 			void loadCandidates();
 		}
@@ -151,6 +206,8 @@ export const DataLakePoolPage: React.FC = () => {
 		repoPage,
 		repoStateFilter,
 		repoEtlFilter,
+		repoCreatorFilter,
+		creatorRoleFilter,
 		candHasPagesOnly,
 		candNotInPoolOnly,
 	]);
@@ -232,13 +289,22 @@ export const DataLakePoolPage: React.FC = () => {
 						<span>Manga Data Lake & Storage Pool</span>
 					</h1>
 					<p className="text-sm text-[var(--text-secondary)] mt-1">
-						Quản lý nguồn dữ liệu đóng gói hoàn chỉnh, quản lý chương/trang và
-						làm sạch trùng lặp với cơ chế Zero-Copy MinIO dành cho ETL
-						Connector.
+						Quản lý nguồn dữ liệu đóng gói hoàn chỉnh (Manga, Creators UUID,
+						Tags, Chapters & Pages) với cơ chế Zero-Copy MinIO dành cho hệ thống
+						đọc truyện.
 					</p>
 				</div>
 
-				<div className="flex items-center space-x-2">
+				<div className="flex flex-wrap items-center gap-2">
+					<Button
+						variant="outline"
+						onClick={() => setShowTemplateModal(true)}
+						className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10 hover:text-orange-300"
+					>
+						<FileCode size={16} className="mr-2" />
+						<span>Mẫu Hợp Đồng v2</span>
+					</Button>
+
 					<Button
 						variant={activeTab === "repository" ? "default" : "outline"}
 						onClick={() => setActiveTab("repository")}
@@ -251,6 +317,22 @@ export const DataLakePoolPage: React.FC = () => {
 						<Layers size={16} className="mr-2" />
 						<span>
 							Kho Trong Pool ({repoTotal || (stats?.total_mangas ?? 0)})
+						</span>
+					</Button>
+
+					<Button
+						variant={activeTab === "creators" ? "default" : "outline"}
+						onClick={() => setActiveTab("creators")}
+						className={
+							activeTab === "creators"
+								? "bg-[var(--brand-orange)] text-white hover:bg-[var(--brand-coral)]"
+								: ""
+						}
+					>
+						<Users size={16} className="mr-2" />
+						<span>
+							Creators Đóng Gói ({creatorsTotal || (stats?.total_creators ?? 0)}
+							)
 						</span>
 					</Button>
 
@@ -270,7 +352,7 @@ export const DataLakePoolPage: React.FC = () => {
 			</div>
 
 			{/* KPI Deck */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+			<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
 				{/* KPI 1 */}
 				<div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-xs">
 					<span className="text-xs font-semibold text-[var(--text-secondary)] block">
@@ -295,11 +377,25 @@ export const DataLakePoolPage: React.FC = () => {
 					</div>
 					<div className="text-[11px] text-blue-400 flex items-center mt-1">
 						<ShieldCheck size={12} className="mr-1" />
-						<span>Data Contract v1.0</span>
+						<span>Reader Contract v2.0</span>
 					</div>
 				</div>
 
-				{/* KPI 3 */}
+				{/* KPI 3: Distinct Creators */}
+				<div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-xs">
+					<span className="text-xs font-semibold text-[var(--text-secondary)] block">
+						Creators (Author/Artist)
+					</span>
+					<div className="text-2xl font-black text-purple-400 mt-1">
+						{loadingStats ? "..." : (stats?.total_creators ?? 0)}
+					</div>
+					<div className="text-[11px] text-purple-300/80 flex items-center mt-1">
+						<Fingerprint size={12} className="mr-1" />
+						<span>Định danh theo UUID</span>
+					</div>
+				</div>
+
+				{/* KPI 4 */}
 				<div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-xs">
 					<span className="text-xs font-semibold text-[var(--text-secondary)] block">
 						Tổng Chương Quản Lý
@@ -312,7 +408,7 @@ export const DataLakePoolPage: React.FC = () => {
 					</div>
 				</div>
 
-				{/* KPI 4 */}
+				{/* KPI 5 */}
 				<div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-xs">
 					<span className="text-xs font-semibold text-[var(--text-secondary)] block">
 						Tổng Trang Truyện
@@ -325,7 +421,7 @@ export const DataLakePoolPage: React.FC = () => {
 					</div>
 				</div>
 
-				{/* KPI 5: Zero-Copy Saved */}
+				{/* KPI 6: Zero-Copy Saved */}
 				<div className="p-4 rounded-2xl bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20 shadow-xs">
 					<span className="text-xs font-semibold text-orange-400 block">
 						Tiết Kiệm Zero-Copy
@@ -351,7 +447,7 @@ export const DataLakePoolPage: React.FC = () => {
 							<Search size={18} className="text-[var(--text-secondary)]" />
 							<input
 								type="text"
-								placeholder="Tìm kiếm manga trong Pool theo tiêu đề..."
+								placeholder="Tìm kiếm manga trong Pool theo tiêu đề, tác giả..."
 								value={repoSearch}
 								onChange={(e) => {
 									setRepoSearch(e.target.value);
@@ -365,6 +461,30 @@ export const DataLakePoolPage: React.FC = () => {
 						</div>
 
 						<div className="flex flex-wrap items-center gap-2">
+							{repoCreatorFilter && (
+								<div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-xs text-orange-300">
+									<Fingerprint size={13} />
+									<span>
+										Creator: <strong>{repoCreatorFilter.name}</strong> (
+										<span className="font-mono">
+											{repoCreatorFilter.creator_id.slice(0, 8)}...
+										</span>
+										)
+									</span>
+									<button
+										type="button"
+										onClick={() => {
+											setRepoCreatorFilter(null);
+											setRepoPage(1);
+										}}
+										className="ml-1 hover:text-white cursor-pointer"
+										title="Xóa bộ lọc Creator"
+									>
+										<X size={13} />
+									</button>
+								</div>
+							)}
+
 							<select
 								value={repoStateFilter}
 								onChange={(e) => {
@@ -516,8 +636,14 @@ export const DataLakePoolPage: React.FC = () => {
 											>
 												{m.title}
 											</h3>
-											<p className="text-xs text-[var(--text-secondary)] line-clamp-1 mt-0.5">
+											<p
+												className="text-xs text-[var(--text-secondary)] line-clamp-1 mt-0.5"
+												title={`Author: ${m.author || "N/A"} | Artist: ${m.artist || "N/A"}`}
+											>
 												{m.author || "Không rõ tác giả"}
+												{m.artist && m.artist !== m.author
+													? ` • Art: ${m.artist}`
+													: ""}
 											</p>
 
 											{/* Stats Row */}
@@ -544,16 +670,31 @@ export const DataLakePoolPage: React.FC = () => {
 												</div>
 											</div>
 
-											{/* Languages & Tags preview */}
-											<div className="flex flex-wrap gap-1 mt-2">
-												{m.stats.available_languages.map((l) => (
+											{/* Languages & Creators count preview */}
+											<div className="flex flex-wrap items-center justify-between gap-1 mt-2">
+												<div className="flex flex-wrap gap-1">
+													{m.stats.available_languages.map((l) => (
+														<span
+															key={l}
+															className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 uppercase font-mono"
+														>
+															{l}
+														</span>
+													))}
+												</div>
+												{m.creators && m.creators.length > 0 && (
 													<span
-														key={l}
-														className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 uppercase font-mono"
+														className="text-[10px] font-mono text-purple-400"
+														title={m.creators
+															.map(
+																(c) =>
+																	`${c.name} (${c.role}) [${c.creator_id}]`,
+															)
+															.join(", ")}
 													>
-														{l}
+														{m.creators.length} creator(s)
 													</span>
-												))}
+												)}
 											</div>
 										</div>
 
@@ -585,7 +726,235 @@ export const DataLakePoolPage: React.FC = () => {
 				</div>
 			)}
 
-			{/* ===================== TAB 2: CANDIDATE PICKER ===================== */}
+			{/* ===================== TAB 2: DISTINCT CREATORS CATALOG ===================== */}
+			{activeTab === "creators" && (
+				<div className="space-y-4">
+					{/* Creators Filter Bar */}
+					<div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-primary)]">
+						<div className="flex items-center space-x-2 flex-1 min-w-[240px]">
+							<Search size={18} className="text-[var(--text-secondary)]" />
+							<input
+								type="text"
+								placeholder="Tìm kiếm Creator theo tên, slug hoặc UUID (ví dụ: nakamura-moto, 7918d851-...)..."
+								value={creatorSearch}
+								onChange={(e) => setCreatorSearch(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") void loadPoolCreators();
+								}}
+								className="bg-transparent border-none text-sm text-[var(--text-primary)] focus:outline-none w-full"
+							/>
+						</div>
+
+						<div className="flex flex-wrap items-center gap-2">
+							<select
+								value={creatorRoleFilter}
+								onChange={(e) =>
+									setCreatorRoleFilter(
+										e.target.value as "all" | "author" | "artist",
+									)
+								}
+								className="px-3 py-1.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-primary)] text-xs text-[var(--text-secondary)] focus:outline-none"
+							>
+								<option value="all">Tất cả vai trò (Author & Artist)</option>
+								<option value="author">Chỉ Tác Giả (Author)</option>
+								<option value="artist">Chỉ Họa Sĩ (Artist)</option>
+							</select>
+
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={() => void loadPoolCreators()}
+								className="text-xs"
+							>
+								<Search size={13} className="mr-1.5" />
+								<span>Tìm kiếm</span>
+							</Button>
+						</div>
+					</div>
+
+					{/* Creators Content State */}
+					{loadingCreators ? (
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+							{Array.from({ length: 6 }).map((_, i) => (
+								<div
+									key={i}
+									className="p-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-card)] space-y-3"
+								>
+									<Skeleton className="h-5 w-1/2 rounded-md" />
+									<Skeleton className="h-4 w-3/4 rounded-md" />
+									<Skeleton className="h-12 w-full rounded-lg" />
+								</div>
+							))}
+						</div>
+					) : creatorError ? (
+						<div className="p-8 text-center rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 space-y-3">
+							<AlertTriangle size={32} className="mx-auto" />
+							<p className="font-semibold text-sm">{creatorError}</p>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={loadPoolCreators}
+								className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10"
+							>
+								Thử lại
+							</Button>
+						</div>
+					) : creators.length === 0 ? (
+						<div className="py-16 text-center rounded-2xl border border-dashed border-[var(--border-primary)] p-8 bg-[var(--bg-card)] space-y-3">
+							<div className="w-14 h-14 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+								<Users size={28} />
+							</div>
+							<h3 className="text-sm font-bold text-[var(--text-primary)]">
+								Chưa có Creator nào trong danh mục Data Lake Pool
+							</h3>
+							<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
+								Khi bạn đóng gói manga vào Pool hoặc bấm Sync, toàn bộ Author và
+								Artist liên quan sẽ tự động được trích xuất distinct theo UUID
+								tại đây.
+							</p>
+						</div>
+					) : (
+						<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+							{creators.map((creator) => (
+								<div
+									key={creator.creator_id}
+									className="p-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-card)] hover:border-orange-500/40 transition-all flex flex-col justify-between space-y-3 shadow-xs"
+								>
+									<div className="space-y-2.5">
+										{/* Name + Roles */}
+										<div className="flex items-start justify-between gap-2">
+											<div className="min-w-0">
+												<h3 className="font-bold text-base text-[var(--text-primary)] truncate">
+													{creator.name}
+												</h3>
+												<div className="flex items-center gap-1.5 text-[11px] font-mono text-[var(--text-secondary)] mt-0.5">
+													<Fingerprint
+														size={12}
+														className="text-[var(--brand-orange)] shrink-0"
+													/>
+													<span className="truncate" title={creator.creator_id}>
+														{creator.creator_id}
+													</span>
+												</div>
+												{creator.slug && (
+													<div className="text-[11px] font-mono text-zinc-500 truncate">
+														/author/{creator.creator_id}/{creator.slug}
+													</div>
+												)}
+											</div>
+
+											<div className="flex flex-wrap gap-1 shrink-0">
+												{creator.roles.map((r) => (
+													<Badge
+														key={r}
+														className={
+															r === "author"
+																? "bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px]"
+																: "bg-pink-500/20 text-pink-400 border border-pink-500/30 text-[10px]"
+														}
+													>
+														{r.toUpperCase()}
+													</Badge>
+												))}
+											</div>
+										</div>
+
+										{/* Biography snippet */}
+										{creator.biography?.en ? (
+											<p className="text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+												{creator.biography.en}
+											</p>
+										) : (
+											<p className="text-xs text-zinc-500 italic">
+												Chưa có tiểu sử chi tiết.
+											</p>
+										)}
+
+										{/* Social links */}
+										{creator.links && Object.keys(creator.links).length > 0 && (
+											<div className="flex flex-wrap gap-1.5">
+												{Object.entries(creator.links).map(([key, url]) => (
+													<a
+														key={key}
+														href={url}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-[10px] text-orange-300 font-medium transition"
+													>
+														<ExternalLink size={10} />
+														<span>{key}</span>
+													</a>
+												))}
+											</div>
+										)}
+
+										{/* Sample pooled mangas */}
+										<div className="pt-2 border-t border-[var(--border-primary)] space-y-1.5">
+											<span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
+												Tác phẩm đóng gói trong Pool ({creator.manga_count}):
+											</span>
+											<div className="flex flex-wrap gap-1.5">
+												{creator.sample_mangas.slice(0, 4).map((sm) => (
+													<button
+														key={sm.pool_manga_id}
+														type="button"
+														onClick={() =>
+															setSelectedPoolMangaId(sm.pool_manga_id)
+														}
+														className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-[var(--border-primary)] text-[11px] text-[var(--text-primary)] truncate max-w-[200px] cursor-pointer transition"
+														title={sm.title}
+													>
+														{sm.title}
+													</button>
+												))}
+											</div>
+										</div>
+									</div>
+
+									{/* Actions */}
+									<div className="pt-2 flex items-center gap-2">
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												setRepoCreatorFilter({
+													creator_id: creator.creator_id,
+													name: creator.name,
+												});
+												setRepoPage(1);
+												setActiveTab("repository");
+											}}
+											className="flex-1 text-xs"
+										>
+											<Filter size={13} className="mr-1.5" />
+											<span>Lọc Manga ({creator.manga_count})</span>
+										</Button>
+
+										<Button
+											size="sm"
+											onClick={() =>
+												navigate(
+													`/author/${encodeURIComponent(creator.creator_id)}${
+														creator.slug
+															? `/${encodeURIComponent(creator.slug)}`
+															: ""
+													}`,
+												)
+											}
+											className="bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs"
+										>
+											<ExternalLink size={13} className="mr-1.5" />
+											<span>Hồ Sơ</span>
+										</Button>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* ===================== TAB 3: CANDIDATE PICKER ===================== */}
 			{activeTab === "candidates" && (
 				<div className="space-y-4">
 					{/* Candidate Filter & Batch Action Bar */}
@@ -865,9 +1234,18 @@ export const DataLakePoolPage: React.FC = () => {
 					onUpdated={() => {
 						void loadStats();
 						void loadRepositoryMangas();
+						if (activeTab === "creators") {
+							void loadPoolCreators();
+						}
 					}}
 				/>
 			)}
+
+			{/* Universal Contract Template Modal */}
+			<ContractTemplateModal
+				isOpen={showTemplateModal}
+				onClose={() => setShowTemplateModal(false)}
+			/>
 		</div>
 	);
 };

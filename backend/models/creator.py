@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,14 @@ from backend.models.pyobjectid import PyObjectId
 
 
 class CreatorBase(BaseModel):
+    creator_id: Optional[str] = Field(
+        default=None,
+        description="Canonical Creator UUID (MangaDex UUID when available, or deterministic UUID)",
+    )
+    slug: Optional[str] = Field(
+        default=None,
+        description="URL-friendly creator slug (e.g. nakamura-moto)",
+    )
     mangadex_id: Optional[str] = None
     name: str
     biography: Dict[str, str] = Field(default_factory=dict)  # e.g., {"en": "...", "ja": "..."}
@@ -14,6 +22,8 @@ class CreatorBase(BaseModel):
     pixiv: Optional[str] = None
     youtube: Optional[str] = None
     website: Optional[str] = None
+    links: Dict[str, str] = Field(default_factory=dict)
+    roles: List[str] = Field(default_factory=list)
 
 
 class CreatorCreate(CreatorBase):
@@ -22,11 +32,13 @@ class CreatorCreate(CreatorBase):
 
 class CreatorUpdate(BaseModel):
     name: Optional[str] = None
+    slug: Optional[str] = None
     biography: Optional[Dict[str, str]] = None
     twitter: Optional[str] = None
     pixiv: Optional[str] = None
     youtube: Optional[str] = None
     website: Optional[str] = None
+    links: Optional[Dict[str, str]] = None
 
 
 class CreatorResponse(CreatorBase):

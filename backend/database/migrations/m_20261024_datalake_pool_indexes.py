@@ -12,8 +12,18 @@ POOL_MANGAS_INDEXES = [
         {},
     ),
     ("title", "idx_pool_title", {}),
+    ("creators.creator_id", "idx_pool_creators_creator_id", {}),
     ("primary_cover.object_key", "idx_pool_primary_cover_key", {}),
     ("cover_arts.object_key", "idx_pool_cover_arts_key", {}),
+]
+
+POOL_CREATORS_INDEXES = [
+    ("creator_id", "idx_pool_creator_id", {"unique": True}),
+    ("mangadex_id", "idx_pool_creator_mangadex_id", {"sparse": True}),
+    ("slug", "idx_pool_creator_slug", {}),
+    ("name", "idx_pool_creator_name", {}),
+    ("roles", "idx_pool_creator_roles", {}),
+    ([("manga_count", -1), ("name", 1)], "idx_pool_creator_manga_count", {}),
 ]
 
 POOL_CHAPTERS_INDEXES = [
@@ -45,6 +55,9 @@ async def upgrade():
     for keys, name, kwargs in POOL_MANGAS_INDEXES:
         await pool_db.pool_mangas.create_index(keys, name=name, **kwargs)
 
+    for keys, name, kwargs in POOL_CREATORS_INDEXES:
+        await pool_db.pool_creators.create_index(keys, name=name, **kwargs)
+
     for keys, name, kwargs in POOL_CHAPTERS_INDEXES:
         await pool_db.pool_chapters.create_index(keys, name=name, **kwargs)
 
@@ -57,6 +70,7 @@ async def downgrade():
     pool_db = get_pool_db()
     for col, defs in (
         (pool_db.pool_mangas, POOL_MANGAS_INDEXES),
+        (pool_db.pool_creators, POOL_CREATORS_INDEXES),
         (pool_db.pool_chapters, POOL_CHAPTERS_INDEXES),
         (pool_db.pool_audit_logs, POOL_AUDIT_LOGS_INDEXES),
     ):

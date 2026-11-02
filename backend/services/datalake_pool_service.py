@@ -13,7 +13,10 @@ from backend.models.datalake_pool import (
     PoolCandidateItem,
     PoolChapterInDB,
     PoolCoverArtEmbedded,
+    PoolCreatorCatalogItem,
+    PoolCreatorDetailResponse,
     PoolCreatorEmbedded,
+    PoolCreatorListResponse,
     PoolDuplicateGroup,
     PoolDuplicateItem,
     PoolDuplicateTarget,
@@ -28,7 +31,14 @@ from backend.models.datalake_pool import (
     PublishToPoolRequest,
     PublishToPoolResponse,
 )
+from backend.services.creator_service import (
+    deterministic_creator_uuid,
+    extract_creator_links,
+    slugify_creator_name,
+    split_creator_names,
+)
 from backend.services.minio_service import minio_service
+from backend.services.reader_contract_service import build_reader_package
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +58,347 @@ class DatalakePoolService:
 
     def _get_pool_db(self):
         return get_pool_db()
+
+    async def _build_denormalized_creators_for_manga(
+        self, manga: Dict[str, Any], source_db: Any
+    ) -> List[Dict[str, Any]]:
+        """
+        Resolve and encapsulate all creators (authors & artists) for a manga into PoolCreatorEmbedded dicts.
+        - Splits comma/semicolon-separated author & artist strings.
+        - Preserves homonymous creators with distinct creator_ids / mangadex_ids.
+        - Pulls biography and social links (twitter, pixiv, youtube, website, links) from source_db.creators.
+        - Guarantees every author and artist is included even if not previously stored in source_db.creators.
+        """
+        raw_refs = [c for c in (manga.get("creators") or []) if isinstance(c, dict) and c.get("name")]
+
+        # Gather all candidate names and IDs to look up in source_db.creators
+        candidate_names: set[str] = set()
+        candidate_ids: set[str] = set()
+
+        for r in raw_refs:
+            r_name = str(r.get("name") or "").strip()
+            if r_name:
+                candidate_names.add(r_name)
+            for id_field in ("creator_id", "mangadex_id"):
+                val = r.get(id_field)
+                if isinstance(val, str) and val.strip():
+                    candidate_ids.add(val.strip())
+
+        for role in ("author", "artist"):
+            for name in split_creator_names(manga.get(role)):
+                candidate_names.add(name)
+
+        by_creator_id: Dict[str, Dict[str, Any]] = {}
+        by_dex_id: Dict[str, Dict[str, Any]] = {}
+        by_name_lower: Dict[str, List[Dict[str, Any]]] = {}
+
+        if (candidate_names or candidate_ids) and hasattr(source_db, "creators"):
+            or_clauses: List[Dict[str, Any]] = []
+            if candidate_names:
+                or_clauses.append({"name": {"$in": list(candidate_names)}})
+            if candidate_ids:
+                or_clauses.append({"creator_id": {"$in": list(candidate_ids)}})
+                or_clauses.append({"mangadex_id": {"$in": list(candidate_ids)}})
+
+            find_query = {"$or": or_clauses} if len(or_clauses) > 1 else (or_clauses[0] if or_clauses else {})
+            creators_cursor = source_db.creators.find(find_query)
+            async for c_doc in creators_cursor:
+                if not isinstance(c_doc, dict):
+                    continue
+                c_name = str(c_doc.get("name") or "").strip()
+                c_dex = str(c_doc.get("mangadex_id") or "").strip() or None
+                c_id = str(c_doc.get("creator_id") or "").strip() or (
+                    deterministic_creator_uuid(c_name, c_dex) if c_name else ""
+                )
+                if c_id:
+                    by_creator_id[c_id] = c_doc
+                if c_dex:
+                    by_dex_id[c_dex] = c_doc
+                if c_name:
+                    by_name_lower.setdefault(c_name.lower(), []).append(c_doc)
+
+        refs_by_name_role: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
+        refs_by_name_any: Dict[str, List[Dict[str, Any]]] = {}
+        for r in raw_refs:
+            r_name = str(r.get("name") or "").strip()
+            if not r_name:
+                continue
+            r_name_lower = r_name.lower()
+            refs_by_name_any.setdefault(r_name_lower, []).append(r)
+            r_role = str(r.get("role") or "").strip().lower()
+            if r_role in ("author", "artist"):
+                refs_by_name_role.setdefault((r_name_lower, r_role), []).append(r)
+
+        denormalized: List[Dict[str, Any]] = []
+        seen_id_role: set[tuple[str, str]] = set()
+
+        def _emit_creator(
+            name_str: str,
+            role_str: str,
+            ref_dict: Optional[Dict[str, Any]] = None,
+            source_doc: Optional[Dict[str, Any]] = None,
+        ) -> None:
+            ref_dict = ref_dict or {}
+            source_doc = source_doc or {}
+            dex_id = str(ref_dict.get("mangadex_id") or source_doc.get("mangadex_id") or "").strip() or None
+            cid = str(
+                ref_dict.get("creator_id") or source_doc.get("creator_id") or ""
+            ).strip() or deterministic_creator_uuid(name_str, dex_id)
+            if (cid, role_str) in seen_id_role:
+                return
+            seen_id_role.add((cid, role_str))
+
+            c_slug = str(ref_dict.get("slug") or source_doc.get("slug") or "").strip() or slugify_creator_name(name_str)
+            src_id = (
+                str(source_doc["_id"])
+                if "_id" in source_doc and source_doc["_id"] is not None
+                else (str(ref_dict.get("source_creator_id") or "").strip() or None)
+            )
+            bio_raw = source_doc.get("biography") or ref_dict.get("biography") or {}
+            bio = {str(k): str(v) for k, v in bio_raw.items() if v} if isinstance(bio_raw, dict) else {}
+            merged_links = {**extract_creator_links(ref_dict), **extract_creator_links(source_doc)}
+
+            denormalized.append(
+                PoolCreatorEmbedded(
+                    creator_id=cid,
+                    slug=c_slug,
+                    source_creator_id=src_id,
+                    name=name_str,
+                    role=role_str,
+                    mangadex_id=dex_id,
+                    biography=bio,
+                    links=merged_links,
+                ).model_dump()
+            )
+
+        for role in ("author", "artist"):
+            covered_names: set[str] = set()
+
+            # 1. Process explicit refs on manga["creators"] for this role
+            for (r_name_lower, r_role), r_list in refs_by_name_role.items():
+                if r_role != role:
+                    continue
+                for r_item in r_list:
+                    r_name = str(r_item["name"]).strip()
+                    r_cid = str(r_item.get("creator_id") or "").strip()
+                    r_dex = str(r_item.get("mangadex_id") or "").strip()
+                    matched_doc = (
+                        by_creator_id.get(r_cid) or by_dex_id.get(r_dex) or (by_name_lower.get(r_name_lower, [None])[0])
+                    )
+                    _emit_creator(r_name, role, ref_dict=r_item, source_doc=matched_doc)
+                covered_names.add(r_name_lower)
+
+            # 2. Process comma/semicolon-separated names from manga[role]
+            for name in split_creator_names(manga.get(role)):
+                name_lower = name.lower()
+                if name_lower in covered_names:
+                    continue
+                covered_names.add(name_lower)
+
+                any_refs = refs_by_name_any.get(name_lower)
+                db_docs = by_name_lower.get(name_lower)
+                if any_refs:
+                    for r_item in any_refs:
+                        r_cid = str(r_item.get("creator_id") or "").strip()
+                        r_dex = str(r_item.get("mangadex_id") or "").strip()
+                        matched_doc = (
+                            by_creator_id.get(r_cid) or by_dex_id.get(r_dex) or (db_docs[0] if db_docs else None)
+                        )
+                        _emit_creator(name, role, ref_dict=r_item, source_doc=matched_doc)
+                elif db_docs:
+                    for db_doc in db_docs:
+                        _emit_creator(str(db_doc.get("name") or name).strip(), role, source_doc=db_doc)
+                else:
+                    _emit_creator(name, role)
+
+        return denormalized
+
+    async def _sync_pool_creators_catalog(self) -> int:
+        """
+        Aggregate distinct creators across all pooled mangas in pool_db.pool_mangas
+        and synchronize them into pool_db.pool_creators (keyed by creator_id UUID).
+        """
+        pool_db = self._get_pool_db()
+        if not hasattr(pool_db, "pool_creators"):
+            return 0
+
+        catalog: Dict[str, Dict[str, Any]] = {}
+        now = datetime.now(timezone.utc)
+
+        mangas_cursor = pool_db.pool_mangas.find({})
+        async for m in mangas_cursor:
+            if not isinstance(m, dict):
+                continue
+            pm_id = str(m.get("pool_manga_id") or "")
+            pm_title = str(m.get("title") or "Untitled")
+            pm_slug = str(m.get("slug") or slugify(pm_title))
+
+            m_creators = [c for c in (m.get("creators") or []) if isinstance(c, dict) and c.get("name")]
+            if not m_creators:
+                # Fallback for legacy pooled mangas without embedded creators array
+                for role in ("author", "artist"):
+                    for name in split_creator_names(m.get(role)):
+                        m_creators.append(
+                            {
+                                "creator_id": deterministic_creator_uuid(name, None),
+                                "slug": slugify_creator_name(name),
+                                "name": name,
+                                "role": role,
+                            }
+                        )
+
+            for c in m_creators:
+                c_name = str(c.get("name") or "").strip()
+                if not c_name:
+                    continue
+                dex_id = str(c.get("mangadex_id") or "").strip() or None
+                cid = str(c.get("creator_id") or "").strip() or deterministic_creator_uuid(c_name, dex_id)
+                c_slug = str(c.get("slug") or "").strip() or slugify_creator_name(c_name)
+                role = "artist" if str(c.get("role") or "").strip().lower() == "artist" else "author"
+
+                entry = catalog.get(cid)
+                if not entry:
+                    entry = {
+                        "creator_id": cid,
+                        "slug": c_slug,
+                        "name": c_name,
+                        "mangadex_id": dex_id,
+                        "source_creator_id": c.get("source_creator_id"),
+                        "roles": [],
+                        "biography": {},
+                        "links": {},
+                        "pool_manga_ids": [],
+                        "sample_mangas": [],
+                        "manga_count": 0,
+                        "updated_at": now,
+                    }
+                    catalog[cid] = entry
+
+                if dex_id and not entry.get("mangadex_id"):
+                    entry["mangadex_id"] = dex_id
+                if c.get("source_creator_id") and not entry.get("source_creator_id"):
+                    entry["source_creator_id"] = c.get("source_creator_id")
+                if role not in entry["roles"]:
+                    entry["roles"].append(role)
+                    entry["roles"].sort()
+
+                bio = c.get("biography")
+                if isinstance(bio, dict):
+                    for k, v in bio.items():
+                        if v and k not in entry["biography"]:
+                            entry["biography"][str(k)] = str(v)
+
+                c_links = extract_creator_links(c)
+                for k, v in c_links.items():
+                    if v and k not in entry["links"]:
+                        entry["links"][k] = v
+
+                if pm_id and pm_id not in entry["pool_manga_ids"]:
+                    entry["pool_manga_ids"].append(pm_id)
+                    entry["manga_count"] = len(entry["pool_manga_ids"])
+                    if len(entry["sample_mangas"]) < 6:
+                        entry["sample_mangas"].append(
+                            {
+                                "pool_manga_id": pm_id,
+                                "title": pm_title,
+                                "slug": pm_slug,
+                            }
+                        )
+
+        try:
+            await pool_db.pool_creators.delete_many({"creator_id": {"$nin": list(catalog.keys())}})
+            for cid, c_doc in catalog.items():
+                await pool_db.pool_creators.update_one(
+                    {"creator_id": cid},
+                    {"$set": c_doc},
+                    upsert=True,
+                )
+        except Exception as e:
+            logger.warning(f"Could not sync pool_creators collection: {e}")
+
+        return len(catalog)
+
+    async def list_pool_creators(
+        self,
+        search: Optional[str] = None,
+        role: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> PoolCreatorListResponse:
+        """
+        Return the distinct creators catalog across all pooled mangas in the Data Lake Pool.
+        """
+        pool_db = self._get_pool_db()
+        await self._sync_pool_creators_catalog()
+
+        items_raw: List[Dict[str, Any]] = []
+        if hasattr(pool_db, "pool_creators"):
+            cursor = pool_db.pool_creators.find({})
+            if hasattr(cursor, "to_list"):
+                items_raw = await cursor.to_list(length=5000)
+            else:
+                async for doc in cursor:
+                    items_raw.append(doc)
+
+        filtered: List[PoolCreatorCatalogItem] = []
+        search_q = search.strip().lower() if search and search.strip() else None
+        role_q = role.strip().lower() if role and role.strip() else None
+
+        for doc in items_raw:
+            if not isinstance(doc, dict) or not doc.get("creator_id"):
+                continue
+            if role_q and role_q not in (doc.get("roles") or []):
+                continue
+            if search_q:
+                haystack = f"{doc.get('name', '')} {doc.get('slug', '')} {doc.get('creator_id', '')}".lower()
+                if search_q not in haystack:
+                    continue
+            filtered.append(PoolCreatorCatalogItem.model_validate(doc))
+
+        filtered.sort(key=lambda x: (-x.manga_count, x.name.lower(), x.creator_id))
+        total = len(filtered)
+        skip = max(0, (page - 1) * page_size)
+        paged = filtered[skip : skip + page_size]
+
+        return PoolCreatorListResponse(
+            items=paged,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def get_pool_creator_detail(self, creator_id: str) -> Optional[PoolCreatorDetailResponse]:
+        """
+        Get full profile of a distinct pooled creator by creator_id (or mangadex_id) along with their pooled mangas.
+        """
+        await self._sync_pool_creators_catalog()
+        pool_db = self._get_pool_db()
+
+        creator_doc = None
+        if hasattr(pool_db, "pool_creators"):
+            creator_doc = await pool_db.pool_creators.find_one(
+                {"$or": [{"creator_id": creator_id}, {"mangadex_id": creator_id}, {"slug": creator_id.lower()}]}
+            )
+        if not creator_doc:
+            return None
+
+        catalog_item = PoolCreatorCatalogItem.model_validate(creator_doc)
+        mangas_list: List[Dict[str, Any]] = []
+        if catalog_item.pool_manga_ids:
+            cursor = pool_db.pool_mangas.find({"pool_manga_id": {"$in": catalog_item.pool_manga_ids}})
+            raw_mangas = await cursor.to_list(length=500) if hasattr(cursor, "to_list") else [d async for d in cursor]
+            for m in raw_mangas:
+                if "_id" in m:
+                    m["_id"] = str(m["_id"])
+                pc = m.get("primary_cover")
+                if pc and pc.get("object_key"):
+                    pc["url"] = minio_service.get_presigned_url(pc["object_key"])
+                mangas_list.append(m)
+
+        return PoolCreatorDetailResponse(
+            creator=catalog_item,
+            mangas=mangas_list,
+        )
 
     async def list_eligible_candidates(
         self,
@@ -136,7 +487,6 @@ class DatalakePoolService:
             )
 
         total = len(candidates)
-        # Apply pagination after in-memory filtering if has_pages_only or not_in_pool_only
         paged_candidates = candidates[skip : skip + page_size]
 
         return {
@@ -227,25 +577,8 @@ class DatalakePoolService:
                             ).model_dump()
                         )
 
-                # Denormalize creators
-                creator_names = set()
-                if manga.get("author"):
-                    creator_names.add(manga["author"])
-                if manga.get("artist"):
-                    creator_names.add(manga["artist"])
-                denormalized_creators: List[Dict[str, Any]] = []
-                if creator_names:
-                    creators_cursor = source_db.creators.find({"name": {"$in": list(creator_names)}})
-                    async for c_doc in creators_cursor:
-                        denormalized_creators.append(
-                            PoolCreatorEmbedded(
-                                name=c_doc.get("name", ""),
-                                role=c_doc.get("role", "author"),
-                                mangadex_id=c_doc.get("mangadex_id"),
-                                biography=c_doc.get("biography", {}),
-                                links=c_doc.get("links", {}),
-                            ).model_dump()
-                        )
+                # Denormalize creators (splits multi-creators, preserves homonyms via creator_id UUID, includes social links)
+                denormalized_creators = await self._build_denormalized_creators_for_manga(manga, source_db)
 
                 # Denormalize cover arts
                 cover_arts_cursor = source_db.cover_arts.find({"manga_id": s_id})
@@ -363,14 +696,26 @@ class DatalakePoolService:
                         included=True,
                         created_at=now,
                         updated_at=now,
-                    )
-                    pool_chapters_to_insert.append(pool_chapter.model_dump())
+                    ).model_dump(by_alias=True, exclude={"id"})
 
-                # Overall manifest SHA-256
-                manifest_payload = f"{pool_manga_id}:{title}:{total_pages_count}:{total_size_bytes}:{pool_revision}"
+                    pool_chapters_to_insert.append(pool_chapter)
+
+                if not pool_chapters_to_insert:
+                    results.append(
+                        PublishItemResult(
+                            source_manga_id=s_id,
+                            success=False,
+                            title=title,
+                            error="Không tìm thấy trang truyện có khóa object_key hợp lệ.",
+                        )
+                    )
+                    error_count += 1
+                    continue
+
+                # Compute manifest sha256 for manga package
+                manifest_payload = f"{pool_manga_id}:{len(pool_chapters_to_insert)}:{total_pages_count}:{total_size_bytes}:{now.isoformat()}"
                 manifest_sha256 = hashlib.sha256(manifest_payload.encode("utf-8")).hexdigest()
 
-                # Stats & Lineage
                 stats = PoolMangaStats(
                     total_chapters=len(pool_chapters_to_insert),
                     total_pages=total_pages_count,
@@ -382,7 +727,7 @@ class DatalakePoolService:
                     source_metadata_revision=manga.get("metadata_revision", 1),
                     pool_revision=pool_revision,
                     manifest_sha256=manifest_sha256,
-                    published_at=now,
+                    published_at=existing_manga.get("lineage", {}).get("published_at", now) if existing_manga else now,
                     last_synced_from_source_at=now,
                     updated_at=now,
                     has_upstream_changes=False,
@@ -466,6 +811,9 @@ class DatalakePoolService:
                 )
                 error_count += 1
 
+        if success_count > 0:
+            await self._sync_pool_creators_catalog()
+
         return PublishToPoolResponse(
             success_count=success_count,
             error_count=error_count,
@@ -478,6 +826,7 @@ class DatalakePoolService:
         pool_state: Optional[str] = None,
         is_etl_ready: Optional[bool] = None,
         language: Optional[str] = None,
+        creator_id: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
         sort_by: str = "lineage.updated_at",
@@ -495,6 +844,8 @@ class DatalakePoolService:
             query["is_etl_ready"] = is_etl_ready
         if language:
             query["stats.available_languages"] = language
+        if creator_id:
+            query["creators.creator_id"] = creator_id
 
         total = await pool_db.pool_mangas.count_documents(query)
         skip = (page - 1) * page_size
@@ -506,7 +857,6 @@ class DatalakePoolService:
         for doc in raw_items:
             if "_id" in doc:
                 doc["_id"] = str(doc["_id"])
-            # Generate temporary presigned URLs for primary cover
             pc = doc.get("primary_cover")
             if pc and pc.get("object_key"):
                 pc["url"] = minio_service.get_presigned_url(pc["object_key"])
@@ -531,12 +881,10 @@ class DatalakePoolService:
         if "_id" in doc:
             doc["_id"] = str(doc["_id"])
 
-        # Presign primary cover
         pc = doc.get("primary_cover")
         if pc and pc.get("object_key"):
             pc["url"] = minio_service.get_presigned_url(pc["object_key"])
 
-        # Presign cover arts
         covers = doc.get("cover_arts", [])
         for cv in covers:
             if cv.get("object_key"):
@@ -562,6 +910,7 @@ class DatalakePoolService:
     async def update_pool_manga(self, pool_manga_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update metadata on the isolated pool database without mutating review DB."""
         pool_db = self._get_pool_db()
+        source_db = self._get_source_db()
 
         existing = await pool_db.pool_mangas.find_one({"pool_manga_id": pool_manga_id})
         if not existing:
@@ -578,6 +927,12 @@ class DatalakePoolService:
                 "object_key": clean_update.pop("primary_cover_key"),
             }
 
+        # Re-synchronize embedded creators if author or artist was modified
+        if "author" in clean_update or "artist" in clean_update:
+            merged_doc = dict(existing)
+            merged_doc.update(clean_update)
+            clean_update["creators"] = await self._build_denormalized_creators_for_manga(merged_doc, source_db)
+
         now = datetime.now(timezone.utc)
         clean_update["lineage.updated_at"] = now
         clean_update["lineage.pool_revision"] = existing.get("lineage", {}).get("pool_revision", 1) + 1
@@ -586,6 +941,9 @@ class DatalakePoolService:
             {"pool_manga_id": pool_manga_id},
             {"$set": clean_update},
         )
+
+        if "creators" in clean_update:
+            await self._sync_pool_creators_catalog()
 
         await pool_db.pool_audit_logs.insert_one(
             {
@@ -606,6 +964,8 @@ class DatalakePoolService:
         pool_db = self._get_pool_db()
         res = await pool_db.pool_mangas.delete_one({"pool_manga_id": pool_manga_id})
         await pool_db.pool_chapters.delete_many({"pool_manga_id": pool_manga_id})
+
+        await self._sync_pool_creators_catalog()
 
         await pool_db.pool_audit_logs.insert_one(
             {
@@ -724,7 +1084,6 @@ class DatalakePoolService:
         pages_to_remove = set(page_numbers)
         remaining_pages = [p for p in ch.get("pages", []) if p.get("page_number") not in pages_to_remove]
 
-        # Renumber remaining pages 1..N
         total_size = 0
         for i, p in enumerate(remaining_pages):
             p["page_number"] = i + 1
@@ -809,7 +1168,6 @@ class DatalakePoolService:
         Renumbers remaining pages and recalculates stats.
         Never calls MinIO delete.
         """
-        # Group targets by pool_chapter_id
         targets_by_ch: Dict[str, List[int]] = {}
         for t in targets:
             targets_by_ch.setdefault(t.pool_chapter_id, []).append(t.page_number)
@@ -868,24 +1226,21 @@ class DatalakePoolService:
         )
 
     async def export_etl_package_manifest(self, pool_manga_id: str) -> Optional[Dict[str, Any]]:
-        """Export a self-contained JSON data contract package for downstream ETL ingestion."""
-        manga = await self.get_pool_manga_detail(pool_manga_id)
+        """Export a self-contained Manga Reader Data Contract v2 package for downstream ETL ingestion."""
+        pool_db = self._get_pool_db()
+        manga = await pool_db.pool_mangas.find_one({"pool_manga_id": pool_manga_id})
         if not manga:
             return None
 
         chapters = await self.get_pool_manga_chapters(pool_manga_id)
-        return {
-            "contract_version": "1.0",
-            "exported_at": datetime.now(timezone.utc).isoformat(),
-            "manga": manga,
-            "chapters": chapters,
-        }
+        return build_reader_package(manga, chapters).model_dump(mode="json")
 
     async def get_pool_stats(self) -> PoolStatsResponse:
         """Calculate overall KPI deck stats for the data lake pool."""
         pool_db = self._get_pool_db()
         total_mangas = await pool_db.pool_mangas.count_documents({})
         total_etl_ready = await pool_db.pool_mangas.count_documents({"is_etl_ready": True})
+        total_creators = await self._sync_pool_creators_catalog()
 
         pipeline = [
             {
@@ -906,6 +1261,7 @@ class DatalakePoolService:
         return PoolStatsResponse(
             total_mangas=total_mangas,
             total_etl_ready=total_etl_ready,
+            total_creators=total_creators,
             total_chapters=tot_ch,
             total_pages=tot_pg,
             total_size_bytes=tot_sz,

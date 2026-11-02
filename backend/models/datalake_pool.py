@@ -49,11 +49,52 @@ class PoolTagEmbedded(BaseModel):
 class PoolCreatorEmbedded(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    creator_id: str = Field(
+        default="",
+        description="Canonical Creator UUID (MangaDex UUID or deterministic UUIDv5). Disambiguates homonymous creators.",
+    )
+    slug: str = Field(default="creator", description="URL-friendly creator slug (e.g. nakamura-moto)")
+    source_creator_id: Optional[str] = Field(None, description="Source _id in review system creators collection")
     name: str = Field(..., description="Creator full name")
-    role: str = Field("author", description="Role e.g. author, artist, creator")
+    role: str = Field("author", description="Role e.g. author, artist")
     mangadex_id: Optional[str] = None
     biography: Dict[str, str] = Field(default_factory=dict)
     links: Dict[str, str] = Field(default_factory=dict)
+
+
+class PoolCreatorCatalogItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    creator_id: str = Field(..., description="Unique Creator UUID (Primary Key in pool_creators)")
+    slug: str = Field(..., description="URL-friendly creator slug")
+    name: str = Field(..., description="Creator display name")
+    mangadex_id: Optional[str] = None
+    source_creator_id: Optional[str] = None
+    roles: List[str] = Field(default_factory=list, description="Distinct roles across pooled works: author, artist")
+    biography: Dict[str, str] = Field(default_factory=dict)
+    links: Dict[str, str] = Field(default_factory=dict)
+    manga_count: int = Field(0, description="Number of pooled mangas associated with this creator")
+    pool_manga_ids: List[str] = Field(default_factory=list, description="List of pool_manga_ids by this creator")
+    sample_mangas: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Preview list of pooled mangas [{pool_manga_id, title, slug}]"
+    )
+    updated_at: Optional[datetime] = None
+
+
+class PoolCreatorListResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    items: List[PoolCreatorCatalogItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 50
+
+
+class PoolCreatorDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    creator: PoolCreatorCatalogItem
+    mangas: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class PoolCoverArtEmbedded(BaseModel):
@@ -295,6 +336,7 @@ class PoolStatsResponse(BaseModel):
 
     total_mangas: int = 0
     total_etl_ready: int = 0
+    total_creators: int = 0
     total_chapters: int = 0
     total_pages: int = 0
     total_size_bytes: int = 0

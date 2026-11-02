@@ -59,6 +59,10 @@ export const App: React.FC = () => {
 										<Route path="panels" element={<PanelWordsDetectorPage />} />
 										<Route path="analytics" element={<AnalyticsPage />} />
 										<Route path="tags" element={<TagsPage />} />
+										<Route
+											path="author/:id/:slug"
+											element={<AuthorDetailPage />}
+										/>
 										<Route path="author/:name" element={<AuthorDetailPage />} />
 										<Route path="tools" element={<ImageToolsPage />} />
 										<Route path="downloads" element={<DownloadsPage />} />
