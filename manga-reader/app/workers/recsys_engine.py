@@ -149,11 +149,7 @@ async def update_manga_content_vector(
     )
     vec = build_content_feature_vector(tag_slugs, creator_ids, demo_val, manga.description)
 
-    cache_row = (
-        await db.execute(
-            select(MangaRecommendationsCache).where(MangaRecommendationsCache.manga_id == manga.pool_manga_id)
-        )
-    ).scalar_one_or_none()
+    cache_row = await db.get(MangaRecommendationsCache, manga.pool_manga_id)
     if cache_row is None:
         cache_row = MangaRecommendationsCache(
             manga_id=manga.pool_manga_id,
@@ -166,6 +162,7 @@ async def update_manga_content_vector(
     else:
         cache_row.content_feature_vec = vec
         cache_row.computed_at = datetime.now(timezone.utc)
+    await db.flush()
     return cache_row
 
 
