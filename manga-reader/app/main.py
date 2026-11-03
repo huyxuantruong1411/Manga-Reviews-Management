@@ -17,6 +17,8 @@ from app.modules.mod3_manga_discovery.router import router as mod3_router
 from app.modules.mod4_manga_reader.router import router as mod4_router
 from app.modules.mod5_comments.router import router as mod5_router
 from app.modules.mod6_user_profile.router import router as mod6_router
+from app.modules.mod7_reading_lists.router import router as mod7_router
+from app.modules.mod8_list_items.router import router as mod8_router
 
 
 @asynccontextmanager
@@ -52,6 +54,8 @@ app.include_router(mod2_router)
 app.include_router(mod3_router)
 app.include_router(mod4_router)
 app.include_router(mod5_router)
+app.include_router(mod8_router)
+app.include_router(mod7_router)
 
 
 @app.get("/health/live", tags=["Health"])
