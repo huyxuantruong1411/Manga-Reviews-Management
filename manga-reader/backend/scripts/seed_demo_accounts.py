@@ -19,7 +19,7 @@ from app.models import AccountStatus, User, UserRole
 
 DEMO_ACCOUNTS = [
     {
-        "email": "admin@mangareader.local",
+        "email": "admin@mangareader.com",
         "username": "admin",
         "display_name": "Quản Trị Viên (Admin)",
         "password": "Admin123456",
@@ -27,7 +27,7 @@ DEMO_ACCOUNTS = [
         "bio": "Hệ thống Quản trị viên Manga Reader & Data Lake.",
     },
     {
-        "email": "mod@mangareader.local",
+        "email": "mod@mangareader.com",
         "username": "moderator",
         "display_name": "Kiểm Duyệt Viên (Moderator)",
         "password": "Mod123456",
@@ -35,7 +35,7 @@ DEMO_ACCOUNTS = [
         "bio": "Kiểm duyệt nội dung, xử lý báo cáo và khóa bình luận vi phạm.",
     },
     {
-        "email": "reader1@mangareader.local",
+        "email": "reader1@mangareader.com",
         "username": "reader1",
         "display_name": "Độc Giả 01 (Huy Reader)",
         "password": "Reader123456",
@@ -43,7 +43,7 @@ DEMO_ACCOUNTS = [
         "bio": "Độc giả đam mê Manga phiêu lưu hành động.",
     },
     {
-        "email": "reader2@mangareader.local",
+        "email": "reader2@mangareader.com",
         "username": "reader2",
         "display_name": "Độc Giả 02 (Otaku VIP)",
         "password": "Reader123456",
@@ -64,6 +64,7 @@ async def seed_accounts() -> None:
             pw_hash = hash_password(acc["password"])
 
             if existing:
+                existing.email = acc["email"]
                 existing.password_hash = pw_hash
                 existing.role = acc["role"]
                 existing.status = AccountStatus.active
@@ -94,3 +95,4 @@ async def seed_accounts() -> None:
 
 if __name__ == "__main__":
     asyncio.run(seed_accounts())
+

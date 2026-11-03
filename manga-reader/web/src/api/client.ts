@@ -173,10 +173,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   if (!res.ok) {
-    let errorDetail = res.statusText;
+    let errorDetail = res.statusText || "Đã xảy ra lỗi kết nối";
     try {
       const errJson = await res.json();
-      errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+      if (typeof errJson.detail === "string") {
+        errorDetail = errJson.detail;
+      } else if (Array.isArray(errJson.detail)) {
+        errorDetail = errJson.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ");
+      } else if (errJson.detail && typeof errJson.detail === "object") {
+        errorDetail = errJson.detail.message || JSON.stringify(errJson.detail);
+      } else if (errJson.message) {
+        errorDetail = errJson.message;
+      } else {
+        errorDetail = JSON.stringify(errJson);
+      }
     } catch {
       // ignore
     }

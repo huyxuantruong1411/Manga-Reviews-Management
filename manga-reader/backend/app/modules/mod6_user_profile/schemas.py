@@ -36,7 +36,7 @@ class ResendOtpRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=1, max_length=255, description="Email address or username")
     password: str = Field(..., min_length=1, max_length=128)
 
 

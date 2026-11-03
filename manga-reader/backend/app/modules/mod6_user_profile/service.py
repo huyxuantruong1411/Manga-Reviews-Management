@@ -200,23 +200,26 @@ class UserProfileService:
         ip_address: str,
         user_agent: str | None,
     ) -> dict[str, Any]:
-        email_lower = payload.email.lower()
-        failures = await get_login_failures(email_lower)
+        identifier = payload.email.strip().lower()
+        failures = await get_login_failures(identifier)
         if failures >= 5:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Tài khoản tạm khóa đăng nhập 15 phút do nhập sai mật khẩu quá 5 lần.",
             )
 
-        user = (await db.execute(select(User).where(User.email == email_lower))).scalar_one_or_none()
+        stmt = select(User).where((User.email == identifier) | (User.username == identifier))
+        user = (await db.execute(stmt)).scalar_one_or_none()
         if user is None or not verify_password(payload.password, user.password_hash):
-            await record_login_failure(email_lower)
+            await record_login_failure(identifier)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Email hoặc mật khẩu không chính xác.",
+                detail="Tài khoản (email hoặc username) hoặc mật khẩu không chính xác.",
             )
 
-        await reset_login_failures(email_lower)
+        await reset_login_failures(identifier)
+        if user.email != identifier:
+            await reset_login_failures(user.email.lower())
 
         if user.status == AccountStatus.locked:
             raise HTTPException(

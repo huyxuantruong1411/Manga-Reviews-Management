@@ -158,7 +158,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@manga-reader.local"
+                  placeholder="admin hoặc admin@mangareader.com"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-8 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-sans"
                 />
               </div>
