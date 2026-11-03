@@ -196,15 +196,9 @@ class MangaManagementService:
 
             await db.flush()
 
-            # Replace chapter pages cleanly for idempotency
+            # Replace chapter pages cleanly for idempotency (Zero-Copy S3 metadata registration)
             await db.execute(delete(ChapterPage).where(ChapterPage.chapter_id == ch_dto.pool_chapter_id))
             for pg_dto in ch_dto.pages:
-                storage_service.sync_or_create_placeholder_media(
-                    bucket=pg_dto.media.bucket,
-                    object_key=pg_dto.media.object_key,
-                    width=pg_dto.media.width,
-                    height=pg_dto.media.height,
-                )
                 db.add(
                     ChapterPage(
                         page_uid=pg_dto.page_uid,
