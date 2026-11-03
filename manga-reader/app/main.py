@@ -13,6 +13,8 @@ from app.core.redis import close_redis, get_redis
 from app.core.storage import storage_service
 from app.modules.mod1_reader_activity.router import router as mod1_router
 from app.modules.mod2_manga_management.router import router as mod2_router
+from app.modules.mod3_manga_discovery.router import router as mod3_router
+from app.modules.mod4_manga_reader.router import router as mod4_router
 from app.modules.mod6_user_profile.router import router as mod6_router
 
 
@@ -46,6 +48,8 @@ app.add_middleware(
 app.include_router(mod6_router)
 app.include_router(mod1_router)
 app.include_router(mod2_router)
+app.include_router(mod3_router)
+app.include_router(mod4_router)
 
 
 @app.get("/health/live", tags=["Health"])

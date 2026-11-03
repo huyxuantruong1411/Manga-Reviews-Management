@@ -157,6 +157,9 @@ async def get_optional_current_user(
     return user
 
 
+get_optional_user = get_optional_current_user
+
+
 async def get_current_user(
     user: User | None = Depends(get_optional_current_user),
 ) -> User:
