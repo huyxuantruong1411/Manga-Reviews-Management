@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/black">
+
+    <ImageView
+        android:id="@+id/imgReaderPage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:contentDescription="Manga Page"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/tvPageNumberOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="8dp"
+        android:background="#80000000"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="2dp"
+        android:text="Page 1"
+        android:textColor="@color/text_muted"
+        android:textSize="10sp" />
+
+</FrameLayout>
+
