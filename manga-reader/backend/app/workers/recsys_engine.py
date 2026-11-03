@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import desc, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.sanitization import strip_accents
@@ -149,21 +150,28 @@ async def update_manga_content_vector(
     )
     vec = build_content_feature_vector(tag_slugs, creator_ids, demo_val, manga.description)
 
-    cache_row = await db.get(MangaRecommendationsCache, manga.pool_manga_id)
-    if cache_row is None:
-        cache_row = MangaRecommendationsCache(
+    now = datetime.now(timezone.utc)
+    stmt = (
+        pg_insert(MangaRecommendationsCache)
+        .values(
             manga_id=manga.pool_manga_id,
             content_feature_vec=vec,
             content_based_ids=[],
             item_based_ids=[],
-            computed_at=datetime.now(timezone.utc),
+            computed_at=now,
         )
-        db.add(cache_row)
-    else:
-        cache_row.content_feature_vec = vec
-        cache_row.computed_at = datetime.now(timezone.utc)
-    await db.flush()
-    return cache_row
+        .on_conflict_do_update(
+            index_elements=["manga_id"],
+            set_={
+                "content_feature_vec": vec,
+                "computed_at": now,
+            },
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    cache_row = await db.get(MangaRecommendationsCache, manga.pool_manga_id)
+    return cache_row  # type: ignore[return-value]
 
 
 async def compute_user_item_utility_matrix(

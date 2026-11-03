@@ -26,9 +26,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !infra/elk/.env.example
-!manga-reader/.env.example
+!manga-reader/backend/.env.example
 infra/elk/.env
-manga-reader/.env
+manga-reader/backend/.env
 logs/
 *.pem
 *.key
@@ -53,6 +53,14 @@ backend/redis_data/
 manga-reader/postgres_data/
 manga-reader/redis_data/
 manga-reader/minio_data/
+manga-reader/android/.gradle/
+manga-reader/android/.kotlin/
+manga-reader/android/build/
+manga-reader/android/app/build/
+manga-reader/android/local.properties
+manga-reader/android/captures/
+manga-reader/web/test-results/
+manga-reader/web/playwright-report/
 infra/elk/elasticsearch_data/
 infra/elk/logstash_data/
 backend/scratch/

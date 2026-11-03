@@ -15,6 +15,9 @@ import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Docker infra (docker-compose.yml + bind-mounted data) lives at the Manga Reader system root,
+# shared by all subsystems (backend, web, android): manga-reader/{postgres_data,redis_data,minio_data}
+SYSTEM_DIR = BASE_DIR.parent
 
 DEFAULT_PORTS = {
     "BACKEND_HOST_PORT": 18000,
@@ -25,9 +28,9 @@ DEFAULT_PORTS = {
 }
 
 PERSISTENT_DATA_DIRS = [
-    BASE_DIR / "postgres_data",
-    BASE_DIR / "redis_data",
-    BASE_DIR / "minio_data",
+    SYSTEM_DIR / "postgres_data",
+    SYSTEM_DIR / "redis_data",
+    SYSTEM_DIR / "minio_data",
 ]
 
 
