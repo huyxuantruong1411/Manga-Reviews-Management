@@ -214,3 +214,4 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
     </div>
   );
 };
+

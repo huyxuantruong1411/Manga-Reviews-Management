@@ -365,3 +365,4 @@ const ReaderImage: React.FC<{ page: any; fitClasses: string }> = ({ page, fitCla
     </div>
   );
 };
+

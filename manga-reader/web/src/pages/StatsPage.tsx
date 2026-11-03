@@ -107,3 +107,4 @@ export const StatsPage: React.FC<StatsPageProps> = ({ currentUser, onOpenAuth })
     </div>
   );
 };
+

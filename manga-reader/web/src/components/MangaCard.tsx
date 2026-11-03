@@ -88,3 +88,4 @@ export const MangaCard: React.FC<MangaCardProps> = ({ manga }) => {
     </Link>
   );
 };
+

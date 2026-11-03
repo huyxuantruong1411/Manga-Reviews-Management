@@ -241,3 +241,4 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth, currentUser, onLogou
     </header>
   );
 };
+

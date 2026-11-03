@@ -147,3 +147,4 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ currentUser, onOpenAut
     </div>
   );
 };
+

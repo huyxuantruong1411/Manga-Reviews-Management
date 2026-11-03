@@ -286,3 +286,4 @@ export const ListDetailPage: React.FC = () => {
     </div>
   );
 };
+

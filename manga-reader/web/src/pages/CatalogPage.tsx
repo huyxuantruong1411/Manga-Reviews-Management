@@ -329,3 +329,4 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ currentUser }) => {
     </div>
   );
 };
+
