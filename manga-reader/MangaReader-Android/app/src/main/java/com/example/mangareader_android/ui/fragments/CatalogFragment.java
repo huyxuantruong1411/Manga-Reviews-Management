@@ -1,10 +1,12 @@
 package com.example.mangareader_android.ui.fragments;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,9 +14,9 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.api.RetrofitClient;
-import com.example.mangareader_android.data.model.MangaModels.MangaItem;
 import com.example.mangareader_android.data.model.MangaModels.MangaListResponse;
 import com.example.mangareader_android.data.model.MangaModels.RecommendationsResponse;
 import com.example.mangareader_android.databinding.FragmentCatalogBinding;
@@ -112,6 +114,31 @@ public class CatalogFragment extends Fragment {
             currentPage++;
             loadCatalogData();
         });
+
+        binding.btnRetryCatalog.setOnClickListener(v -> loadCatalogData());
+
+        binding.btnChangeEndpoint.setOnClickListener(v -> showChangeEndpointDialog());
+    }
+
+    private void showChangeEndpointDialog() {
+        EditText input = new EditText(requireContext());
+        input.setText(MangaReaderApp.getInstance().getBaseUrl());
+        input.setSingleLine(true);
+        input.setPadding(32, 24, 32, 24);
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Configure Manga API Server URL")
+                .setMessage("Android Emulator: http://10.0.2.2:18000/\nPhysical Phone: http://<PC_LAN_IP>:18000/")
+                .setView(input)
+                .setPositiveButton("Save & Connect", (dialog, which) -> {
+                    String newUrl = input.getText().toString().trim();
+                    if (!newUrl.isEmpty()) {
+                        MangaReaderApp.getInstance().setBaseUrl(newUrl);
+                        loadCatalogData();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void updateFilterButtons() {
@@ -124,6 +151,15 @@ public class CatalogFragment extends Fragment {
     }
 
     private void loadCatalogData() {
+        boolean hasExistingData = catalogAdapter.getItemCount() > 0;
+        if (!hasExistingData) {
+            binding.layoutCatalogLoading.setVisibility(View.VISIBLE);
+            binding.layoutCatalogError.setVisibility(View.GONE);
+            binding.layoutCatalogEmpty.setVisibility(View.GONE);
+            binding.layoutCatalogContent.setVisibility(View.GONE);
+            binding.tvCatalogStats.setText("Connecting to server...");
+        }
+
         binding.swipeRefreshCatalog.setRefreshing(true);
 
         RetrofitClient.getApi().getMangas(
@@ -131,25 +167,42 @@ public class CatalogFragment extends Fragment {
         ).enqueue(new Callback<MangaListResponse>() {
             @Override
             public void onResponse(@NonNull Call<MangaListResponse> call, @NonNull Response<MangaListResponse> response) {
+                if (!isAdded()) return;
                 binding.swipeRefreshCatalog.setRefreshing(false);
+                binding.layoutCatalogLoading.setVisibility(View.GONE);
+
                 if (response.isSuccessful() && response.body() != null) {
                     MangaListResponse body = response.body();
                     totalCount = body.total;
                     catalogAdapter.setMangaList(body.items);
-                    binding.tvCatalogStats.setText(String.format(Locale.US, "%d titles indexed • Page %d", totalCount, currentPage));
-                    binding.tvPageIndicator.setText(String.format(Locale.US, "Page %d", currentPage));
 
-                    binding.btnPrevPage.setEnabled(currentPage > 1);
-                    binding.btnNextPage.setEnabled(body.items.size() == 24);
+                    if (body.items == null || body.items.isEmpty()) {
+                        binding.layoutCatalogEmpty.setVisibility(View.VISIBLE);
+                        binding.layoutCatalogContent.setVisibility(View.GONE);
+                        binding.layoutCatalogError.setVisibility(View.GONE);
+                        binding.tvCatalogStats.setText("0 titles found");
+                    } else {
+                        binding.layoutCatalogEmpty.setVisibility(View.GONE);
+                        binding.layoutCatalogError.setVisibility(View.GONE);
+                        binding.layoutCatalogContent.setVisibility(View.VISIBLE);
+
+                        binding.tvCatalogStats.setText(String.format(Locale.US, "%d titles indexed • Page %d", totalCount, currentPage));
+                        binding.tvPageIndicator.setText(String.format(Locale.US, "Page %d", currentPage));
+
+                        binding.btnPrevPage.setEnabled(currentPage > 1);
+                        binding.btnNextPage.setEnabled(body.items.size() == 24);
+                    }
                 } else {
-                    Toast.makeText(getContext(), "Error loading catalog", Toast.LENGTH_SHORT).show();
+                    handleFetchError("Server returned code " + response.code());
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<MangaListResponse> call, @NonNull Throwable t) {
+                if (!isAdded()) return;
                 binding.swipeRefreshCatalog.setRefreshing(false);
-                Toast.makeText(getContext(), "Network error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                binding.layoutCatalogLoading.setVisibility(View.GONE);
+                handleFetchError(t.getMessage());
             }
         });
 
@@ -157,6 +210,7 @@ public class CatalogFragment extends Fragment {
         RetrofitClient.getApi().getUserRecommendations().enqueue(new Callback<RecommendationsResponse>() {
             @Override
             public void onResponse(@NonNull Call<RecommendationsResponse> call, @NonNull Response<RecommendationsResponse> response) {
+                if (!isAdded()) return;
                 if (response.isSuccessful() && response.body() != null && response.body().items != null && !response.body().items.isEmpty()) {
                     binding.layoutRecommendations.setVisibility(View.VISIBLE);
                     recommendationsAdapter.setMangaList(response.body().items);
@@ -167,9 +221,22 @@ public class CatalogFragment extends Fragment {
 
             @Override
             public void onFailure(@NonNull Call<RecommendationsResponse> call, @NonNull Throwable t) {
+                if (!isAdded()) return;
                 binding.layoutRecommendations.setVisibility(View.GONE);
             }
         });
+    }
+
+    private void handleFetchError(String reason) {
+        if (catalogAdapter.getItemCount() == 0) {
+            binding.layoutCatalogContent.setVisibility(View.GONE);
+            binding.layoutCatalogEmpty.setVisibility(View.GONE);
+            binding.layoutCatalogError.setVisibility(View.VISIBLE);
+            binding.tvEndpointInfo.setText(String.format("Target: %s", MangaReaderApp.getInstance().getBaseUrl()));
+            binding.tvCatalogStats.setText("Offline • Connection failed");
+        } else {
+            Toast.makeText(getContext(), "Sync error: " + reason, Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -178,4 +245,3 @@ public class CatalogFragment extends Fragment {
         binding = null;
     }
 }
-

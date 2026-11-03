@@ -27,7 +27,8 @@ public class MainActivity extends AppCompatActivity {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.main, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, 0);
+            binding.fragmentContainer.setPadding(systemBars.left, systemBars.top, systemBars.right, 0);
+            binding.bottomNav.setPadding(0, 0, 0, systemBars.bottom);
             return insets;
         });
 

@@ -12,6 +12,8 @@ import {
   Activity,
   Layers,
   ChevronDown,
+  Menu,
+  X,
 } from "lucide-react";
 import { api, getStoredUser, clearStoredAuth, UserProfile } from "@/api/client";
 
@@ -28,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth, currentUser, onLogou
   const [showDropdown, setShowDropdown] = useState(false);
   const [healthStatus, setHealthStatus] = useState<"ok" | "degraded" | "checking">("checking");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     api.getHealth()
@@ -236,8 +239,84 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth, currentUser, onLogou
               <span>Đăng Nhập</span>
             </button>
           )}
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
+            aria-label="Toggle mobile menu"
+          >
+            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-zinc-800 bg-zinc-950/98 px-4 py-3 space-y-3">
+          {/* Mobile Search */}
+          <form onSubmit={(e) => {
+            handleSearchSubmit(e);
+            setMobileMenuOpen(false);
+          }}>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm manga (tiếng Việt, không dấu)..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded px-8 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+          </form>
+
+          {/* Mobile Navigation Links */}
+          <nav className="flex flex-col space-y-1 text-xs font-medium text-zinc-300">
+            <Link
+              to="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded hover:bg-zinc-900 hover:text-zinc-100 transition-colors flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4 text-emerald-400" />
+              <span>Danh Mục Truyện</span>
+            </Link>
+            <Link
+              to="/lists"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded hover:bg-zinc-900 hover:text-zinc-100 transition-colors flex items-center gap-2"
+            >
+              <Bookmark className="w-4 h-4 text-amber-400" />
+              <span>List Của Tôi</span>
+            </Link>
+            <Link
+              to="/history"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded hover:bg-zinc-900 hover:text-zinc-100 transition-colors flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4 text-cyan-400" />
+              <span>Lịch Sử Đọc & Điểm Số</span>
+            </Link>
+            <Link
+              to="/stats"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded hover:bg-zinc-900 hover:text-zinc-100 transition-colors flex items-center gap-2"
+            >
+              <BarChart2 className="w-4 h-4 text-purple-400" />
+              <span>Thống Kê Thói Quen</span>
+            </Link>
+            {currentUser?.role === "admin" && (
+              <Link
+                to="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-3 py-2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors flex items-center gap-2"
+              >
+                <Shield className="w-4 h-4" />
+                <span>Console Quản Trị Hệ Thống</span>
+              </Link>
+            )}
+          </nav>
+        </div>
+      )}
     </header>
   );
 };

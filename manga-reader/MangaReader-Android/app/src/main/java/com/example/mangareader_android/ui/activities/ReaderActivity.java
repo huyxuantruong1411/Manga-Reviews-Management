@@ -5,8 +5,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.widget.Toast;
+import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.mangareader_android.data.api.RetrofitClient;
@@ -36,8 +40,26 @@ public class ReaderActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         binding = ActivityReaderBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.getRoot(), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            binding.layoutReaderTopBar.setPadding(
+                    binding.layoutReaderTopBar.getPaddingLeft(),
+                    systemBars.top + 8,
+                    binding.layoutReaderTopBar.getPaddingRight(),
+                    binding.layoutReaderTopBar.getPaddingBottom()
+            );
+            binding.layoutReaderBottomBar.setPadding(
+                    binding.layoutReaderBottomBar.getPaddingLeft(),
+                    binding.layoutReaderBottomBar.getPaddingTop(),
+                    binding.layoutReaderBottomBar.getPaddingRight(),
+                    systemBars.bottom + 10
+            );
+            return insets;
+        });
 
         currentChapterId = getIntent().getStringExtra(EXTRA_CHAPTER_ID);
         if (currentChapterId == null || currentChapterId.isEmpty()) {
