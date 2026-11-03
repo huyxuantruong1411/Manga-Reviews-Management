@@ -63,7 +63,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.HistoryV
 
         void bind(ReadingHistoryItem item) {
             binding.tvHistoryMangaTitle.setText(item.manga_title);
-            binding.tvHistoryProgress.setText(String.format(Locale.US, "Chapter %s • Page %d", item.chapter_number, item.last_read_page));
+            binding.tvHistoryProgress.setText(String.format(Locale.US, "Chapter %s | Page %d", item.chapter_number, item.last_read_page));
 
             if (item.is_completed) {
                 binding.tvHistoryCompletedBadge.setVisibility(View.VISIBLE);

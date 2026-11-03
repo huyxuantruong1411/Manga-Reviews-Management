@@ -34,6 +34,10 @@ android {
     }
 }
 
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+}
+
 dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)

@@ -81,7 +81,7 @@ public class MangaAdapter extends RecyclerView.Adapter<MangaAdapter.MangaViewHol
             // Rating
             if (item.average_rating > 0.0) {
                 binding.tvRating.setVisibility(View.VISIBLE);
-                binding.tvRating.setText(String.format(Locale.US, "%.1f ★", item.average_rating));
+                binding.tvRating.setText(String.format(Locale.US, "%.1f *", item.average_rating));
             } else {
                 binding.tvRating.setVisibility(View.GONE);
             }

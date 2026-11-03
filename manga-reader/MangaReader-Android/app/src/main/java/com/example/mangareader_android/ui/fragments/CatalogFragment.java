@@ -186,7 +186,7 @@ public class CatalogFragment extends Fragment {
                         binding.layoutCatalogError.setVisibility(View.GONE);
                         binding.layoutCatalogContent.setVisibility(View.VISIBLE);
 
-                        binding.tvCatalogStats.setText(String.format(Locale.US, "%d titles indexed • Page %d", totalCount, currentPage));
+                        binding.tvCatalogStats.setText(String.format(Locale.US, "%d titles indexed | Page %d", totalCount, currentPage));
                         binding.tvPageIndicator.setText(String.format(Locale.US, "Page %d", currentPage));
 
                         binding.btnPrevPage.setEnabled(currentPage > 1);
@@ -233,7 +233,7 @@ public class CatalogFragment extends Fragment {
             binding.layoutCatalogEmpty.setVisibility(View.GONE);
             binding.layoutCatalogError.setVisibility(View.VISIBLE);
             binding.tvEndpointInfo.setText(String.format("Target: %s", MangaReaderApp.getInstance().getBaseUrl()));
-            binding.tvCatalogStats.setText("Offline • Connection failed");
+            binding.tvCatalogStats.setText("Offline - Connection failed");
         } else {
             Toast.makeText(getContext(), "Sync error: " + reason, Toast.LENGTH_SHORT).show();
         }

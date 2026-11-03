@@ -66,8 +66,8 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentAdapter.CommentV
                     item.created_at.substring(0, 10) : "");
 
             binding.tvCommentContent.setText(item.content);
-            binding.btnLike.setText(String.format(Locale.US, "▲ %d", item.like_count));
-            binding.btnDislike.setText(String.format(Locale.US, "▼ %d", item.dislike_count));
+            binding.btnLike.setText(String.format(Locale.US, "+ %d", item.like_count));
+            binding.btnDislike.setText(String.format(Locale.US, "- %d", item.dislike_count));
 
             if (item.is_spoiler) {
                 binding.tvSpoilerBadge.setVisibility(View.VISIBLE);

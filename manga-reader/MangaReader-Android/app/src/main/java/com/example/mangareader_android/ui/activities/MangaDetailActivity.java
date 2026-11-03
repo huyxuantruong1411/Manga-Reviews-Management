@@ -133,7 +133,7 @@ public class MangaDetailActivity extends AppCompatActivity {
 
         binding.btnSortOrderToggle.setOnClickListener(v -> {
             sortOrder = "desc".equals(sortOrder) ? "asc" : "desc";
-            binding.btnSortOrderToggle.setText("desc".equals(sortOrder) ? "DESCENDING ↓" : "ASCENDING ↑");
+            binding.btnSortOrderToggle.setText("desc".equals(sortOrder) ? "DESCENDING [v]" : "ASCENDING [^]");
             loadChapters();
         });
 
@@ -187,8 +187,8 @@ public class MangaDetailActivity extends AppCompatActivity {
 
         binding.tvDetailStatusBadge.setText(manga.status != null ? manga.status.toUpperCase() : "ONGOING");
         binding.tvDetailDemographicBadge.setText(manga.publication_demographic != null ? manga.publication_demographic.toUpperCase() : "MANGA");
-        binding.tvDetailRatingBadge.setText(String.format(Locale.US, "%.1f ★", manga.average_rating));
-        binding.tvDetailStats.setText(String.format(Locale.US, "%d chapters • %d views", manga.chapter_count, manga.view_count));
+        binding.tvDetailRatingBadge.setText(String.format(Locale.US, "%.1f *", manga.average_rating));
+        binding.tvDetailStats.setText(String.format(Locale.US, "%d chapters | %d views", manga.chapter_count, manga.view_count));
         binding.tvDetailSynopsis.setText(manga.description != null && !manga.description.isEmpty() ? manga.description : "No description provided.");
 
         Glide.with(this)
@@ -315,7 +315,7 @@ public class MangaDetailActivity extends AppCompatActivity {
         layout.setPadding(50, 30, 50, 20);
 
         final TextView tvScore = new TextView(this);
-        tvScore.setText("10 ★");
+        tvScore.setText("10 *");
         tvScore.setTextSize(18);
         tvScore.setTextColor(getResources().getColor(R.color.accent_amber, null));
         layout.addView(tvScore);
@@ -326,7 +326,7 @@ public class MangaDetailActivity extends AppCompatActivity {
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int progress, boolean fromUser) {
-                tvScore.setText(String.format(Locale.US, "%d ★", progress + 1));
+                tvScore.setText(String.format(Locale.US, "%d *", progress + 1));
             }
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {}
