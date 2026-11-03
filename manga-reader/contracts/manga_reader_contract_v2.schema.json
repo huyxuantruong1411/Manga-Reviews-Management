@@ -1,0 +1,1019 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:manga-datalake:contract:manga-reader-package:2.0",
+  "$defs": {
+    "ReaderChapter": {
+      "additionalProperties": false,
+      "properties": {
+        "pool_chapter_id": {
+          "description": "PRIMARY KEY",
+          "minLength": 1,
+          "title": "Pool Chapter Id",
+          "type": "string"
+        },
+        "pool_manga_id": {
+          "description": "FOREIGN KEY -> manga.pool_manga_id",
+          "minLength": 1,
+          "title": "Pool Manga Id",
+          "type": "string"
+        },
+        "source_chapter_id": {
+          "description": "ID in the source review system",
+          "title": "Source Chapter Id",
+          "type": "string"
+        },
+        "chapter_number": {
+          "description": "Display number, may be '10.5' or 'Extra'",
+          "title": "Chapter Number",
+          "type": "string"
+        },
+        "chapter_numeric": {
+          "default": 0,
+          "description": "Sort key. ORDER BY chapter_numeric, language",
+          "title": "Chapter Numeric",
+          "type": "number"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "description": "ISO 639-1 lowercase (may include region, e.g. pt-br)",
+          "title": "Language",
+          "type": "string"
+        },
+        "scanlation_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scanlation Group"
+        },
+        "publish_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publish At"
+        },
+        "source": {
+          "default": "mangadex",
+          "description": "Origin provider of this chapter",
+          "title": "Source",
+          "type": "string"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Chapter ID at the origin provider",
+          "title": "Source Id"
+        },
+        "page_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Page Count",
+          "type": "integer"
+        },
+        "total_size_bytes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Size Bytes",
+          "type": "integer"
+        },
+        "pages_revision": {
+          "default": 1,
+          "description": "Increments when pages are edited",
+          "minimum": 1,
+          "title": "Pages Revision",
+          "type": "integer"
+        },
+        "manifest_sha256": {
+          "default": "",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        },
+        "pages": {
+          "items": {
+            "$ref": "#/$defs/ReaderPage"
+          },
+          "title": "Pages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pool_chapter_id",
+        "pool_manga_id",
+        "source_chapter_id",
+        "chapter_number"
+      ],
+      "title": "ReaderChapter",
+      "type": "object"
+    },
+    "ReaderCoverArt": {
+      "additionalProperties": false,
+      "properties": {
+        "cover_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cover identifier in the source system",
+          "title": "Cover Id"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Volume label this cover belongs to",
+          "title": "Volume"
+        },
+        "locale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cover locale (ISO 639-1)",
+          "title": "Locale"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "media": {
+          "$ref": "#/$defs/ReaderMediaRef"
+        }
+      },
+      "required": [
+        "media"
+      ],
+      "title": "ReaderCoverArt",
+      "type": "object"
+    },
+    "ReaderCreator": {
+      "additionalProperties": false,
+      "description": "Author/artist credit. A person with both roles appears twice (one row per (creator_id, role)).",
+      "properties": {
+        "creator_id": {
+          "description": "PRIMARY KEY / Canonical creator UUID (MangaDex UUID or deterministic UUIDv5). Disambiguates homonymous creators.",
+          "minLength": 1,
+          "title": "Creator Id",
+          "type": "string"
+        },
+        "slug": {
+          "description": "URL-friendly creator slug (e.g. nakamura-moto) for routes like /author/{creator_id}/{slug}.",
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "description": "Credit role",
+          "enum": [
+            "author",
+            "artist"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "mangadex_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MangaDex author UUID if known",
+          "title": "Mangadex Id"
+        },
+        "biography": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Localized biography {lang: text}",
+          "title": "Biography",
+          "type": "object"
+        },
+        "links": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "External/social links {platform: url}, e.g. twitter, pixiv, youtube, website",
+          "title": "Links",
+          "type": "object"
+        }
+      },
+      "required": [
+        "creator_id",
+        "slug",
+        "name",
+        "role"
+      ],
+      "title": "ReaderCreator",
+      "type": "object"
+    },
+    "ReaderLineage": {
+      "additionalProperties": false,
+      "description": "Versioning info for incremental upserts on the reader side.",
+      "properties": {
+        "pool_revision": {
+          "default": 1,
+          "description": "Increments on every pool change. Use for change detection",
+          "minimum": 1,
+          "title": "Pool Revision",
+          "type": "integer"
+        },
+        "source_metadata_revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Source Metadata Revision",
+          "type": "integer"
+        },
+        "manifest_sha256": {
+          "default": "",
+          "description": "Content hash of the pooled manga",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "First publish into pool (UTC, ISO 8601)",
+          "title": "Published At"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Last pool modification (UTC, ISO 8601)",
+          "title": "Updated At"
+        }
+      },
+      "title": "ReaderLineage",
+      "type": "object"
+    },
+    "ReaderLink": {
+      "additionalProperties": false,
+      "properties": {
+        "site": {
+          "description": "Site label, e.g. MangaDex, MyAnimeList",
+          "minLength": 1,
+          "title": "Site",
+          "type": "string"
+        },
+        "url": {
+          "description": "Absolute URL",
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "site",
+        "url"
+      ],
+      "title": "ReaderLink",
+      "type": "object"
+    },
+    "ReaderManga": {
+      "additionalProperties": false,
+      "properties": {
+        "pool_manga_id": {
+          "description": "PRIMARY KEY. Stable pool ID, e.g. pm_1a2b3c4d5e6f",
+          "minLength": 1,
+          "title": "Pool Manga Id",
+          "type": "string"
+        },
+        "slug": {
+          "description": "UNIQUE. URL-friendly slug",
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        },
+        "source_manga_id": {
+          "description": "ID in the source review system (traceability)",
+          "title": "Source Manga Id",
+          "type": "string"
+        },
+        "mangadex_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MangaDex manga UUID if known",
+          "title": "Mangadex Id"
+        },
+        "title": {
+          "description": "Primary display title",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "alt_titles": {
+          "description": "Alternative titles (any language)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Alt Titles",
+          "type": "array"
+        },
+        "description": {
+          "default": "",
+          "description": "Synopsis (plain text / markdown)",
+          "title": "Description",
+          "type": "string"
+        },
+        "status": {
+          "default": "unknown",
+          "enum": [
+            "ongoing",
+            "completed",
+            "hiatus",
+            "cancelled",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "content_rating": {
+          "default": "unknown",
+          "description": "`unknown` must be treated as NOT safe by readers",
+          "enum": [
+            "safe",
+            "suggestive",
+            "erotica",
+            "pornographic",
+            "unknown"
+          ],
+          "title": "Content Rating",
+          "type": "string"
+        },
+        "publication_demographic": {
+          "default": "unknown",
+          "enum": [
+            "shounen",
+            "shoujo",
+            "seinen",
+            "josei",
+            "kodomo",
+            "unknown"
+          ],
+          "title": "Publication Demographic",
+          "type": "string"
+        },
+        "original_language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 639-1 lowercase, e.g. ja, ko, zh",
+          "title": "Original Language"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "maximum": 2200,
+              "minimum": 1800,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "First publication year",
+          "title": "Year"
+        },
+        "published_start_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free-form or ISO date string from source",
+          "title": "Published Start Date"
+        },
+        "published_end_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published End Date"
+        },
+        "official_volumes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Official volume count (not the exported one)",
+          "title": "Official Volumes"
+        },
+        "official_chapters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Official chapter count (not the exported one)",
+          "title": "Official Chapters"
+        },
+        "creators": {
+          "items": {
+            "$ref": "#/$defs/ReaderCreator"
+          },
+          "title": "Creators",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/ReaderTag"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/ReaderLink"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "primary_cover": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReaderMediaRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cover_arts": {
+          "items": {
+            "$ref": "#/$defs/ReaderCoverArt"
+          },
+          "title": "Cover Arts",
+          "type": "array"
+        },
+        "stats": {
+          "$ref": "#/$defs/ReaderMangaStats"
+        },
+        "lineage": {
+          "$ref": "#/$defs/ReaderLineage"
+        }
+      },
+      "required": [
+        "pool_manga_id",
+        "slug",
+        "source_manga_id",
+        "title"
+      ],
+      "title": "ReaderManga",
+      "type": "object"
+    },
+    "ReaderMangaStats": {
+      "additionalProperties": false,
+      "description": "Computed from the exported chapters/pages only (never stale).",
+      "properties": {
+        "chapter_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chapter Count",
+          "type": "integer"
+        },
+        "page_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Page Count",
+          "type": "integer"
+        },
+        "total_size_bytes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Size Bytes",
+          "type": "integer"
+        },
+        "languages": {
+          "description": "Distinct chapter languages, sorted",
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "title": "ReaderMangaStats",
+      "type": "object"
+    },
+    "ReaderMediaRef": {
+      "additionalProperties": false,
+      "description": "Pointer to an image object in S3/MinIO object storage (Zero-Copy).",
+      "properties": {
+        "bucket": {
+          "description": "Object storage bucket name. SQL: VARCHAR(63) NOT NULL",
+          "title": "Bucket",
+          "type": "string"
+        },
+        "object_key": {
+          "description": "Object key inside the bucket. SQL: TEXT NOT NULL",
+          "title": "Object Key",
+          "type": "string"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MIME type, e.g. image/jpeg, image/webp",
+          "title": "Content Type"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Image width in pixels",
+          "title": "Width"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Image height in pixels",
+          "title": "Height"
+        },
+        "file_size": {
+          "default": 0,
+          "description": "Size in bytes. SQL: BIGINT",
+          "minimum": 0,
+          "title": "File Size",
+          "type": "integer"
+        },
+        "md5_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MD5 hex digest (dedup)",
+          "title": "Md5 Hash"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 hex digest (integrity)",
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "bucket",
+        "object_key"
+      ],
+      "title": "ReaderMediaRef",
+      "type": "object"
+    },
+    "ReaderPage": {
+      "additionalProperties": false,
+      "properties": {
+        "page_uid": {
+          "description": "PRIMARY KEY. Stable page identifier",
+          "minLength": 1,
+          "title": "Page Uid",
+          "type": "string"
+        },
+        "page_number": {
+          "description": "1-indexed reading order, contiguous 1..N",
+          "minimum": 1,
+          "title": "Page Number",
+          "type": "integer"
+        },
+        "filename": {
+          "description": "Original image filename",
+          "title": "Filename",
+          "type": "string"
+        },
+        "media": {
+          "$ref": "#/$defs/ReaderMediaRef"
+        }
+      },
+      "required": [
+        "page_uid",
+        "page_number",
+        "filename",
+        "media"
+      ],
+      "title": "ReaderPage",
+      "type": "object"
+    },
+    "ReaderTag": {
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "description": "Stable URL-safe tag key (unique). Derived from English name",
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        },
+        "source_tag_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tag ID in the source review system",
+          "title": "Source Tag Id"
+        },
+        "mangadex_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MangaDex tag UUID if known",
+          "title": "Mangadex Id"
+        },
+        "group": {
+          "default": "genre",
+          "description": "Tag category",
+          "enum": [
+            "genre",
+            "theme",
+            "format",
+            "content",
+            "other"
+          ],
+          "title": "Group",
+          "type": "string"
+        },
+        "name": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Localized names {lang: name}; key `en` always present",
+          "title": "Name",
+          "type": "object"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "title": "ReaderTag",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Universal Data Contract for every manga in the Manga Data Lake & Storage Pool. Suggested relational mapping: manga(1) -> chapters(N) -> pages(N); manga(N) <-> tags(N); manga(1) -> creators(N), links(N), cover_arts(N).",
+  "properties": {
+    "contract_name": {
+      "const": "manga-reader-package",
+      "default": "manga-reader-package",
+      "title": "Contract Name",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "exported_at": {
+      "format": "date-time",
+      "title": "Exported At",
+      "type": "string"
+    },
+    "manga": {
+      "$ref": "#/$defs/ReaderManga"
+    },
+    "chapters": {
+      "description": "Sorted by chapter_numeric, language",
+      "items": {
+        "$ref": "#/$defs/ReaderChapter"
+      },
+      "title": "Chapters",
+      "type": "array"
+    }
+  },
+  "required": [
+    "exported_at",
+    "manga"
+  ],
+  "title": "MangaReaderPackage",
+  "type": "object",
+  "examples": [
+    {
+      "contract_name": "manga-reader-package",
+      "contract_version": "2.0",
+      "exported_at": "2026-01-01T00:00:00Z",
+      "manga": {
+        "pool_manga_id": "pm_1a2b3c4d5e6f",
+        "slug": "example-manga",
+        "source_manga_id": "65e0c0ffee0000000000abcd",
+        "mangadex_id": "00000000-0000-4000-8000-000000000001",
+        "title": "Example Manga",
+        "alt_titles": [
+          "Ví Dụ Manga",
+          "サンプル漫画"
+        ],
+        "description": "Synopsis of the manga.",
+        "status": "ongoing",
+        "content_rating": "safe",
+        "publication_demographic": "shounen",
+        "original_language": "ja",
+        "year": 2020,
+        "published_start_date": "2020-04-01",
+        "published_end_date": null,
+        "official_volumes": 12,
+        "official_chapters": 110,
+        "creators": [
+          {
+            "creator_id": "00000000-0000-4000-8000-0000000000a1",
+            "slug": "jane-author",
+            "name": "Jane Author",
+            "role": "author",
+            "mangadex_id": "00000000-0000-4000-8000-0000000000a1",
+            "biography": {
+              "en": "**Name In Native Language:** 山田花子\n\nAward-winning manga author."
+            },
+            "links": {
+              "twitter": "https://twitter.com/jane_author",
+              "website": "https://jane-author.example.com"
+            }
+          },
+          {
+            "creator_id": "00000000-0000-4000-8000-0000000000a2",
+            "slug": "john-artist",
+            "name": "John Artist",
+            "role": "artist",
+            "mangadex_id": "00000000-0000-4000-8000-0000000000a2",
+            "biography": {
+              "en": "Lead illustrator and character designer."
+            },
+            "links": {
+              "twitter": "https://twitter.com/john_artist",
+              "pixiv": "https://www.pixiv.net/users/123456"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "slug": "action",
+            "source_tag_id": "tag_action",
+            "mangadex_id": null,
+            "group": "genre",
+            "name": {
+              "en": "Action",
+              "vi": "Hành động"
+            }
+          }
+        ],
+        "links": [
+          {
+            "site": "MangaDex",
+            "url": "https://mangadex.org/title/00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "primary_cover": {
+          "bucket": "manga-library",
+          "object_key": "covers/example-manga/main.webp",
+          "content_type": null,
+          "width": null,
+          "height": null,
+          "file_size": 0,
+          "md5_hash": null,
+          "sha256": null
+        },
+        "cover_arts": [
+          {
+            "cover_id": "cov_v1",
+            "volume": "1",
+            "locale": "ja",
+            "description": null,
+            "media": {
+              "bucket": "manga-library",
+              "object_key": "covers/example-manga/v1.webp",
+              "content_type": null,
+              "width": null,
+              "height": null,
+              "file_size": 0,
+              "md5_hash": null,
+              "sha256": null
+            }
+          }
+        ],
+        "stats": {
+          "chapter_count": 1,
+          "page_count": 1,
+          "total_size_bytes": 245760,
+          "languages": [
+            "en"
+          ]
+        },
+        "lineage": {
+          "pool_revision": 3,
+          "source_metadata_revision": 2,
+          "manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "published_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      },
+      "chapters": [
+        {
+          "pool_chapter_id": "pch_0a1b2c3d4e5f",
+          "pool_manga_id": "pm_1a2b3c4d5e6f",
+          "source_chapter_id": "65e0c0ffee0000000000ef01",
+          "chapter_number": "1",
+          "chapter_numeric": 1,
+          "volume": "1",
+          "title": "The Beginning",
+          "language": "en",
+          "scanlation_group": "Example Scans",
+          "publish_at": "2026-01-01T00:00:00Z",
+          "source": "mangadex",
+          "source_id": "00000000-0000-4000-8000-0000000000c1",
+          "page_count": 1,
+          "total_size_bytes": 245760,
+          "pages_revision": 1,
+          "manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "updated_at": "2026-01-01T00:00:00Z",
+          "pages": [
+            {
+              "page_uid": "pg_000001",
+              "page_number": 1,
+              "filename": "001.webp",
+              "media": {
+                "bucket": "manga-library",
+                "object_key": "chapters/example-manga/en/ch-1/001.webp",
+                "content_type": "image/webp",
+                "width": 1080,
+                "height": 1620,
+                "file_size": 245760,
+                "md5_hash": "d41d8cd98f00b204e9800998ecf8427e",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

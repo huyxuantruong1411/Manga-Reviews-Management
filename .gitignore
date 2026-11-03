@@ -26,7 +26,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !infra/elk/.env.example
+!manga-reader/.env.example
 infra/elk/.env
+manga-reader/.env
 logs/
 *.pem
 *.key
@@ -48,6 +50,9 @@ Thumbs.db
 downloads/
 backend/minio_data/
 backend/redis_data/
+manga-reader/postgres_data/
+manga-reader/redis_data/
+manga-reader/minio_data/
 infra/elk/elasticsearch_data/
 infra/elk/logstash_data/
 backend/scratch/
