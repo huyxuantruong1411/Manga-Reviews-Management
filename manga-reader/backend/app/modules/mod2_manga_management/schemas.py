@@ -10,7 +10,8 @@ from app.schemas.contract_v2 import MangaReaderPackage, ReaderChapter
 class EtlIngestRequest(BaseModel):
     package: MangaReaderPackage | None = None
     pool_manga_id: str | None = None
-    cdc_enabled: bool = False
+    pool_manga_ids: list[str] | None = None
+    cdc_enabled: bool = True
 
 
 class CdcChaptersWebhookRequest(BaseModel):

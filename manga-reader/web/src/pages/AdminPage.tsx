@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { api, type ReportItem, type MangaItem } from "../api/client";
+import {
+  api,
+  type ReportItem,
+  type MangaItem,
+  type EtlPackageItem,
+  type EtlSourcesResponse,
+} from "../api/client";
 
 export const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"reports" | "mangas" | "users" | "datalake">("reports");
+  const [activeTab, setActiveTab] = useState<"reports" | "mangas" | "users" | "datalake">("datalake");
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
@@ -18,9 +24,13 @@ export const AdminPage: React.FC = () => {
   const [targetUserId, setTargetUserId] = useState<string>("");
   const [userLockReason, setUserLockReason] = useState<string>("");
 
-  // Data lake sync state
-  const [etlSources, setEtlSources] = useState<any[]>([]);
-  const [dataLakePath, setDataLakePath] = useState<string>("data/datalake_pool");
+  // Data lake sync state (UC-2.3: Chọn source tải truyện)
+  const [etlData, setEtlData] = useState<EtlSourcesResponse | null>(null);
+  const [selectedPoolIds, setSelectedPoolIds] = useState<Set<string>>(new Set());
+  const [batchCdcEnabled, setBatchCdcEnabled] = useState<boolean>(true);
+  const [etlSearch, setEtlSearch] = useState<string>("");
+  const [etlFilter, setEtlFilter] = useState<"all" | "pending" | "ingested" | "updates">("all");
+  const [ingestingId, setIngestingId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +49,7 @@ export const AdminPage: React.FC = () => {
         setMangas(res.items);
       } else if (activeTab === "datalake") {
         const res = await api.getEtlSources();
-        setEtlSources(res.sources || []);
+        setEtlData(res);
       }
     } catch (err: any) {
       setMessage({ text: err.message || "Failed to load admin data", type: "error" });
@@ -102,21 +112,87 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const handleTriggerETL = async () => {
-    setLoading(true);
-    setSyncStatus("Ingestion pipeline triggered... Reading parquet & comic artifacts from Manga Data Lake Pool.");
+  // --- UC-2.3: Chọn source tải truyện & ETL Handlers ---
+  const handleToggleSelect = (poolId: string) => {
+    setSelectedPoolIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(poolId)) next.delete(poolId);
+      else next.add(poolId);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (items: EtlPackageItem[]) => {
+    setSelectedPoolIds(new Set(items.map((i) => i.pool_manga_id)));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedPoolIds(new Set());
+  };
+
+  const handleIngestSingle = async (poolMangaId: string, cdcEnabled: boolean = true) => {
+    setIngestingId(poolMangaId);
+    setSyncStatus(`Đang nạp gói manga '${poolMangaId}' từ Data Lake Pool...`);
     try {
       const res = await api.ingestEtlPackage({
-        source_type: "data_lake_pool",
-        source_path: dataLakePath,
+        pool_manga_id: poolMangaId,
+        cdc_enabled: cdcEnabled,
       });
-      setSyncStatus(`ETL Completed: ${JSON.stringify(res)}`);
-      setMessage({ text: "Data Lake Ingestion executed successfully", type: "success" });
+      setMessage({
+        text: `Nạp thành công '${res.title}' (${res.chapter_count} chương, ${res.page_count} trang) vào hệ thống đọc truyện!`,
+        type: "success",
+      });
+      setSyncStatus(`Hoàn tất nạp '${res.title}' (Revision: ${res.pool_revision}, CDC: ${res.cdc_enabled ? "BẬT" : "TẮT"})`);
+      const fresh = await api.getEtlSources();
+      setEtlData(fresh);
     } catch (err: any) {
-      setSyncStatus(`ETL Failed: ${err.message}`);
-      setMessage({ text: err.message || "ETL Execution failed", type: "error" });
+      setMessage({ text: err.message || `Lỗi khi nạp gói ${poolMangaId}`, type: "error" });
+      setSyncStatus(`Thất bại: ${err.message}`);
+    } finally {
+      setIngestingId(null);
+    }
+  };
+
+  const handleIngestBatch = async () => {
+    if (selectedPoolIds.size === 0) {
+      setMessage({ text: "Vui lòng chọn ít nhất một bộ manga để nạp.", type: "error" });
+      return;
+    }
+    setLoading(true);
+    const count = selectedPoolIds.size;
+    setSyncStatus(`Đang tiến hành đẩy hàng loạt ${count} gói manga vào hệ thống đọc (CDC: ${batchCdcEnabled ? "BẬT" : "TẮT"})...`);
+    try {
+      const res = await api.ingestEtlPackage({
+        pool_manga_ids: Array.from(selectedPoolIds),
+        cdc_enabled: batchCdcEnabled,
+      });
+      setMessage({
+        text: `Đã nạp thành công ${res.succeeded_count} / ${res.total} bộ manga từ Data Lake vào hệ thống đọc!`,
+        type: "success",
+      });
+      setSyncStatus(`Hoàn tất Batch ETL: ${res.succeeded_count} thành công, ${res.failed_count} lỗi.`);
+      setSelectedPoolIds(new Set());
+      const fresh = await api.getEtlSources();
+      setEtlData(fresh);
+    } catch (err: any) {
+      setMessage({ text: err.message || "Lỗi tiến trình nạp hàng loạt", type: "error" });
+      setSyncStatus(`Thất bại Batch ETL: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleCdc = async (mangaId: string, currentCdc: boolean) => {
+    try {
+      const res = await api.toggleMangaCdc(mangaId, !currentCdc);
+      setMessage({
+        text: `Đã ${res.cdc_enabled ? "BẬT" : "TẮT"} tính năng CDC (tự động nhận chương mới) cho '${res.title}'.`,
+        type: "success",
+      });
+      const fresh = await api.getEtlSources();
+      setEtlData(fresh);
+    } catch (err: any) {
+      setMessage({ text: err.message || "Lỗi khi đổi trạng thái CDC", type: "error" });
     }
   };
 
@@ -132,8 +208,25 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const filteredReports = reportTargetType === "all" 
-    ? reports 
+  // Filtered packages
+  const packages = etlData?.datalake_packages || [];
+  const filteredPackages = packages.filter((pkg) => {
+    const matchSearch =
+      etlSearch.trim() === "" ||
+      pkg.title.toLowerCase().includes(etlSearch.toLowerCase()) ||
+      (pkg.author && pkg.author.toLowerCase().includes(etlSearch.toLowerCase())) ||
+      pkg.pool_manga_id.toLowerCase().includes(etlSearch.toLowerCase());
+
+    if (!matchSearch) return false;
+
+    if (etlFilter === "pending") return !pkg.already_ingested;
+    if (etlFilter === "ingested") return pkg.already_ingested;
+    if (etlFilter === "updates") return pkg.has_upstream_update;
+    return true;
+  });
+
+  const filteredReports = reportTargetType === "all"
+    ? reports
     : reports.filter((r) => r.target_type === reportTargetType);
 
   return (
@@ -146,7 +239,7 @@ export const AdminPage: React.FC = () => {
             <h1 className="text-xl font-bold font-mono tracking-tight text-zinc-100">ADMIN CONTROL CONSOLE</h1>
           </div>
           <p className="text-xs text-zinc-400 font-mono mt-1">
-            System Operations, Content Moderation (UC-8.1..8.3) & Data Lake Ingestion (UC-8.4)
+            System Operations, Content Moderation (UC-8.1..8.3) & Chọn Source Tải Truyện (UC-2.3)
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -160,20 +253,36 @@ export const AdminPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Global Message Banner */}
       {message && (
         <div
-          className={`p-3 text-xs font-mono rounded border ${
+          className={`p-3 rounded text-xs font-mono border ${
             message.type === "success"
-              ? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300"
-              : "bg-red-950/40 border-red-800/60 text-red-300"
+              ? "bg-emerald-950/40 border-emerald-800 text-emerald-400"
+              : "bg-red-950/40 border-red-800 text-red-400"
           }`}
         >
           {message.text}
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-800 space-x-1 font-mono text-xs">
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-zinc-800 text-xs font-mono overflow-x-auto">
+        <button
+          onClick={() => setActiveTab("datalake")}
+          className={`px-4 py-2 border-b-2 font-medium transition flex items-center gap-2 ${
+            activeTab === "datalake"
+              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
+              : "border-transparent text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <span>CHỌN SOURCE TẢI TRUYỆN (UC-2.3)</span>
+          {etlData && (
+            <span className="px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 text-[10px]">
+              {etlData.datalake_packages.length}
+            </span>
+          )}
+        </button>
         <button
           onClick={() => setActiveTab("reports")}
           className={`px-4 py-2 border-b-2 font-medium transition ${
@@ -204,19 +313,392 @@ export const AdminPage: React.FC = () => {
         >
           USER GOVERNANCE
         </button>
-        <button
-          onClick={() => setActiveTab("datalake")}
-          className={`px-4 py-2 border-b-2 font-medium transition ${
-            activeTab === "datalake"
-              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          DATA LAKE ETL INGESTION
-        </button>
       </div>
 
-      {/* TAB 1: REPORTS */}
+      {/* TAB 1: DATA LAKE ETL INGESTION (UC-2.3) */}
+      {activeTab === "datalake" && (
+        <div className="space-y-6">
+          {/* Header & Connection Status */}
+          <div className="border border-zinc-800 bg-zinc-900/40 rounded p-5 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold font-mono text-zinc-100 uppercase tracking-wide flex items-center gap-2">
+                  <span>CHỌN SOURCE TẢI TRUYỆN & DATA LAKE ETL (UC-2.3)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-normal">
+                    Data Contract v2.0
+                  </span>
+                </h2>
+                <p className="text-xs text-zinc-400 font-mono mt-1">
+                  Chọn các bộ manga đã đóng gói từ Service lưu trữ bên ngoài (Manga Data Lake & Storage Pool) để nạp vào hệ thống đọc truyện, cấu hình CDC để tự động nhận chương mới.
+                </p>
+              </div>
+
+              {/* Status Pill & Refresh */}
+              <div className="flex items-center gap-3">
+                {etlData?.datalake_online ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 text-xs font-mono">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>ONLINE: Service Data Lake (:8000)</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-red-950/60 border border-red-800/80 text-red-400 text-xs font-mono">
+                    <span className="h-2 w-2 rounded-full bg-red-400"></span>
+                    <span>OFFLINE: Không kết nối được Service (:8000)</span>
+                  </div>
+                )}
+                <button
+                  onClick={loadTabContent}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-xs font-mono text-zinc-300 rounded transition disabled:opacity-50"
+                  title="Tải lại danh sách từ Data Lake"
+                >
+                  ↻ Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Offline Alert if Service Down */}
+            {!etlData?.datalake_online && (
+              <div className="p-3 bg-red-950/30 border border-red-800/60 rounded text-xs font-mono text-red-300 flex items-center justify-between">
+                <div>
+                  <span className="font-bold block">⚠️ Cảnh báo kết nối nguồn (Alternative Flow 2a):</span>
+                  <span>
+                    Không nhận được phản hồi từ Manga Data Lake Pool API tại{" "}
+                    <code className="text-amber-400">{etlData?.datalake_pool_api || "http://localhost:8000/api/datalake-pool"}</code>.
+                    Vui lòng khởi chạy Backend Manga Reviews (`uv run --project backend uvicorn backend.main:app --port 8000`).
+                  </span>
+                </div>
+                <button
+                  onClick={loadTabContent}
+                  className="px-3 py-1 bg-red-800 hover:bg-red-700 text-white rounded text-xs whitespace-nowrap ml-4"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
+            {/* Stats Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+              <div className="bg-zinc-950 p-3 border border-zinc-800 rounded font-mono">
+                <span className="text-[11px] text-zinc-500 uppercase block">GÓI TRONG DATA LAKE</span>
+                <span className="text-xl font-bold text-amber-400 mt-0.5 block">
+                  {packages.length}
+                </span>
+                <span className="text-[10px] text-zinc-500">Đã đóng gói sẵn sàng</span>
+              </div>
+              <div className="bg-zinc-950 p-3 border border-zinc-800 rounded font-mono">
+                <span className="text-[11px] text-zinc-500 uppercase block">ĐÃ NẠP VÀO HỆ THỐNG ĐỌC</span>
+                <span className="text-xl font-bold text-emerald-400 mt-0.5 block">
+                  {etlData?.ingested_count || 0}
+                </span>
+                <span className="text-[10px] text-zinc-500">Hiện diện trong PostgreSQL</span>
+              </div>
+              <div className="bg-zinc-950 p-3 border border-zinc-800 rounded font-mono">
+                <span className="text-[11px] text-zinc-500 uppercase block">CÓ BẢN CẬP NHẬT MỚI</span>
+                <span className="text-xl font-bold text-sky-400 mt-0.5 block">
+                  {packages.filter((p) => p.has_upstream_update).length}
+                </span>
+                <span className="text-[10px] text-zinc-500">Revision mới trên nguồn</span>
+              </div>
+              <div className="bg-zinc-950 p-3 border border-zinc-800 rounded font-mono">
+                <span className="text-[11px] text-zinc-500 uppercase block">ĐANG CHỌN ĐỂ NẠP</span>
+                <span className="text-xl font-bold text-amber-300 mt-0.5 block">
+                  {selectedPoolIds.size}
+                </span>
+                <span className="text-[10px] text-zinc-500">Sẵn sàng Batch Ingestion</span>
+              </div>
+            </div>
+
+            {/* Batch Action & Configuration Bar */}
+            <div className="bg-zinc-950 p-4 border border-zinc-800 rounded space-y-3 font-mono">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={batchCdcEnabled}
+                      onChange={(e) => setBatchCdcEnabled(e.target.checked)}
+                      className="rounded border-zinc-700 text-amber-600 focus:ring-0"
+                    />
+                    <span className="font-semibold text-amber-400">
+                      Bật CDC (Tự động cập nhật chương mới khi phát sinh - UC-2.3 BR2)
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSelectAll(filteredPackages)}
+                    className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded"
+                  >
+                    Chọn tất cả ({filteredPackages.length})
+                  </button>
+                  <button
+                    onClick={handleDeselectAll}
+                    disabled={selectedPoolIds.size === 0}
+                    className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 rounded disabled:opacity-40"
+                  >
+                    Bỏ chọn
+                  </button>
+                  <button
+                    onClick={handleIngestBatch}
+                    disabled={loading || selectedPoolIds.size === 0}
+                    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs rounded transition disabled:opacity-40 flex items-center gap-1.5 shadow"
+                  >
+                    <span>⚡ Xác Nhận Đẩy ({selectedPoolIds.size}) Gói Vào Hệ Thống Đọc</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 flex-1 max-w-md">
+                  <input
+                    type="text"
+                    value={etlSearch}
+                    onChange={(e) => setEtlSearch(e.target.value)}
+                    placeholder="Tìm theo tên truyện, tác giả hoặc pool_manga_id..."
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                  {etlSearch && (
+                    <button
+                      onClick={() => setEtlSearch("")}
+                      className="text-zinc-500 hover:text-zinc-300 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-zinc-500 mr-1">Lọc:</span>
+                  {(
+                    [
+                      { id: "all", label: `Tất cả (${packages.length})` },
+                      { id: "pending", label: `Chưa nạp (${packages.filter((p) => !p.already_ingested).length})` },
+                      { id: "ingested", label: `Đã nạp (${packages.filter((p) => p.already_ingested).length})` },
+                      { id: "updates", label: `Có update (${packages.filter((p) => p.has_upstream_update).length})` },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setEtlFilter(f.id)}
+                      className={`px-2 py-1 rounded text-xs transition ${
+                        etlFilter === f.id
+                          ? "bg-zinc-700 text-amber-400 font-semibold"
+                          : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Live Pipeline Execution Logs */}
+            {syncStatus && (
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded font-mono text-xs text-zinc-300">
+                <span className="text-zinc-500 block mb-1">TIẾN TRÌNH PIPELINE GẦN NHẤT:</span>
+                <p className="font-mono text-zinc-200">{syncStatus}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Manga Package Table (UC-2.3: Chọn manga đóng gói sẵn) */}
+          <div className="border border-zinc-800 rounded bg-zinc-900/30 overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead className="bg-zinc-900/80 text-zinc-400 border-b border-zinc-800">
+                <tr>
+                  <th className="p-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredPackages.length > 0 &&
+                        filteredPackages.every((p) => selectedPoolIds.has(p.pool_manga_id))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) handleSelectAll(filteredPackages);
+                        else handleDeselectAll();
+                      }}
+                      className="rounded border-zinc-700 text-amber-600 focus:ring-0"
+                    />
+                  </th>
+                  <th className="p-3">BỘ MANGA TRONG DATA LAKE</th>
+                  <th className="p-3">POOL ID & REVISION</th>
+                  <th className="p-3">QUY MÔ</th>
+                  <th className="p-3">TRẠNG THÁI HỆ THỐNG ĐỌC</th>
+                  <th className="p-3">CẤU HÌNH CDC</th>
+                  <th className="p-3 text-right">THAO TÁC</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {filteredPackages.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-zinc-500 font-mono">
+                      {etlData?.datalake_online
+                        ? "Không tìm thấy bộ manga nào phù hợp với bộ lọc."
+                        : "Chưa kết nối được với Service Manga Data Lake Pool (:8000)."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPackages.map((pkg) => {
+                    const isSelected = selectedPoolIds.has(pkg.pool_manga_id);
+                    const isIngesting = ingestingId === pkg.pool_manga_id;
+                    const sizeMb = (pkg.total_size_bytes / (1024 * 1024)).toFixed(1);
+
+                    return (
+                      <tr
+                        key={pkg.pool_manga_id}
+                        className={`hover:bg-zinc-900/40 transition ${
+                          isSelected ? "bg-amber-950/20" : ""
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="p-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(pkg.pool_manga_id)}
+                            className="rounded border-zinc-700 text-amber-600 focus:ring-0"
+                          />
+                        </td>
+
+                        {/* Manga Details & Cover */}
+                        <td className="p-3">
+                          <div className="flex items-center gap-3">
+                            {pkg.cover_url ? (
+                              <img
+                                src={pkg.cover_url}
+                                alt={pkg.title}
+                                className="w-10 h-14 object-cover rounded bg-zinc-800 border border-zinc-700/60 shrink-0"
+                                onError={(e) => {
+                                  // Fallback placeholder if image broken
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div className="w-10 h-14 rounded bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-[10px] text-zinc-500 shrink-0">
+                                NO IMG
+                              </div>
+                            )}
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-zinc-100 block text-xs hover:text-amber-400">
+                                {pkg.title}
+                              </span>
+                              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                                <span>Tác giả: {pkg.author || "N/A"}</span>
+                                {pkg.year && <span>• Năm: {pkg.year}</span>}
+                              </div>
+                              <div className="flex items-center gap-1.5 pt-0.5">
+                                <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-[10px] text-zinc-300 uppercase">
+                                  {pkg.status || "Unknown"}
+                                </span>
+                                {pkg.publication_demographic && (
+                                  <span className="px-1.5 py-0.2 rounded bg-zinc-800/80 text-[10px] text-zinc-400 uppercase">
+                                    {pkg.publication_demographic}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Pool ID & Revision */}
+                        <td className="p-3 text-zinc-400">
+                          <span className="font-mono text-zinc-300 block">{pkg.pool_manga_id}</span>
+                          <span className="text-[11px] text-zinc-500 block">
+                            Pool Rev: <strong className="text-amber-400">v{pkg.pool_revision}</strong>
+                          </span>
+                        </td>
+
+                        {/* Scale (Chapters, Pages, Size) */}
+                        <td className="p-3 text-zinc-300">
+                          <span className="font-semibold block">{pkg.chapter_count} Chương</span>
+                          <span className="text-[11px] text-zinc-500 block">
+                            {pkg.page_count} trang • {sizeMb} MB
+                          </span>
+                        </td>
+
+                        {/* System Ingestion Status */}
+                        <td className="p-3">
+                          {pkg.already_ingested ? (
+                            pkg.has_upstream_update ? (
+                              <div className="space-y-0.5">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800 animate-pulse inline-block">
+                                  ⚡ CÓ BẢN MỚI (v{pkg.pool_revision} &gt; v{pkg.local_revision})
+                                </span>
+                                <span className="text-[10px] text-zinc-500 block">Đã nạp bản cũ</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800 inline-block">
+                                  ✓ ĐÃ NẠP (v{pkg.local_revision})
+                                </span>
+                                <span className="text-[10px] text-zinc-500 block">Khớp sha256</span>
+                              </div>
+                            )
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 inline-block">
+                              CHƯA NẠP
+                            </span>
+                          )}
+                        </td>
+
+                        {/* CDC Configuration */}
+                        <td className="p-3">
+                          {pkg.already_ingested ? (
+                            <button
+                              onClick={() => handleToggleCdc(pkg.pool_manga_id, pkg.cdc_enabled)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
+                                pkg.cdc_enabled
+                                  ? "bg-emerald-950/60 text-emerald-300 border-emerald-700 hover:bg-emerald-900"
+                                  : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:bg-zinc-700"
+                              }`}
+                              title="Bấm để bật/tắt CDC cho bộ truyện này"
+                            >
+                              {pkg.cdc_enabled ? "● CDC ON" : "○ CDC OFF"}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-zinc-500 italic">
+                              Sẽ bật khi nạp
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => handleIngestSingle(pkg.pool_manga_id, batchCdcEnabled)}
+                            disabled={isIngesting || loading}
+                            className={`px-3 py-1 rounded text-xs font-bold transition disabled:opacity-40 ${
+                              pkg.already_ingested
+                                ? pkg.has_upstream_update
+                                  ? "bg-amber-600 hover:bg-amber-500 text-black"
+                                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                                : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                            }`}
+                          >
+                            {isIngesting
+                              ? "Đang nạp..."
+                              : pkg.already_ingested
+                              ? pkg.has_upstream_update
+                                ? "Cập nhật v" + pkg.pool_revision
+                                : "Đồng bộ lại"
+                              : "+ Nạp Vào Hệ Thống"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: REPORTS */}
       {activeTab === "reports" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -300,13 +782,13 @@ export const AdminPage: React.FC = () => {
                           <>
                             <button
                               onClick={() => handleResolveReport(report.report_id, "resolved")}
-                              className="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/60 rounded text-[11px]"
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px]"
                             >
                               Resolve
                             </button>
                             <button
                               onClick={() => handleResolveReport(report.report_id, "dismissed")}
-                              className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[11px]"
+                              className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-[11px]"
                             >
                               Dismiss
                             </button>
@@ -322,61 +804,86 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: MANGA CATALOG MANAGEMENT */}
+      {/* TAB 3: MANGA CATALOG */}
       {activeTab === "mangas" && (
         <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-zinc-900/40 p-3 rounded border border-zinc-800">
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className="text-zinc-400">Action Reason (Audit Trail):</span>
+              <input
+                type="text"
+                value={mangaActionReason}
+                onChange={(e) => setMangaActionReason(e.target.value)}
+                placeholder="Reason for hiding/showing..."
+                className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-zinc-200 text-xs w-64"
+              />
+            </div>
+            <button
+              onClick={loadTabContent}
+              className="text-xs font-mono text-zinc-400 hover:text-zinc-200"
+            >
+              ↻ Refresh
+            </button>
+          </div>
+
           <div className="border border-zinc-800 rounded bg-zinc-900/30 overflow-x-auto">
             <table className="w-full text-left text-xs font-mono">
               <thead className="bg-zinc-900/80 text-zinc-400 border-b border-zinc-800">
                 <tr>
-                  <th className="p-3">ID</th>
-                  <th className="p-3">TITLE</th>
-                  <th className="p-3">STATUS</th>
+                  <th className="p-3">POOL ID / TITLE</th>
+                  <th className="p-3">CHAPTERS</th>
+                  <th className="p-3">RATINGS</th>
                   <th className="p-3">VISIBILITY</th>
                   <th className="p-3 text-right">ACTION</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
-                {mangas.map((manga) => (
-                  <tr key={manga.pool_manga_id} className="hover:bg-zinc-900/40">
-                    <td className="p-3 text-zinc-500">{manga.pool_manga_id.substring(0, 8)}</td>
-                    <td className="p-3 font-semibold text-zinc-200">{manga.title}</td>
-                    <td className="p-3 text-zinc-400 uppercase">{manga.status}</td>
-                    <td className="p-3">
-                      {manga.is_hidden ? (
-                        <span className="px-1.5 py-0.5 bg-amber-950/60 border border-amber-800/60 text-amber-400 rounded text-[10px]">
-                          HIDDEN
+                {mangas.map((m) => {
+                  const isHidden = (m as any).visibility_status === "hidden";
+                  return (
+                    <tr key={m.pool_manga_id} className="hover:bg-zinc-900/40">
+                      <td className="p-3">
+                        <span className="font-semibold block text-zinc-100">{m.title}</span>
+                        <span className="text-zinc-500 font-mono text-[11px]">{m.pool_manga_id}</span>
+                      </td>
+                      <td className="p-3 text-zinc-300">{m.chapter_count} Ch.</td>
+                      <td className="p-3 text-zinc-300">★ {m.average_rating.toFixed(1)} ({m.rating_count})</td>
+                      <td className="p-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            isHidden
+                              ? "bg-red-950/60 text-red-400 border border-red-800/60"
+                              : "bg-emerald-950/60 text-emerald-400 border border-emerald-800/60"
+                          }`}
+                        >
+                          {isHidden ? "HIDDEN" : "PUBLIC"}
                         </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 rounded text-[10px]">
-                          PUBLIC
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => handleToggleMangaVisibility(manga.pool_manga_id, !!manga.is_hidden)}
-                        className={`px-2 py-1 rounded text-[11px] border ${
-                          manga.is_hidden
-                            ? "bg-emerald-950/60 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/80"
-                            : "bg-amber-950/60 text-amber-300 border-amber-800/60 hover:bg-amber-900/80"
-                        }`}
-                      >
-                        {manga.is_hidden ? "Publish" : "Hide Manga"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => handleToggleMangaVisibility(m.pool_manga_id, isHidden)}
+                          className={`px-3 py-1 rounded text-[11px] font-bold ${
+                            isHidden
+                              ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                              : "bg-amber-600 hover:bg-amber-500 text-black"
+                          }`}
+                        >
+                          {isHidden ? "Show Public" : "Hide Manga"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* TAB 3: USERS */}
+      {/* TAB 4: USER GOVERNANCE */}
       {activeTab === "users" && (
-        <div className="space-y-4">
-          <div className="border border-zinc-800 rounded bg-zinc-900/40 p-5 space-y-4 font-mono text-xs max-w-xl">
+        <div className="space-y-6">
+          <div className="border border-zinc-800 bg-zinc-900/40 rounded p-5 space-y-4 font-mono text-xs max-w-xl">
             <h3 className="text-sm font-bold text-zinc-200 uppercase">
               Account Lock & Unlock Operations (UC-1.2 & UC-1.3)
             </h3>
@@ -420,61 +927,8 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* TAB 4: DATA LAKE INGESTION */}
-      {activeTab === "datalake" && (
-        <div className="space-y-6">
-          <div className="border border-zinc-800 bg-zinc-900/40 rounded p-5 space-y-4">
-            <div>
-              <h2 className="text-sm font-bold font-mono text-zinc-200 uppercase tracking-wide">
-                Manga Data Lake & Storage Pool Ingestion (UC-8.4)
-              </h2>
-              <p className="text-xs text-zinc-400 font-mono mt-1">
-                Ingest curated parquet metadata, manga assets, and chapter packages exported by the core review system into this standalone reader database.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div className="bg-zinc-950 p-4 border border-zinc-800 rounded font-mono text-xs space-y-2">
-                <span className="text-zinc-500 uppercase block font-semibold">STORAGE POOL LOCATION</span>
-                <input
-                  type="text"
-                  value={dataLakePath}
-                  onChange={(e) => setDataLakePath(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
-                />
-                <span className="text-[11px] text-zinc-500 block">
-                  Path relative to backend root or MinIO pool bucket: `data/datalake_pool`
-                </span>
-              </div>
-
-              <div className="bg-zinc-950 p-4 border border-zinc-800 rounded font-mono text-xs flex flex-col justify-between">
-                <div>
-                  <span className="text-zinc-500 uppercase block font-semibold mb-1">EXECUTION MODE</span>
-                  <p className="text-zinc-400 text-xs">
-                    Uses atomic upsert on chapters & pages with sha256 checksum comparison to avoid redundant re-uploads.
-                  </p>
-                </div>
-                <button
-                  onClick={handleTriggerETL}
-                  disabled={loading}
-                  className="mt-3 w-full py-2 bg-amber-600 hover:bg-amber-500 text-black font-bold font-mono text-xs rounded transition disabled:opacity-50"
-                >
-                  {loading ? "Ingesting Pipeline Running..." : "Execute Ingestion Pipeline"}
-                </button>
-              </div>
-            </div>
-
-            {syncStatus && (
-              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded font-mono text-xs text-zinc-300">
-                <span className="text-zinc-500 block mb-1">PIPELINE EXECUTION LOGS:</span>
-                <p className="font-mono text-zinc-200">{syncStatus}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
 export default AdminPage;

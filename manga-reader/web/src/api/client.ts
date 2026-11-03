@@ -129,6 +129,36 @@ export interface ReportItem {
   resolved_at?: string | null;
 }
 
+export interface EtlPackageItem {
+  pool_manga_id: string;
+  title: string;
+  slug: string;
+  author?: string;
+  artist?: string;
+  status?: string;
+  content_rating?: string;
+  publication_demographic?: string;
+  year?: string | number;
+  chapter_count: number;
+  page_count: number;
+  total_size_bytes: number;
+  pool_revision: number;
+  manifest_sha256?: string;
+  cover_url?: string;
+  already_ingested: boolean;
+  local_revision?: number;
+  cdc_enabled: boolean;
+  has_upstream_update: boolean;
+}
+
+export interface EtlSourcesResponse {
+  datalake_pool_api: string;
+  datalake_online: boolean;
+  datalake_packages: EtlPackageItem[];
+  local_contracts: Array<{ filename: string; pool_manga_id?: string; title?: string; already_ingested: boolean }>;
+  ingested_count: number;
+}
+
 const TOKEN_KEY = "mr_access_token";
 const USER_KEY = "mr_user_profile";
 
@@ -360,7 +390,10 @@ export const api = {
     });
     return request<any>(`/api/v1/admin/analytics/mangas?${q.toString()}`);
   },
-  getEtlSources: () => request<any>("/api/v1/admin/etl/sources"),
-  ingestEtlPackage: (body: any) => request<any>("/api/v1/admin/etl/ingest", { method: "POST", body: JSON.stringify(body) }),
+  getEtlSources: () => request<EtlSourcesResponse>("/api/v1/admin/etl/sources"),
+  ingestEtlPackage: (body: { package?: any; pool_manga_id?: string; pool_manga_ids?: string[]; cdc_enabled?: boolean }) =>
+    request<any>("/api/v1/admin/etl/ingest", { method: "POST", body: JSON.stringify(body) }),
+  toggleMangaCdc: (mangaId: string, cdcEnabled: boolean) =>
+    request<any>(`/api/v1/admin/mangas/${mangaId}/toggle-cdc`, { method: "POST", body: JSON.stringify({ cdc_enabled: cdcEnabled }) }),
   recomputeRecommendations: () => request<any>("/api/v1/admin/workers/recompute-recommendations", { method: "POST" }),
 };

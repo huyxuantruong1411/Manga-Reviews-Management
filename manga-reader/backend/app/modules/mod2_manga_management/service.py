@@ -56,31 +56,60 @@ class MangaManagementService:
     """Domain service for Module 2 use cases (UC-2.1 -> UC-2.5)."""
 
     async def list_etl_sources(self, db: AsyncSession) -> dict[str, Any]:
-        """List available manga packages from Manga Data Lake & Storage Pool API, MinIO staging, and local contracts."""
-        existing_rows = (await db.execute(select(Manga.pool_manga_id, Manga.pool_revision, Manga.cdc_enabled))).all()
-        ingested_map = {r[0]: {"pool_revision": r[1], "cdc_enabled": r[2]} for r in existing_rows}
+        """List available manga packages from Manga Data Lake & Storage Pool API, MinIO staging, and local contracts (UC-2.3)."""
+        existing_rows = (
+            await db.execute(select(Manga.pool_manga_id, Manga.pool_revision, Manga.cdc_enabled, Manga.title))
+        ).all()
+        ingested_map = {r[0]: {"pool_revision": r[1], "cdc_enabled": r[2], "title": r[3]} for r in existing_rows}
 
         datalake_items: list[dict[str, Any]] = []
         datalake_online = False
         try:
-            async with httpx.AsyncClient(timeout=2.5) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{settings.DATA_LAKE_API_URL.rstrip('/')}/mangas",
-                    params={"pool_state": "published", "is_etl_ready": "true", "page_size": 50},
+                    params={"page_size": 100},
                 )
                 if resp.status_code == 200:
                     datalake_online = True
                     body = resp.json()
                     for item in body.get("items", []):
                         pmid = item.get("pool_manga_id")
+                        lineage = item.get("lineage") or {}
+                        remote_rev = lineage.get("pool_revision", 1)
+                        local_rev = ingested_map.get(pmid, {}).get("pool_revision")
+                        stats = item.get("stats") or {}
+                        primary_cov = item.get("primary_cover") or {}
+
+                        # Construct clean cover URL
+                        cover_url = primary_cov.get("url")
+                        if not cover_url and primary_cov.get("object_key"):
+                            cover_url = storage_service.build_media_url(
+                                primary_cov.get("minio_bucket") or "manga-library",
+                                primary_cov.get("object_key"),
+                            )
+
                         datalake_items.append(
                             {
                                 "pool_manga_id": pmid,
                                 "title": item.get("title"),
                                 "slug": item.get("slug"),
-                                "pool_revision": (item.get("lineage") or {}).get("pool_revision", 1),
+                                "author": item.get("author") or item.get("artist") or "N/A",
+                                "artist": item.get("artist"),
+                                "status": item.get("status", "unknown"),
+                                "content_rating": item.get("content_rating", "safe"),
+                                "publication_demographic": item.get("publication_demographic"),
+                                "year": item.get("year"),
+                                "chapter_count": stats.get("total_chapters", item.get("chapters", 0)),
+                                "page_count": stats.get("total_pages", 0),
+                                "total_size_bytes": stats.get("total_size_bytes", 0),
+                                "pool_revision": remote_rev,
+                                "manifest_sha256": lineage.get("manifest_sha256", ""),
+                                "cover_url": cover_url,
                                 "already_ingested": pmid in ingested_map,
-                                "local_revision": ingested_map.get(pmid, {}).get("pool_revision"),
+                                "local_revision": local_rev,
+                                "cdc_enabled": ingested_map.get(pmid, {}).get("cdc_enabled", True),
+                                "has_upstream_update": pmid in ingested_map and (remote_rev > (local_rev or 0)),
                             }
                         )
         except Exception:
@@ -89,7 +118,9 @@ class MangaManagementService:
         local_contracts: list[dict[str, Any]] = []
         contracts_dir = BASE_DIR / "contracts"
         if contracts_dir.exists():
-            for jf in sorted(contracts_dir.glob("*example*.json")):
+            for jf in sorted(contracts_dir.glob("*.json")):
+                if jf.name.endswith(".schema.json"):
+                    continue
                 try:
                     raw = json.loads(jf.read_text(encoding="utf-8"))
                     m_info = raw.get("manga") or {}
@@ -117,7 +148,7 @@ class MangaManagementService:
         """Fetch MangaReaderPackage v2.0 from Manga Data Lake Pool API or local contract file."""
         # 1. Try live Manga Data Lake & Storage Pool API
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 url = f"{settings.DATA_LAKE_API_URL.rstrip('/')}/mangas/{pool_manga_id}/etl-manifest"
                 resp = await client.get(url)
                 if resp.status_code == 200:
@@ -225,6 +256,39 @@ class MangaManagementService:
         payload: EtlIngestRequest,
     ) -> dict[str, Any]:
         """Validate and idempotently ingest a MangaReaderPackage v2.0 into PostgreSQL and MinIO (UC-2.3)."""
+        # Batch Ingestion processing (UC-2.3)
+        if payload.pool_manga_ids:
+            succeeded: list[dict[str, Any]] = []
+            failed: list[dict[str, str]] = []
+            for pmid in payload.pool_manga_ids:
+                try:
+                    res = await self._ingest_single_package(
+                        db=db,
+                        admin=admin,
+                        payload=EtlIngestRequest(pool_manga_id=pmid, cdc_enabled=payload.cdc_enabled),
+                    )
+                    succeeded.append(res)
+                except Exception as exc:
+                    failed.append({"pool_manga_id": pmid, "error": str(exc)})
+            return {
+                "status": "batch_completed",
+                "total": len(payload.pool_manga_ids),
+                "succeeded_count": len(succeeded),
+                "failed_count": len(failed),
+                "succeeded_items": succeeded,
+                "failed_items": failed,
+                "cdc_enabled": payload.cdc_enabled,
+            }
+
+        return await self._ingest_single_package(db=db, admin=admin, payload=payload)
+
+    async def _ingest_single_package(
+        self,
+        db: AsyncSession,
+        admin: User | None,
+        payload: EtlIngestRequest,
+    ) -> dict[str, Any]:
+        """Ingest a single manga package atomically."""
         pkg = payload.package
         if pkg is None:
             if not payload.pool_manga_id:
@@ -452,6 +516,39 @@ class MangaManagementService:
             "page_count": manga.page_count,
             "cdc_enabled": manga.cdc_enabled,
             "visibility_status": manga.visibility_status.value,
+        }
+
+    async def toggle_cdc(
+        self,
+        db: AsyncSession,
+        admin: User,
+        manga_id: str,
+        cdc_enabled: bool,
+    ) -> dict[str, Any]:
+        """Toggle Change Data Capture (CDC) listening state for a manga (UC-2.3 BR2)."""
+        manga = (await db.execute(select(Manga).where(Manga.pool_manga_id == manga_id))).scalar_one_or_none()
+        if not manga:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy manga với ID '{manga_id}' trên hệ thống đọc truyện.",
+            )
+        manga.cdc_enabled = cdc_enabled
+        db.add(
+            AdminAuditLog(
+                admin_id=admin.user_id,
+                action_type="toggle_manga_cdc",
+                target_type="manga",
+                target_id=manga.pool_manga_id,
+                reason=f"Admin {'bật' if cdc_enabled else 'tắt'} đồng bộ CDC",
+                details={"cdc_enabled": cdc_enabled, "title": manga.title},
+            )
+        )
+        await db.commit()
+        await db.refresh(manga)
+        return {
+            "manga_id": manga.pool_manga_id,
+            "title": manga.title,
+            "cdc_enabled": manga.cdc_enabled,
         }
 
     async def process_cdc_chapters_webhook(

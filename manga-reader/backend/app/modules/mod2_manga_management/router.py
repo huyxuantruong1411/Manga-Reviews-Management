@@ -15,6 +15,7 @@ from app.modules.mod2_manga_management.schemas import (
     CdcChaptersWebhookRequest,
     EtlIngestRequest,
     MangaReasonRequest,
+    ToggleCdcRequest,
 )
 from app.modules.mod2_manga_management.service import manga_management_service
 
@@ -38,6 +39,17 @@ async def ingest_etl_package(
 ) -> Any:
     """Validate and idempotently ingest a MangaReaderPackage v2.0 into PostgreSQL & MinIO (UC-2.3)."""
     return await manga_management_service.ingest_package(db, admin, payload)
+
+
+@router.post("/admin/mangas/{manga_id}/toggle-cdc", status_code=status.HTTP_200_OK)
+async def toggle_manga_cdc(
+    manga_id: str,
+    payload: ToggleCdcRequest,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Toggle Change Data Capture (CDC) listening state for a manga (UC-2.3 BR2)."""
+    return await manga_management_service.toggle_cdc(db, admin, manga_id, payload.cdc_enabled)
 
 
 @router.post("/webhooks/cdc/chapters", status_code=status.HTTP_200_OK)
