@@ -31,14 +31,14 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "manga_user"
     POSTGRES_PASSWORD: str = "manga_secret_pwd_change_me"
     POSTGRES_DB: str = "manga_reader_db"
-    POSTGRES_HOST: str = "localhost"
-    DATABASE_URL: str = "postgresql+asyncpg://manga_user:manga_secret_pwd_change_me@localhost:15432/manga_reader_db"
+    POSTGRES_HOST: str = "127.0.0.1"
+    DATABASE_URL: str = "postgresql+asyncpg://manga_user:manga_secret_pwd_change_me@127.0.0.1:15432/manga_reader_db"
 
-    REDIS_URL: str = "redis://localhost:16379/0"
+    REDIS_URL: str = "redis://127.0.0.1:16379/0"
 
     MINIO_ROOT_USER: str = "minio_admin"
     MINIO_ROOT_PASSWORD: str = "minio_secret_pwd_change_me"
-    MINIO_ENDPOINT: str = "localhost:19000"
+    MINIO_ENDPOINT: str = "127.0.0.1:19000"
     MINIO_SECURE: bool = False
     MINIO_PUBLIC_BASE_URL: str | None = None
     MINIO_BUCKET_LIBRARY: str = "manga-library"

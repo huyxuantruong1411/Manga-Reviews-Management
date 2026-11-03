@@ -41,9 +41,10 @@ def is_port_in_use(port: int) -> bool:
     return False
 
 
-def get_docker_bound_ports() -> set[int]:
-    """Retrieve all host ports currently bound by running Docker containers."""
-    bound_ports: set[int] = set()
+def get_docker_ports() -> tuple[set[int], set[int]]:
+    """Retrieve (other_container_ports, own_mr_container_ports) from running Docker containers."""
+    other_ports: set[int] = set()
+    own_ports: set[int] = set()
     try:
         res = subprocess.run(
             ["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"],
@@ -56,25 +57,27 @@ def get_docker_bound_ports() -> set[int]:
                 continue
             parts_tab = line.split("\t", 1)
             container_name = parts_tab[0].strip()
-            # Ignore our own stack's containers if re-running preflight check
-            if container_name.startswith("mr_"):
-                continue
+            is_own = container_name.startswith("mr_")
             ports_col = parts_tab[1] if len(parts_tab) > 1 else ""
             for part in ports_col.split(","):
                 if "->" in part and ":" in part:
                     host_part = part.split("->")[0].strip()
                     port_str = host_part.rsplit(":", 1)[-1]
                     if port_str.isdigit():
-                        bound_ports.add(int(port_str))
+                        p = int(port_str)
+                        if is_own:
+                            own_ports.add(p)
+                        else:
+                            other_ports.add(p)
     except Exception as exc:
         print(f"[WARN] Could not query 'docker ps': {exc}", file=sys.stderr)
-    return bound_ports
+    return other_ports, own_ports
 
 
-def find_free_port(preferred_port: int, reserved: set[int]) -> int:
-    """Find the preferred port or next available conflict-free port."""
+def find_free_port(preferred_port: int, reserved: set[int], own_ports: set[int]) -> int:
+    """Find the preferred port (allowing ports already bound by our own mr_* containers) or next free port."""
     port = preferred_port
-    while port in reserved or is_port_in_use(port):
+    while port in reserved or (port not in own_ports and is_port_in_use(port)):
         print(f"[INFO] Port {port} is busy, probing next port...")
         port += 1
     reserved.add(port)
@@ -95,9 +98,11 @@ def main() -> None:
     print("=== MANGA READER v2.0 PRE-FLIGHT ENVIRONMENT & PORT CHECK ===")
     ensure_drive_d_data_dirs()
 
-    docker_ports = get_docker_bound_ports()
-    if docker_ports:
-        print(f"[INFO] Ports bound by other Docker containers: {sorted(docker_ports)}")
+    other_ports, own_ports = get_docker_ports()
+    if other_ports:
+        print(f"[INFO] Ports bound by other Docker containers: {sorted(other_ports)}")
+    if own_ports:
+        print(f"[INFO] Ports already bound by Manga Reader stack (mr_*): {sorted(own_ports)}")
 
     env_path = BASE_DIR / ".env"
     if env_path.exists():
@@ -105,10 +110,10 @@ def main() -> None:
         return
 
     allocated_ports: dict[str, int] = {}
-    reserved = set(docker_ports)
+    reserved = set(other_ports)
 
     for key, preferred in DEFAULT_PORTS.items():
-        free_port = find_free_port(preferred, reserved)
+        free_port = find_free_port(preferred, reserved, own_ports)
         allocated_ports[key] = free_port
         status = "OK (Preferred)" if free_port == preferred else f"REASSIGNED ({preferred} -> {free_port})"
         print(f"  + {key}: {free_port} [{status}]")
@@ -131,16 +136,16 @@ MINIO_CONSOLE_HOST_PORT={allocated_ports["MINIO_CONSOLE_HOST_PORT"]}
 POSTGRES_USER=manga_user
 POSTGRES_PASSWORD=manga_secret_pwd_change_me
 POSTGRES_DB=manga_reader_db
-POSTGRES_HOST=localhost
-DATABASE_URL=postgresql+asyncpg://manga_user:manga_secret_pwd_change_me@localhost:{allocated_ports["POSTGRES_HOST_PORT"]}/manga_reader_db
+POSTGRES_HOST=127.0.0.1
+DATABASE_URL=postgresql+asyncpg://manga_user:manga_secret_pwd_change_me@127.0.0.1:{allocated_ports["POSTGRES_HOST_PORT"]}/manga_reader_db
 
 # --- Redis 7 ---
-REDIS_URL=redis://localhost:{allocated_ports["REDIS_HOST_PORT"]}/0
+REDIS_URL=redis://127.0.0.1:{allocated_ports["REDIS_HOST_PORT"]}/0
 
 # --- MinIO Object Storage (Drive D Bind Mount) ---
 MINIO_ROOT_USER=minio_admin
 MINIO_ROOT_PASSWORD=minio_secret_pwd_change_me
-MINIO_ENDPOINT=localhost:{allocated_ports["MINIO_API_HOST_PORT"]}
+MINIO_ENDPOINT=127.0.0.1:{allocated_ports["MINIO_API_HOST_PORT"]}
 MINIO_SECURE=false
 MINIO_BUCKET_LIBRARY=manga-library
 MINIO_BUCKET_AVATARS=user-avatars
