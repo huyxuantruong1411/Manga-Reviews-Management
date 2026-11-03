@@ -15,6 +15,7 @@ from app.modules.mod1_reader_activity.router import router as mod1_router
 from app.modules.mod2_manga_management.router import router as mod2_router
 from app.modules.mod3_manga_discovery.router import router as mod3_router
 from app.modules.mod4_manga_reader.router import router as mod4_router
+from app.modules.mod5_comments.router import router as mod5_router
 from app.modules.mod6_user_profile.router import router as mod6_router
 
 
@@ -50,6 +51,7 @@ app.include_router(mod1_router)
 app.include_router(mod2_router)
 app.include_router(mod3_router)
 app.include_router(mod4_router)
+app.include_router(mod5_router)
 
 
 @app.get("/health/live", tags=["Health"])
