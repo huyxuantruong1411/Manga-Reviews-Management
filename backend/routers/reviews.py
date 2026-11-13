@@ -12,7 +12,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Path, UploadFile, stat
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from backend.core.redis import delete_cache, get_cache, set_cache
+from backend.core.redis import delete_cache, delete_cache_pattern, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.review import ReviewCreate, ReviewResponse, ReviewUpdate
 from backend.services.audit_service import audit_service
@@ -111,6 +111,7 @@ async def create_review(manga_id: str = Path(...), data: ReviewCreate = Body(...
     )
 
     await delete_cache(f"reviews:manga:{manga_id}")
+    await delete_cache_pattern("analytics:*")
     return review_doc
 
 
@@ -155,6 +156,7 @@ async def update_review(manga_id: str = Path(...), review_id: str = Path(...), d
         )
 
     await delete_cache(f"reviews:manga:{manga_id}")
+    await delete_cache_pattern("analytics:*")
     updated = await coll.find_one({"_id": ObjectId(review_id)})
     if updated and "_id" in updated:
         updated["_id"] = str(updated["_id"])
@@ -191,6 +193,7 @@ async def delete_review(manga_id: str = Path(...), review_id: str = Path(...)):
         details={"review_id": review_id, "title": review_title},
     )
     await delete_cache(f"reviews:manga:{manga_id}")
+    await delete_cache_pattern("analytics:*")
     return None
 
 

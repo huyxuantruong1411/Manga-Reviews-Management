@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
 	Area,
@@ -49,6 +49,7 @@ import {
 } from "../components/analytics/StorytellingKPIDeck";
 import {
 	ChartPanelSkeleton,
+	StatCardSkeleton,
 	TableRowsSkeleton,
 } from "../components/loading/PageSkeletons";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
@@ -163,6 +164,19 @@ const getReadStatusColor = (name: string): string => {
 	return map[key] || "#9CA3AF";
 };
 
+const ANALYTICS_CLIENT_CACHE_TTL_MS = 60_000;
+const ANALYTICS_CLIENT_CACHE_MAX_ENTRIES = 20;
+
+const isRequestCanceled = (err: unknown): boolean => {
+	if (!err || typeof err !== "object") return false;
+	const candidate = err as { code?: string; name?: string };
+	return (
+		candidate.code === "ERR_CANCELED" ||
+		candidate.name === "CanceledError" ||
+		candidate.name === "AbortError"
+	);
+};
+
 interface DeferredChartsWrapperProps {
 	children: React.ReactNode;
 	delay?: number;
@@ -170,16 +184,15 @@ interface DeferredChartsWrapperProps {
 
 const DeferredChartsWrapper: React.FC<DeferredChartsWrapperProps> = ({
 	children,
-	delay = 300,
 }) => {
 	const [isReady, setIsReady] = useState(false);
 
 	useEffect(() => {
-		const timer = setTimeout(() => {
+		const frameId = requestAnimationFrame(() => {
 			setIsReady(true);
-		}, delay);
-		return () => clearTimeout(timer);
-	}, [delay]);
+		});
+		return () => cancelAnimationFrame(frameId);
+	}, []);
 
 	if (!isReady) {
 		return <ChartPanelSkeleton height="h-72" />;
@@ -264,6 +277,14 @@ export const AnalyticsPage: React.FC = () => {
 
 	// Analytics API Data States
 	const [overview, setOverview] = useState<OverviewStats | null>(null);
+	const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
+	const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+	const analyticsAbortRef = useRef<AbortController | null>(null);
+	const tagDetailsAbortRef = useRef<AbortController | null>(null);
+	const creatorDetailsAbortRef = useRef<AbortController | null>(null);
+	const analyticsCacheRef = useRef<Map<string, { data: any; ts: number }>>(
+		new Map(),
+	);
 	const [scoreDist, setScoreDist] = useState<ScoreDist[]>([]);
 	const [topTags, setTopTags] = useState<TopTag[]>([]);
 	const [mangaTimeline, setMangaTimeline] = useState<TimelineItem[]>([]);
@@ -801,59 +822,126 @@ export const AnalyticsPage: React.FC = () => {
 		fetchTags();
 	}, []);
 
-	// Fetch Unified Analytics Data
-	const fetchAnalytics = async () => {
+	const buildBaseFilterParams = useCallback(() => {
+		const params: Record<string, any> = {};
+		if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+		if (selectedReadStatuses.length > 0)
+			params.read_statuses = selectedReadStatuses;
+		if (excludeReadStatuses.length > 0)
+			params.exclude_read_statuses = excludeReadStatuses;
+		if (selectedTags.length > 0) params.tags = selectedTags;
+		if (excludeTags.length > 0) params.exclude_tags = excludeTags;
+		if (tagMode) params.tag_mode = tagMode;
+		if (contentRatings.length > 0) params.content_ratings = contentRatings;
+		if (demographics.length > 0) params.demographics = demographics;
+		if (statuses.length > 0) params.statuses = statuses;
+		if (originalLanguages.length > 0)
+			params.original_languages = originalLanguages;
+		if (selectedAuthors.length > 0) params.authors = selectedAuthors;
+		if (selectedArtists.length > 0) params.artists = selectedArtists;
+		if (ratingMin !== "") params.rating_min = Number(ratingMin);
+		if (ratingMax !== "") params.rating_max = Number(ratingMax);
+		if (yearStart.trim()) params.year_start = yearStart.trim();
+		if (yearEnd.trim()) params.year_end = yearEnd.trim();
+		return params;
+	}, [
+		debouncedSearch,
+		selectedReadStatuses,
+		excludeReadStatuses,
+		selectedTags,
+		excludeTags,
+		tagMode,
+		contentRatings,
+		demographics,
+		statuses,
+		originalLanguages,
+		selectedAuthors,
+		selectedArtists,
+		ratingMin,
+		ratingMax,
+		yearStart,
+		yearEnd,
+	]);
+
+	const applyAnalyticsPayload = useCallback((payload: any) => {
+		setOverview(payload.overview);
+		setScoreDist(payload.score_distribution);
+		setTopTags(payload.top_tags);
+		setMangaTimeline(payload.manga_timeline);
+		setReviewTimeline(payload.review_timeline);
+		setCompletedTimeline(payload.completed_timeline || []);
+		setMetadataDists(payload.metadata_distributions);
+		setTopCreators(payload.top_creators);
+		setRatingInsights(payload.rating_insights);
+		setYearDist(payload.year_distribution);
+		setTimelineDateRange(payload.timeline_date_range || null);
+	}, []);
+
+	// Fetch Unified Analytics Data with client TTL cache + stale request cancellation
+	const fetchAnalytics = async (forceRefresh = false) => {
+		const params: Record<string, any> = {
+			...buildBaseFilterParams(),
+			timeline_group_by: timelineGroupBy,
+		};
+		if (addedStartDate) params.added_start_date = addedStartDate;
+		if (addedEndDate) params.added_end_date = addedEndDate;
+		if (reviewStartDate) params.review_start_date = reviewStartDate;
+		if (reviewEndDate) params.review_end_date = reviewEndDate;
+		if (completedStartDate) params.completed_start_date = completedStartDate;
+		if (completedEndDate) params.completed_end_date = completedEndDate;
+
+		const cacheKey = `all:${JSON.stringify(params)}`;
+		if (forceRefresh) {
+			analyticsCacheRef.current.clear();
+		} else {
+			const cached = analyticsCacheRef.current.get(cacheKey);
+			if (cached && Date.now() - cached.ts < ANALYTICS_CLIENT_CACHE_TTL_MS) {
+				setAnalyticsError(null);
+				setAnalyticsLoading(false);
+				applyAnalyticsPayload(cached.data);
+				return;
+			}
+		}
+
+		analyticsAbortRef.current?.abort();
+		const controller = new AbortController();
+		analyticsAbortRef.current = controller;
+
 		try {
-			const params: any = {
-				timeline_group_by: timelineGroupBy,
-			};
-			if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-			if (selectedReadStatuses.length > 0)
-				params.read_statuses = selectedReadStatuses;
-			if (excludeReadStatuses.length > 0)
-				params.exclude_read_statuses = excludeReadStatuses;
-			if (selectedTags.length > 0) params.tags = selectedTags;
-			if (excludeTags.length > 0) params.exclude_tags = excludeTags;
-			if (tagMode) params.tag_mode = tagMode;
-			if (contentRatings.length > 0) params.content_ratings = contentRatings;
-			if (demographics.length > 0) params.demographics = demographics;
-			if (statuses.length > 0) params.statuses = statuses;
-			if (originalLanguages.length > 0)
-				params.original_languages = originalLanguages;
-			if (selectedAuthors.length > 0) params.authors = selectedAuthors;
-			if (selectedArtists.length > 0) params.artists = selectedArtists;
-			if (ratingMin !== "") params.rating_min = Number(ratingMin);
-			if (ratingMax !== "") params.rating_max = Number(ratingMax);
-			if (yearStart.trim()) params.year_start = yearStart.trim();
-			if (yearEnd.trim()) params.year_end = yearEnd.trim();
+			setAnalyticsLoading(true);
+			setAnalyticsError(null);
+			const res = await client.get("/api/analytics", {
+				params,
+				signal: controller.signal,
+			});
 
-			if (addedStartDate) params.added_start_date = addedStartDate;
-			if (addedEndDate) params.added_end_date = addedEndDate;
-			if (reviewStartDate) params.review_start_date = reviewStartDate;
-			if (reviewEndDate) params.review_end_date = reviewEndDate;
-			if (completedStartDate) params.completed_start_date = completedStartDate;
-			if (completedEndDate) params.completed_end_date = completedEndDate;
-
-			const res = await client.get("/api/analytics", { params });
-
-			setOverview(res.data.overview);
-			setScoreDist(res.data.score_distribution);
-			setTopTags(res.data.top_tags);
-			setMangaTimeline(res.data.manga_timeline);
-			setReviewTimeline(res.data.review_timeline);
-			setCompletedTimeline(res.data.completed_timeline || []);
-			setMetadataDists(res.data.metadata_distributions);
-			setTopCreators(res.data.top_creators);
-			setRatingInsights(res.data.rating_insights);
-			setYearDist(res.data.year_distribution);
-			setTimelineDateRange(res.data.timeline_date_range || null);
+			if (
+				analyticsCacheRef.current.size >= ANALYTICS_CLIENT_CACHE_MAX_ENTRIES
+			) {
+				const oldestKey = analyticsCacheRef.current.keys().next().value;
+				if (oldestKey) analyticsCacheRef.current.delete(oldestKey);
+			}
+			analyticsCacheRef.current.set(cacheKey, {
+				data: res.data,
+				ts: Date.now(),
+			});
+			applyAnalyticsPayload(res.data);
 		} catch (err) {
+			if (isRequestCanceled(err)) return;
 			console.error("Error loading library analytics:", err);
+			setAnalyticsError("Không thể tải dữ liệu phân tích. Vui lòng thử lại.");
+		} finally {
+			if (analyticsAbortRef.current === controller) {
+				setAnalyticsLoading(false);
+			}
 		}
 	};
 
 	useEffect(() => {
 		fetchAnalytics();
+		return () => {
+			analyticsAbortRef.current?.abort();
+		};
 	}, [
 		debouncedSearch,
 		selectedReadStatuses,
@@ -882,71 +970,73 @@ export const AnalyticsPage: React.FC = () => {
 
 	// Fetch detailed tag analytics
 	const fetchTagDetails = async () => {
+		const params = buildBaseFilterParams();
+		const cacheKey = `tags:${JSON.stringify(params)}`;
+		const cached = analyticsCacheRef.current.get(cacheKey);
+		if (cached && Date.now() - cached.ts < ANALYTICS_CLIENT_CACHE_TTL_MS) {
+			setTagDetails(cached.data);
+			setTagDetailsLoading(false);
+			return;
+		}
+
+		tagDetailsAbortRef.current?.abort();
+		const controller = new AbortController();
+		tagDetailsAbortRef.current = controller;
+
 		try {
 			setTagDetailsLoading(true);
-			const params: any = {};
-			if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-			if (selectedReadStatuses.length > 0)
-				params.read_statuses = selectedReadStatuses;
-			if (excludeReadStatuses.length > 0)
-				params.exclude_read_statuses = excludeReadStatuses;
-			if (selectedTags.length > 0) params.tags = selectedTags;
-			if (excludeTags.length > 0) params.exclude_tags = excludeTags;
-			if (tagMode) params.tag_mode = tagMode;
-			if (contentRatings.length > 0) params.content_ratings = contentRatings;
-			if (demographics.length > 0) params.demographics = demographics;
-			if (statuses.length > 0) params.statuses = statuses;
-			if (originalLanguages.length > 0)
-				params.original_languages = originalLanguages;
-			if (selectedAuthors.length > 0) params.authors = selectedAuthors;
-			if (selectedArtists.length > 0) params.artists = selectedArtists;
-			if (ratingMin !== "") params.rating_min = Number(ratingMin);
-			if (ratingMax !== "") params.rating_max = Number(ratingMax);
-			if (yearStart.trim()) params.year_start = yearStart.trim();
-			if (yearEnd.trim()) params.year_end = yearEnd.trim();
-
-			const res = await client.get("/api/analytics/tags-details", { params });
+			const res = await client.get("/api/analytics/tags-details", {
+				params,
+				signal: controller.signal,
+			});
+			analyticsCacheRef.current.set(cacheKey, {
+				data: res.data,
+				ts: Date.now(),
+			});
 			setTagDetails(res.data);
 		} catch (err) {
+			if (isRequestCanceled(err)) return;
 			console.error("Error loading tag details:", err);
 		} finally {
-			setTagDetailsLoading(false);
+			if (tagDetailsAbortRef.current === controller) {
+				setTagDetailsLoading(false);
+			}
 		}
 	};
 
 	// Fetch detailed creator analytics
 	const fetchCreatorDetails = async () => {
+		const params = buildBaseFilterParams();
+		const cacheKey = `creators:${JSON.stringify(params)}`;
+		const cached = analyticsCacheRef.current.get(cacheKey);
+		if (cached && Date.now() - cached.ts < ANALYTICS_CLIENT_CACHE_TTL_MS) {
+			setCreatorsDetails(cached.data);
+			setCreatorsDetailsLoading(false);
+			return;
+		}
+
+		creatorDetailsAbortRef.current?.abort();
+		const controller = new AbortController();
+		creatorDetailsAbortRef.current = controller;
+
 		try {
 			setCreatorsDetailsLoading(true);
-			const params: any = {};
-			if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-			if (selectedReadStatuses.length > 0)
-				params.read_statuses = selectedReadStatuses;
-			if (excludeReadStatuses.length > 0)
-				params.exclude_read_statuses = excludeReadStatuses;
-			if (selectedTags.length > 0) params.tags = selectedTags;
-			if (excludeTags.length > 0) params.exclude_tags = excludeTags;
-			if (tagMode) params.tag_mode = tagMode;
-			if (contentRatings.length > 0) params.content_ratings = contentRatings;
-			if (demographics.length > 0) params.demographics = demographics;
-			if (statuses.length > 0) params.statuses = statuses;
-			if (originalLanguages.length > 0)
-				params.original_languages = originalLanguages;
-			if (selectedAuthors.length > 0) params.authors = selectedAuthors;
-			if (selectedArtists.length > 0) params.artists = selectedArtists;
-			if (ratingMin !== "") params.rating_min = Number(ratingMin);
-			if (ratingMax !== "") params.rating_max = Number(ratingMax);
-			if (yearStart.trim()) params.year_start = yearStart.trim();
-			if (yearEnd.trim()) params.year_end = yearEnd.trim();
-
 			const res = await client.get("/api/analytics/creators-details", {
 				params,
+				signal: controller.signal,
+			});
+			analyticsCacheRef.current.set(cacheKey, {
+				data: res.data,
+				ts: Date.now(),
 			});
 			setCreatorsDetails(res.data);
 		} catch (err) {
+			if (isRequestCanceled(err)) return;
 			console.error("Error loading creator details:", err);
 		} finally {
-			setCreatorsDetailsLoading(false);
+			if (creatorDetailsAbortRef.current === controller) {
+				setCreatorsDetailsLoading(false);
+			}
 		}
 	};
 
@@ -1780,11 +1870,18 @@ export const AnalyticsPage: React.FC = () => {
 					</label>
 
 					<button
-						onClick={fetchAnalytics}
-						className="px-4 py-2 bg-[var(--bg-card)] hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-[var(--border-primary)] rounded-xl font-bold text-xs flex items-center space-x-2 transition shadow-sm cursor-pointer"
+						type="button"
+						onClick={() => fetchAnalytics(true)}
+						disabled={analyticsLoading}
+						className="px-4 py-2 bg-[var(--bg-card)] hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-[var(--border-primary)] rounded-xl font-bold text-xs flex items-center space-x-2 transition shadow-sm cursor-pointer disabled:opacity-60"
 					>
-						<RefreshCw size={14} />
-						<span>Refresh Analytics</span>
+						<RefreshCw
+							size={14}
+							className={analyticsLoading ? "animate-spin" : ""}
+						/>
+						<span>
+							{analyticsLoading ? "Đang cập nhật..." : "Refresh Analytics"}
+						</span>
 					</button>
 				</div>
 			</div>
@@ -1901,9 +1998,41 @@ export const AnalyticsPage: React.FC = () => {
 				{currentTab === "manga" && (
 					<div className="space-y-8">
 						{renderFiltersPool()}
+						{analyticsError && !overview ? (
+							<div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+								<p className="text-sm font-semibold text-rose-500">
+									{analyticsError}
+								</p>
+								<button
+									type="button"
+									onClick={() => fetchAnalytics(true)}
+									className="px-4 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 transition cursor-pointer shrink-0"
+								>
+									Thử lại
+								</button>
+							</div>
+						) : !overview && analyticsLoading ? (
+							<div className="space-y-6">
+								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+									<StatCardSkeleton />
+									<StatCardSkeleton />
+									<StatCardSkeleton />
+									<StatCardSkeleton />
+								</div>
+								<ChartPanelSkeleton height="h-80" />
+								<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+									<ChartPanelSkeleton height="h-56" />
+									<ChartPanelSkeleton height="h-56" />
+									<ChartPanelSkeleton height="h-56" />
+								</div>
+							</div>
+						) : null}
+
 						{/* Storytelling Banner & Interactive KPI Deck */}
 						{overview && (
-							<div className="space-y-6">
+							<div
+								className={`space-y-6 transition-opacity duration-150 ${analyticsLoading ? "opacity-70" : "opacity-100"}`}
+							>
 								<ReadingProgressStoryBanner
 									overview={overview}
 									topTags={topTags}
@@ -1917,29 +2046,31 @@ export const AnalyticsPage: React.FC = () => {
 						)}
 
 						{/* Read Status Distribution Multi-View Card */}
-						<div className="w-full">
-							<ReadStatusDistributionCard
-								data={pieData}
-								totalManga={overview?.total_manga}
-								onSelectStatus={(statusName) => {
-									const map: Record<string, string> = {
-										Unread: "unread",
-										Reading: "reading",
-										Completed: "completed",
-										Dropped: "dropped",
-										"On Hold": "on_hold",
-										"Plan to Read": "plan_to_read",
-										"Re-reading": "re_reading",
-										"Re-Reading": "re_reading",
-									};
-									const key =
-										map[statusName] ||
-										statusName.toLowerCase().replace(/\s+/g, "_");
-									setSelectedReadStatuses([key]);
-									setExcludeReadStatuses([]);
-								}}
-							/>
-						</div>
+						{(overview || !analyticsLoading) && (
+							<div className="w-full">
+								<ReadStatusDistributionCard
+									data={pieData}
+									totalManga={overview?.total_manga}
+									onSelectStatus={(statusName) => {
+										const map: Record<string, string> = {
+											Unread: "unread",
+											Reading: "reading",
+											Completed: "completed",
+											Dropped: "dropped",
+											"On Hold": "on_hold",
+											"Plan to Read": "plan_to_read",
+											"Re-reading": "re_reading",
+											"Re-Reading": "re_reading",
+										};
+										const key =
+											map[statusName] ||
+											statusName.toLowerCase().replace(/\s+/g, "_");
+										setSelectedReadStatuses([key]);
+										setExcludeReadStatuses([]);
+									}}
+								/>
+							</div>
+						)}
 						{/* Demographic, Publishing Status & Original Language Row */}
 						{metadataDists && (
 							<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -2217,7 +2348,7 @@ export const AnalyticsPage: React.FC = () => {
 														}}
 														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
 															isActive
-																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-xs"
 																: "opacity-40 line-through text-[var(--text-secondary)]"
 														}`}
 														style={{
@@ -2254,7 +2385,7 @@ export const AnalyticsPage: React.FC = () => {
 														}}
 														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
 															isActive
-																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-xs"
 																: "opacity-40 line-through text-[var(--text-secondary)]"
 														}`}
 														style={{
@@ -2293,7 +2424,7 @@ export const AnalyticsPage: React.FC = () => {
 														}}
 														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
 															isActive
-																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-xs"
 																: "opacity-40 line-through text-[var(--text-secondary)]"
 														}`}
 														style={{
@@ -2381,6 +2512,7 @@ export const AnalyticsPage: React.FC = () => {
 														name="Manga Count"
 														fill="var(--brand-orange)"
 														radius={[4, 4, 0, 0]}
+														isAnimationActive={false}
 													/>
 												)}
 
@@ -2394,6 +2526,7 @@ export const AnalyticsPage: React.FC = () => {
 																name={demo}
 																stackId="year_stack"
 																fill={DEMO_COLORS[demo] || "#6B7280"}
+																isAnimationActive={false}
 															/>
 														);
 													})}
@@ -2408,6 +2541,7 @@ export const AnalyticsPage: React.FC = () => {
 																name={status}
 																stackId="year_stack"
 																fill={PUB_STATUS_COLORS[status] || "#6B7280"}
+																isAnimationActive={false}
 															/>
 														);
 													})}
@@ -2425,6 +2559,7 @@ export const AnalyticsPage: React.FC = () => {
 																name={READ_STATUS_LABELS[status] || status}
 																stackId="year_stack"
 																fill={READ_STATUS_COLORS[status] || "#6B7280"}
+																isAnimationActive={false}
 															/>
 														);
 													})}
@@ -2737,6 +2872,7 @@ export const AnalyticsPage: React.FC = () => {
 														fillOpacity={1}
 														fill="url(#colorManga)"
 														strokeWidth={2}
+														isAnimationActive={false}
 													/>
 												</AreaChart>
 											</ResponsiveContainer>
@@ -2829,6 +2965,7 @@ export const AnalyticsPage: React.FC = () => {
 														fillOpacity={1}
 														fill="url(#colorCompleted)"
 														strokeWidth={2}
+														isAnimationActive={false}
 													/>
 												</AreaChart>
 											</ResponsiveContainer>
@@ -3004,6 +3141,7 @@ export const AnalyticsPage: React.FC = () => {
 												stroke="var(--brand-coral)"
 												strokeWidth={2}
 												activeDot={{ r: 8 }}
+												isAnimationActive={false}
 											/>
 										</LineChart>
 									</ResponsiveContainer>

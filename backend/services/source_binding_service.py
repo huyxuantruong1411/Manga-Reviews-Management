@@ -75,9 +75,10 @@ class SourceBindingService:
 
         # Invalidate cache if needed
         try:
-            from backend.core.redis import delete_cache
+            from backend.core.redis import delete_cache, delete_cache_pattern
 
             await delete_cache(f"manga:detail:{manga_id}")
+            await delete_cache_pattern("analytics:*")
         except Exception:
             pass
 

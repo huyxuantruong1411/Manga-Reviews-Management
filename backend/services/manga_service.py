@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 
-from backend.core.redis import delete_cache, get_cache, set_cache
+from backend.core.redis import delete_cache, delete_cache_pattern, get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.manga import MangaCreate, MangaCreateDex, MangaUpdate, ReadStatus
 from backend.services.audit_service import audit_service
@@ -1088,6 +1088,7 @@ class MangaService:
         update_dict["updated_at"] = datetime.utcnow()
         await coll.update_one({"_id": ObjectId(manga_id)}, {"$set": update_dict})
         await delete_cache(f"manga:detail:{manga_id}")
+        await delete_cache_pattern("analytics:*")
 
         updated_doc = await coll.find_one({"_id": ObjectId(manga_id)})
         if updated_doc.get("minio_cover_key"):
@@ -1151,6 +1152,7 @@ class MangaService:
         await coll.delete_one({"_id": ObjectId(manga_id)})
         await delete_cache(f"manga:detail:{manga_id}")
         await delete_cache(f"reviews:manga:{manga_id}")
+        await delete_cache_pattern("analytics:*")
 
         # Note: We preserve audit logs so historical operations remain trackable.
         return True

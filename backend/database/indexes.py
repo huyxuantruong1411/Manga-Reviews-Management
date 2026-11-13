@@ -18,9 +18,49 @@ DELETION_REFERENCE_INDEXES = (
 )
 
 
+# Analytics query acceleration indexes (ESR order for audit velocity & metadata aggregations).
+ANALYTICS_INDEXES = (
+    (
+        "audit_logs",
+        [
+            ("entity_type", 1),
+            ("action", 1),
+            ("field", 1),
+            ("new_value", 1),
+            ("entity_id", 1),
+            ("timestamp", -1),
+        ],
+        "analytics_audit_completion_velocity",
+        {},
+    ),
+    (
+        "reviews",
+        [("is_deleted", 1), ("manga_id", 1), ("created_at", -1)],
+        "analytics_reviews_manga_created",
+        {},
+    ),
+    (
+        "mangas",
+        [("original_language", 1), ("year", 1)],
+        "analytics_mangas_lang_year",
+        {},
+    ),
+    ("mangas", "status", "analytics_mangas_pub_status", {}),
+    ("mangas", "publication_demographic", "analytics_mangas_demographic", {"sparse": True}),
+    ("mangas", "content_rating", "analytics_mangas_content_rating", {"sparse": True}),
+    ("mangas", "author", "analytics_mangas_author", {"sparse": True}),
+    ("mangas", "artist", "analytics_mangas_artist", {"sparse": True}),
+)
+
+
 async def ensure_deletion_reference_indexes(db):
     for collection, field, name in DELETION_REFERENCE_INDEXES:
         await db[collection].create_index(field, name=name)
+
+
+async def ensure_analytics_indexes(db):
+    for collection, keys, name, kwargs in ANALYTICS_INDEXES:
+        await db[collection].create_index(keys, name=name, **kwargs)
 
 
 async def backfill_manga_status_timestamps(dry_run: bool = True) -> dict:
@@ -319,6 +359,7 @@ async def init_db_indexes():
         )
 
         await ensure_deletion_reference_indexes(db)
+        await ensure_analytics_indexes(db)
         await init_pool_db_indexes()
 
         logger.info("Database indexes initialized successfully.")

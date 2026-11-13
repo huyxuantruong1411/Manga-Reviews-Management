@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -6,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from bson import ObjectId
 
+from backend.core.redis import get_cache, set_cache
 from backend.database.connection import get_db
 from backend.models.review_export import (
     ReviewCorpusExportRequest,
@@ -533,12 +535,21 @@ class ReviewExportService:
 
     async def get_review_corpus_summary(self) -> ReviewCorpusSummaryResponse:
         """Aggregates metrics for all active reviews in the system."""
+        cache_key = "analytics:review-corpus:summary"
+        cached = await get_cache(cache_key)
+        if isinstance(cached, dict):
+            return ReviewCorpusSummaryResponse(**cached)
+
         db = get_db()
-        tag_map = await self.get_tag_dictionary(db)
-        pairs = await self.get_reviews_with_manga(db)
+        tag_map, pairs = await asyncio.gather(
+            self.get_tag_dictionary(db),
+            self.get_reviews_with_manga(db),
+        )
 
         if not pairs:
-            return ReviewCorpusSummaryResponse()
+            empty_res = ReviewCorpusSummaryResponse()
+            await set_cache(cache_key, empty_res.model_dump(mode="json"), ttl=180)
+            return empty_res
 
         total_words = 0
         total_chars = 0
@@ -583,7 +594,7 @@ class ReviewExportService:
         sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]
         top_genres = [TopGenreStat(name=name, count=count) for name, count in sorted_genres]
 
-        return ReviewCorpusSummaryResponse(
+        summary = ReviewCorpusSummaryResponse(
             total_reviews=len(pairs),
             total_words=total_words,
             total_characters=total_chars,
@@ -596,6 +607,8 @@ class ReviewExportService:
             read_status_distribution=status_counts,
             top_genres=top_genres,
         )
+        await set_cache(cache_key, summary.model_dump(mode="json"), ttl=180)
+        return summary
 
     async def export_corpus(self, req: ReviewCorpusExportRequest) -> ReviewCorpusExportResponse:
         """Filters reviews, generates the corpus in the requested format, and returns the response."""

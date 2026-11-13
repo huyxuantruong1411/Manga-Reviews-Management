@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from bson import ObjectId
 
 from backend.config import settings
+from backend.core.redis import delete_cache_pattern
 from backend.database.connection import get_db
 
 logger = logging.getLogger(__name__)
@@ -120,6 +121,9 @@ class AuditService:
 
             res = await self._get_audit_collection().insert_one(log_doc)
             log_doc["_id"] = str(res.inserted_id)
+
+            if entity_type in {"manga", "review", "tag"}:
+                await delete_cache_pattern("analytics:*")
 
             # Optional dual-write to Elasticsearch
             if settings.audit_es_sync_enabled:

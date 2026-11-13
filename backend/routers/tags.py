@@ -5,6 +5,7 @@ from typing import List, Optional
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
+from backend.core.redis import delete_cache_pattern
 from backend.database.connection import get_db
 from backend.models.tag import TagCreate, TagResponse
 
@@ -67,6 +68,7 @@ async def create_custom_tag(data: TagCreate):
     res = await coll.insert_one(tag_doc)
     tag_doc["_id"] = str(res.inserted_id)
     tag_doc["manga_count"] = 0
+    await delete_cache_pattern("analytics:*")
     return tag_doc
 
 
@@ -88,6 +90,7 @@ async def delete_custom_tag(tag_id: str = Path(...)):
     await get_db().mangas.update_many({"tag_ids": tag_id}, {"$pull": {"tag_ids": tag_id}})
 
     await coll.delete_one({"_id": ObjectId(tag_id)})
+    await delete_cache_pattern("analytics:*")
     return None
 
 
@@ -129,4 +132,5 @@ async def update_tag(tag_id: str = Path(...), data: TagCreate = ...):
         tag_id_str = str(updated_tag["_id"])
         updated_tag["_id"] = tag_id_str
         updated_tag["manga_count"] = await get_db().mangas.count_documents({"tag_ids": tag_id_str})
+    await delete_cache_pattern("analytics:*")
     return updated_tag
