@@ -16,4 +16,10 @@
         <item name="android:textSize">10sp</item>
         <item name="android:textStyle">bold</item>
     </style>
+
+    <style name="BottomNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/surface_elevated</item>
+        <item name="android:height">28dp</item>
+        <item name="android:width">52dp</item>
+    </style>
 </resources>

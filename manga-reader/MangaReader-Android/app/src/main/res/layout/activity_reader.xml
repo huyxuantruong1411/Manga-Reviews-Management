@@ -5,17 +5,31 @@
     android:layout_height="match_parent"
     android:background="@color/black">
 
-    <!-- Pages RecyclerView (Vertical Scroll Webtoon Mode) -->
+    <!-- Pages RecyclerView -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvReaderPages"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- Subtle Persistent Reading Progress Indicator -->
+    <ProgressBar
+        android:id="@+id/pbReaderProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:elevation="6dp"
+        android:max="100"
+        android:progress="0"
+        android:progressBackgroundTint="@color/border_dark"
+        android:progressTint="@color/accent_amber" />
 
     <ProgressBar
         android:id="@+id/pbReaderLoading"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:indeterminateTint="@color/accent_amber"
         android:visibility="gone" />
 
     <!-- Top Overlay Bar -->
@@ -31,11 +45,11 @@
 
         <ImageButton
             android:id="@+id/btnReaderBack"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Back"
-            android:padding="8dp"
+            android:padding="12dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_arrow_back"
             app:tint="@color/text_primary" />
@@ -62,7 +76,7 @@
                 android:id="@+id/tvReaderPageCount"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="24 pages"
+                android:text="0 pages"
                 android:textColor="@color/text_muted"
                 android:textSize="10sp" />
 
@@ -72,8 +86,10 @@
             android:id="@+id/btnReadingModeToggle"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="38dp"
             android:backgroundTint="@color/surface_elevated"
+            android:minWidth="88dp"
+            android:paddingHorizontal="10dp"
             android:text="WEBTOON"
             android:textColor="@color/accent_amber"
             android:textSize="10sp"
@@ -95,7 +111,7 @@
         <Button
             android:id="@+id/btnReaderPrevChapter"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="38dp"
             android:backgroundTint="@color/surface_elevated"
             android:text="← PREV"
             android:textColor="@color/text_primary"
@@ -114,7 +130,7 @@
         <Button
             android:id="@+id/btnReaderNextChapter"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="38dp"
             android:backgroundTint="@color/accent_amber"
             android:text="NEXT →"
             android:textColor="@color/bg_dark"
@@ -124,4 +140,3 @@
     </LinearLayout>
 
 </FrameLayout>
-

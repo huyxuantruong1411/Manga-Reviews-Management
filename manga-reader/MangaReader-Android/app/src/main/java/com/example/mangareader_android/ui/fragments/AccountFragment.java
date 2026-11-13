@@ -1,6 +1,6 @@
 package com.example.mangareader_android.ui.fragments;
 
-import android.app.AlertDialog;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.view.LayoutInflater;
@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -19,13 +18,14 @@ import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.api.RetrofitClient;
 import com.example.mangareader_android.data.model.AuthModels.*;
 import com.example.mangareader_android.databinding.FragmentAccountBinding;
+import com.example.mangareader_android.util.UiMotionUtils;
 import java.util.Locale;
 import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class AccountFragment extends Fragment {
+public class AccountFragment extends Fragment implements UiMotionUtils.OnTabReselectedListener {
 
     private FragmentAccountBinding binding;
     private CountDownTimer otpTimer;
@@ -46,8 +46,17 @@ public class AccountFragment extends Fragment {
         updateViewState();
     }
 
+    @Override
+    public void onTabReselected() {
+        if (binding != null) {
+            binding.scrollAccount.smoothScrollTo(0, 0);
+        }
+    }
+
     private void updateViewState() {
+        if (binding == null) return;
         boolean loggedIn = MangaReaderApp.getInstance().isAuthenticated();
+        UiMotionUtils.transitionLayout(binding.layoutAccountRoot);
         binding.layoutLoggedOut.setVisibility(loggedIn ? View.GONE : View.VISIBLE);
         binding.layoutLoggedIn.setVisibility(loggedIn ? View.VISIBLE : View.GONE);
 
@@ -56,30 +65,51 @@ public class AccountFragment extends Fragment {
         }
     }
 
+    private void styleAuthTabs(boolean isSignInActive) {
+        int bgActive = ContextCompat.getColor(requireContext(), R.color.surface_dark);
+        int bgInactive = ContextCompat.getColor(requireContext(), R.color.surface_elevated);
+        int textActive = ContextCompat.getColor(requireContext(), R.color.accent_amber);
+        int textInactive = ContextCompat.getColor(requireContext(), R.color.text_secondary);
+
+        binding.btnTabSignIn.setBackgroundTintList(
+                ColorStateList.valueOf(isSignInActive ? bgActive : bgInactive));
+        binding.btnTabSignIn.setTextColor(isSignInActive ? textActive : textInactive);
+
+        binding.btnTabRegister.setBackgroundTintList(
+                ColorStateList.valueOf(!isSignInActive ? bgActive : bgInactive));
+        binding.btnTabRegister.setTextColor(!isSignInActive ? textActive : textInactive);
+    }
+
     private void setupAuthUI() {
         binding.btnTabSignIn.setOnClickListener(v -> {
+            UiMotionUtils.transitionLayout(binding.layoutAccountRoot);
             binding.formSignIn.setVisibility(View.VISIBLE);
             binding.formRegister.setVisibility(View.GONE);
-            binding.btnTabSignIn.setTextColor(ContextCompat.getColor(requireContext(), R.color.accent_amber));
-            binding.btnTabRegister.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_secondary));
+            styleAuthTabs(true);
         });
 
         binding.btnTabRegister.setOnClickListener(v -> {
+            UiMotionUtils.transitionLayout(binding.layoutAccountRoot);
             binding.formSignIn.setVisibility(View.GONE);
             binding.formRegister.setVisibility(View.VISIBLE);
-            binding.btnTabRegister.setTextColor(ContextCompat.getColor(requireContext(), R.color.accent_amber));
-            binding.btnTabSignIn.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_secondary));
+            styleAuthTabs(false);
         });
 
         binding.btnLoginSubmit.setOnClickListener(v -> handleLogin());
         binding.btnRegSubmit.setOnClickListener(v -> handleRegister());
 
         binding.btnSaveProfile.setOnClickListener(v -> handleUpdateProfile());
-        binding.btnSignOut.setOnClickListener(v -> {
-            MangaReaderApp.getInstance().clearAuth();
-            updateViewState();
-            Toast.makeText(getContext(), "Signed out", Toast.LENGTH_SHORT).show();
-        });
+        binding.btnSignOut.setOnClickListener(v ->
+                UiMotionUtils.dialogBuilder(requireContext())
+                        .setTitle("Sign Out")
+                        .setMessage("Sign out of your MangaReader account on this device?")
+                        .setPositiveButton("Sign Out", (dialog, which) -> {
+                            MangaReaderApp.getInstance().clearAuth();
+                            updateViewState();
+                            UiMotionUtils.showInfo(binding.getRoot(), "Signed out");
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show());
     }
 
     private void setupServerUrlUI() {
@@ -88,7 +118,9 @@ public class AccountFragment extends Fragment {
             String url = binding.etServerBaseUrl.getText().toString().trim();
             if (!url.isEmpty()) {
                 MangaReaderApp.getInstance().setBaseUrl(url);
-                Toast.makeText(getContext(), "Backend endpoint updated to: " + MangaReaderApp.getInstance().getBaseUrl(), Toast.LENGTH_LONG).show();
+                UiMotionUtils.showInfo(
+                        binding.getRoot(),
+                        "Backend endpoint updated: " + MangaReaderApp.getInstance().getBaseUrl());
             }
         });
     }
@@ -98,7 +130,7 @@ public class AccountFragment extends Fragment {
         String password = binding.etLoginPassword.getText().toString().trim();
 
         if (username.isEmpty() || password.isEmpty()) {
-            Toast.makeText(getContext(), "Please fill in all fields", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please fill in all fields");
             return;
         }
 
@@ -106,6 +138,7 @@ public class AccountFragment extends Fragment {
         RetrofitClient.getApi().login(new LoginRequest(username, password)).enqueue(new Callback<TokenResponse>() {
             @Override
             public void onResponse(@NonNull Call<TokenResponse> call, @NonNull Response<TokenResponse> response) {
+                if (!isAdded() || binding == null) return;
                 binding.btnLoginSubmit.setEnabled(true);
                 if (response.isSuccessful() && response.body() != null) {
                     TokenResponse tokenRes = response.body();
@@ -113,19 +146,19 @@ public class AccountFragment extends Fragment {
                             tokenRes.accessToken,
                             tokenRes.user.user_id,
                             tokenRes.user.username,
-                            tokenRes.user.role
-                    );
-                    Toast.makeText(getContext(), "Welcome back, " + tokenRes.user.display_name, Toast.LENGTH_SHORT).show();
+                            tokenRes.user.role);
+                    UiMotionUtils.showInfo(binding.getRoot(), "Welcome back, " + tokenRes.user.display_name);
                     updateViewState();
                 } else {
-                    Toast.makeText(getContext(), "Invalid credentials", Toast.LENGTH_SHORT).show();
+                    UiMotionUtils.showError(binding.getRoot(), "Invalid credentials", null, null);
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<TokenResponse> call, @NonNull Throwable t) {
+                if (!isAdded() || binding == null) return;
                 binding.btnLoginSubmit.setEnabled(true);
-                Toast.makeText(getContext(), "Connection failed: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                UiMotionUtils.showError(binding.getRoot(), "Connection failed: " + t.getMessage(), null, null);
             }
         });
     }
@@ -137,38 +170,38 @@ public class AccountFragment extends Fragment {
         String password = binding.etRegPassword.getText().toString().trim();
 
         if (email.isEmpty() || username.isEmpty() || password.isEmpty()) {
-            Toast.makeText(getContext(), "Please fill in required fields", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please fill in required fields");
             return;
         }
 
         binding.btnRegSubmit.setEnabled(false);
-        RetrofitClient.getApi().register(new RegisterRequest(email, username, displayName.isEmpty() ? username : displayName, password))
+        RetrofitClient.getApi().register(new RegisterRequest(
+                        email, username, displayName.isEmpty() ? username : displayName, password))
                 .enqueue(new Callback<RegisterResponse>() {
                     @Override
                     public void onResponse(@NonNull Call<RegisterResponse> call, @NonNull Response<RegisterResponse> response) {
+                        if (!isAdded() || binding == null) return;
                         binding.btnRegSubmit.setEnabled(true);
                         if (response.isSuccessful()) {
                             showOtpDialog(email);
                         } else {
-                            Toast.makeText(getContext(), "Registration error", Toast.LENGTH_SHORT).show();
+                            UiMotionUtils.showError(binding.getRoot(), "Registration error (" + response.code() + ")", null, null);
                         }
                     }
 
                     @Override
                     public void onFailure(@NonNull Call<RegisterResponse> call, @NonNull Throwable t) {
+                        if (!isAdded() || binding == null) return;
                         binding.btnRegSubmit.setEnabled(true);
-                        Toast.makeText(getContext(), "Network error", Toast.LENGTH_SHORT).show();
+                        UiMotionUtils.showError(binding.getRoot(), "Network error", null, null);
                     }
                 });
     }
 
     private void showOtpDialog(String email) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Verify Email with OTP");
-
         LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 20, 40, 20);
+        layout.setPadding(44, 24, 44, 20);
 
         final TextView tvTimer = new TextView(requireContext());
         tvTimer.setText("Expires in: 120s");
@@ -177,14 +210,17 @@ public class AccountFragment extends Fragment {
 
         final EditText etOtp = new EditText(requireContext());
         etOtp.setHint("6-digit code");
+        etOtp.setSingleLine(true);
+        etOtp.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary));
         layout.addView(etOtp);
 
-        builder.setView(layout);
-
-        otpTimer = new CountDownTimer(120000, 1000) {
+        if (otpTimer != null) {
+            otpTimer.cancel();
+        }
+        otpTimer = new CountDownTimer(120000L, 1000L) {
             @Override
             public void onTick(long millisUntilFinished) {
-                tvTimer.setText(String.format(Locale.US, "Expires in: %ds", millisUntilFinished / 1000));
+                tvTimer.setText(String.format(Locale.US, "Expires in: %ds", millisUntilFinished / 1000L));
             }
 
             @Override
@@ -193,42 +229,50 @@ public class AccountFragment extends Fragment {
             }
         }.start();
 
-        builder.setPositiveButton("Verify", (dialog, which) -> {
-            if (otpTimer != null) otpTimer.cancel();
-            String code = etOtp.getText().toString().trim();
-            RetrofitClient.getApi().verifyEmail(new VerifyEmailRequest(email, code))
-                    .enqueue(new Callback<Map<String, Object>>() {
-                        @Override
-                        public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                            if (response.isSuccessful()) {
-                                Toast.makeText(getContext(), "Email verified! You can now sign in.", Toast.LENGTH_LONG).show();
-                                binding.btnTabSignIn.performClick();
-                            } else {
-                                Toast.makeText(getContext(), "Verification failed", Toast.LENGTH_SHORT).show();
-                            }
-                        }
+        UiMotionUtils.dialogBuilder(requireContext())
+                .setTitle("Verify Email with OTP")
+                .setView(layout)
+                .setPositiveButton("Verify", (dialog, which) -> {
+                    if (otpTimer != null) otpTimer.cancel();
+                    String code = etOtp.getText().toString().trim();
+                    RetrofitClient.getApi().verifyEmail(new VerifyEmailRequest(email, code))
+                            .enqueue(new Callback<Map<String, Object>>() {
+                                @Override
+                                public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                    if (!isAdded() || binding == null) return;
+                                    if (response.isSuccessful()) {
+                                        UiMotionUtils.showInfo(binding.getRoot(), "Email verified! You can now sign in.");
+                                        binding.btnTabSignIn.performClick();
+                                    } else {
+                                        UiMotionUtils.showError(binding.getRoot(), "Verification failed", null, null);
+                                    }
+                                }
 
-                        @Override
-                        public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
-                            Toast.makeText(getContext(), "Verification error", Toast.LENGTH_SHORT).show();
-                        }
-                    });
-        });
-        builder.setNegativeButton("Cancel", (dialog, which) -> {
-            if (otpTimer != null) otpTimer.cancel();
-        });
-        builder.show();
+                                @Override
+                                public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                    if (!isAdded() || binding == null) return;
+                                    UiMotionUtils.showError(binding.getRoot(), "Verification error", null, null);
+                                }
+                            });
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> {
+                    if (otpTimer != null) otpTimer.cancel();
+                })
+                .show();
     }
 
     private void loadUserProfile() {
         RetrofitClient.getApi().getMyProfile().enqueue(new Callback<UserProfile>() {
             @Override
             public void onResponse(@NonNull Call<UserProfile> call, @NonNull Response<UserProfile> response) {
+                if (!isAdded() || binding == null) return;
                 if (response.isSuccessful() && response.body() != null) {
                     UserProfile profile = response.body();
-                    binding.tvProfileDisplayName.setText(profile.display_name != null ? profile.display_name : profile.username);
+                    binding.tvProfileDisplayName.setText(
+                            profile.display_name != null ? profile.display_name : profile.username);
                     binding.tvProfileUsername.setText("@" + profile.username);
-                    binding.tvProfileRoleBadge.setText(profile.role != null ? profile.role.toUpperCase() : "READER");
+                    binding.tvProfileRoleBadge.setText(
+                            profile.role != null ? profile.role.toUpperCase(Locale.US) : "READER");
 
                     binding.etEditDisplayName.setText(profile.display_name != null ? profile.display_name : "");
                     binding.etEditBio.setText(profile.bio != null ? profile.bio : "");
@@ -237,7 +281,6 @@ public class AccountFragment extends Fragment {
 
             @Override
             public void onFailure(@NonNull Call<UserProfile> call, @NonNull Throwable t) {
-                // ignore
             }
         });
     }
@@ -250,15 +293,19 @@ public class AccountFragment extends Fragment {
                 .enqueue(new Callback<UserProfile>() {
                     @Override
                     public void onResponse(@NonNull Call<UserProfile> call, @NonNull Response<UserProfile> response) {
+                        if (!isAdded() || binding == null) return;
                         if (response.isSuccessful()) {
-                            Toast.makeText(getContext(), "Profile updated", Toast.LENGTH_SHORT).show();
+                            UiMotionUtils.showInfo(binding.getRoot(), "Profile updated");
                             loadUserProfile();
+                        } else {
+                            UiMotionUtils.showError(binding.getRoot(), "Failed to update profile", null, null);
                         }
                     }
 
                     @Override
                     public void onFailure(@NonNull Call<UserProfile> call, @NonNull Throwable t) {
-                        Toast.makeText(getContext(), "Error updating profile", Toast.LENGTH_SHORT).show();
+                        if (!isAdded() || binding == null) return;
+                        UiMotionUtils.showError(binding.getRoot(), "Error updating profile", null, null);
                     }
                 });
     }
@@ -270,4 +317,3 @@ public class AccountFragment extends Fragment {
         binding = null;
     }
 }
-

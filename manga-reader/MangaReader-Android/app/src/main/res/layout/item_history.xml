@@ -4,6 +4,9 @@
     android:layout_height="wrap_content"
     android:layout_marginVertical="4dp"
     android:background="@drawable/bg_card_dark"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:padding="12dp">
@@ -12,7 +15,7 @@
         android:id="@+id/imgHistoryCover"
         android:layout_width="48dp"
         android:layout_height="64dp"
-        android:background="@color/surface_elevated"
+        android:background="@drawable/bg_cover_placeholder"
         android:contentDescription="Cover"
         android:scaleType="centerCrop" />
 

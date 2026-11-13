@@ -21,7 +21,7 @@
         android:layout_height="wrap_content"
         android:background="@color/surface_dark"
         app:elevation="8dp"
-        app:itemActiveIndicatorStyle="@null"
+        app:itemActiveIndicatorStyle="@style/BottomNavActiveIndicator"
         app:itemIconSize="22dp"
         app:itemIconTint="@color/bottom_nav_color"
         app:itemPaddingBottom="6dp"

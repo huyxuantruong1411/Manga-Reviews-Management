@@ -13,6 +13,7 @@ import com.example.mangareader_android.ui.fragments.CatalogFragment;
 import com.example.mangareader_android.ui.fragments.HistoryFragment;
 import com.example.mangareader_android.ui.fragments.ListsFragment;
 import com.example.mangareader_android.ui.fragments.StatsFragment;
+import com.example.mangareader_android.util.UiMotionUtils;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -35,7 +36,7 @@ public class MainActivity extends AppCompatActivity {
         setupBottomNavigation();
 
         if (savedInstanceState == null) {
-            switchFragment(new CatalogFragment());
+            switchFragment(new CatalogFragment(), false);
         }
     }
 
@@ -43,29 +44,41 @@ public class MainActivity extends AppCompatActivity {
         binding.bottomNav.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
             if (itemId == R.id.nav_catalog) {
-                switchFragment(new CatalogFragment());
+                switchFragment(new CatalogFragment(), true);
                 return true;
             } else if (itemId == R.id.nav_lists) {
-                switchFragment(new ListsFragment());
+                switchFragment(new ListsFragment(), true);
                 return true;
             } else if (itemId == R.id.nav_history) {
-                switchFragment(new HistoryFragment());
+                switchFragment(new HistoryFragment(), true);
                 return true;
             } else if (itemId == R.id.nav_stats) {
-                switchFragment(new StatsFragment());
+                switchFragment(new StatsFragment(), true);
                 return true;
             } else if (itemId == R.id.nav_account) {
-                switchFragment(new AccountFragment());
+                switchFragment(new AccountFragment(), true);
                 return true;
             }
             return false;
         });
+
+        binding.bottomNav.setOnItemReselectedListener(item -> {
+            Fragment current = getSupportFragmentManager().findFragmentById(R.id.fragmentContainer);
+            if (current instanceof UiMotionUtils.OnTabReselectedListener) {
+                ((UiMotionUtils.OnTabReselectedListener) current).onTabReselected();
+            }
+        });
     }
 
-    private void switchFragment(Fragment fragment) {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.fragmentContainer, fragment)
-                .commit();
+    private void switchFragment(Fragment fragment, boolean animate) {
+        androidx.fragment.app.FragmentTransaction tx = getSupportFragmentManager().beginTransaction();
+        if (animate) {
+            tx.setCustomAnimations(
+                    R.anim.frag_fade_enter,
+                    R.anim.frag_fade_exit,
+                    R.anim.frag_fade_enter,
+                    R.anim.frag_fade_exit);
+        }
+        tx.replace(R.id.fragmentContainer, fragment).commit();
     }
 }

@@ -4,6 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="4dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     app:cardBackgroundColor="@color/surface_dark"
     app:cardCornerRadius="6dp"
     app:cardElevation="0dp"
@@ -19,7 +22,7 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="220dp"
-            android:background="@color/surface_elevated">
+            android:background="@drawable/bg_cover_placeholder">
 
             <ImageView
                 android:id="@+id/imgCover"

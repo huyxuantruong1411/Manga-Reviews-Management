@@ -1,6 +1,5 @@
 package com.example.mangareader_android.ui.activities;
 
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
@@ -10,15 +9,16 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.api.RetrofitClient;
@@ -29,6 +29,7 @@ import com.example.mangareader_android.databinding.ActivityMangaDetailBinding;
 import com.example.mangareader_android.ui.adapters.ChapterAdapter;
 import com.example.mangareader_android.ui.adapters.CommentAdapter;
 import com.example.mangareader_android.ui.adapters.MangaAdapter;
+import com.example.mangareader_android.util.UiMotionUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +51,7 @@ public class MangaDetailActivity extends AppCompatActivity {
     private MangaAdapter similarAdapter;
 
     private String sortOrder = "desc";
+    private boolean synopsisExpanded = false;
     private final List<ChapterItem> rawChapters = new ArrayList<>();
 
     @Override
@@ -67,7 +69,6 @@ public class MangaDetailActivity extends AppCompatActivity {
 
         mangaSlug = getIntent().getStringExtra(EXTRA_SLUG);
         if (mangaSlug == null || mangaSlug.isEmpty()) {
-            Toast.makeText(this, "Missing manga identifier", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -78,16 +79,10 @@ public class MangaDetailActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerViews() {
-        // Chapters
-        chapterAdapter = new ChapterAdapter(chapter -> {
-            Intent intent = new Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, chapter.poolChapterId);
-            startActivity(intent);
-        });
+        chapterAdapter = new ChapterAdapter(chapter -> openReaderChapter(chapter.poolChapterId));
         binding.rvDetailChapters.setLayoutManager(new LinearLayoutManager(this));
         binding.rvDetailChapters.setAdapter(chapterAdapter);
 
-        // Comments
         commentAdapter = new CommentAdapter(new CommentAdapter.OnCommentActionListener() {
             @Override
             public void onReaction(CommentItem comment, String reaction) {
@@ -97,11 +92,15 @@ public class MangaDetailActivity extends AppCompatActivity {
                             public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
                                 if (response.isSuccessful()) {
                                     loadComments();
+                                } else {
+                                    UiMotionUtils.showError(binding.getRoot(), "Sign in to react to comments", null, null);
                                 }
                             }
 
                             @Override
-                            public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {}
+                            public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                UiMotionUtils.showError(binding.getRoot(), "Network error updating reaction", null, null);
+                            }
                         });
             }
 
@@ -113,19 +112,28 @@ public class MangaDetailActivity extends AppCompatActivity {
         binding.rvDetailComments.setLayoutManager(new LinearLayoutManager(this));
         binding.rvDetailComments.setAdapter(commentAdapter);
 
-        // Similar Titles
         similarAdapter = new MangaAdapter(manga -> {
             Intent intent = new Intent(this, MangaDetailActivity.class);
             intent.putExtra(EXTRA_SLUG, manga.slug);
             startActivity(intent);
+            UiMotionUtils.applyActivityOpenTransition(this);
         });
         binding.rvSimilarTitles.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.rvSimilarTitles.setAdapter(similarAdapter);
     }
 
+    private void openReaderChapter(String chapterId) {
+        Intent intent = new Intent(this, ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, chapterId);
+        startActivity(intent);
+        UiMotionUtils.applyActivityOpenTransition(this);
+    }
+
     private void setupListeners() {
         binding.btnDetailBack.setOnClickListener(v -> finish());
         binding.btnDetailReport.setOnClickListener(v -> showReportMangaDialog());
+
+        binding.layoutSynopsisCard.setOnClickListener(v -> toggleSynopsis());
 
         binding.btnReadFirst.setOnClickListener(v -> handleReadFirst());
         binding.btnContinueReading.setOnClickListener(v -> handleContinueReading());
@@ -133,7 +141,7 @@ public class MangaDetailActivity extends AppCompatActivity {
 
         binding.btnSortOrderToggle.setOnClickListener(v -> {
             sortOrder = "desc".equals(sortOrder) ? "asc" : "desc";
-            binding.btnSortOrderToggle.setText("desc".equals(sortOrder) ? "DESCENDING [v]" : "ASCENDING [^]");
+            binding.btnSortOrderToggle.setText("desc".equals(sortOrder) ? "DESCENDING ↓" : "ASCENDING ↑");
             loadChapters();
         });
 
@@ -153,10 +161,21 @@ public class MangaDetailActivity extends AppCompatActivity {
         binding.btnSubmitComment.setOnClickListener(v -> handlePostComment());
     }
 
+    private void toggleSynopsis() {
+        if (binding.tvSynopsisToggle.getVisibility() != View.VISIBLE && !synopsisExpanded) {
+            return;
+        }
+        synopsisExpanded = !synopsisExpanded;
+        UiMotionUtils.transitionLayout(binding.layoutDetailRoot);
+        binding.tvDetailSynopsis.setMaxLines(synopsisExpanded ? Integer.MAX_VALUE : 4);
+        binding.tvSynopsisToggle.setText(synopsisExpanded ? "COLLAPSE ▴" : "EXPAND ▾");
+    }
+
     private void loadMangaDetails() {
         RetrofitClient.getApi().getMangaDetail(mangaSlug).enqueue(new Callback<MangaItem>() {
             @Override
             public void onResponse(@NonNull Call<MangaItem> call, @NonNull Response<MangaItem> response) {
+                if (isFinishing() || isDestroyed()) return;
                 if (response.isSuccessful() && response.body() != null) {
                     currentManga = response.body();
                     bindMangaData(currentManga);
@@ -164,18 +183,28 @@ public class MangaDetailActivity extends AppCompatActivity {
                     loadComments();
                     loadSimilarTitles();
                 } else {
-                    Toast.makeText(MangaDetailActivity.this, "Manga not found", Toast.LENGTH_SHORT).show();
+                    UiMotionUtils.showError(
+                            binding.getRoot(),
+                            "Manga not found (" + response.code() + ")",
+                            "RETRY",
+                            v -> loadMangaDetails());
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<MangaItem> call, @NonNull Throwable t) {
-                Toast.makeText(MangaDetailActivity.this, "Failed to connect to backend", Toast.LENGTH_SHORT).show();
+                if (isFinishing() || isDestroyed()) return;
+                UiMotionUtils.showError(
+                        binding.getRoot(),
+                        "Failed to connect to backend",
+                        "RETRY",
+                        v -> loadMangaDetails());
             }
         });
     }
 
     private void bindMangaData(MangaItem manga) {
+        UiMotionUtils.transitionLayout(binding.layoutDetailRoot);
         binding.tvDetailBarTitle.setText(manga.title);
         binding.tvDetailTitle.setText(manga.title);
         if (manga.alt_titles != null && !manga.alt_titles.isEmpty()) {
@@ -185,15 +214,31 @@ public class MangaDetailActivity extends AppCompatActivity {
             binding.tvDetailAltTitle.setVisibility(View.GONE);
         }
 
-        binding.tvDetailStatusBadge.setText(manga.status != null ? manga.status.toUpperCase() : "ONGOING");
-        binding.tvDetailDemographicBadge.setText(manga.publication_demographic != null ? manga.publication_demographic.toUpperCase() : "MANGA");
-        binding.tvDetailRatingBadge.setText(String.format(Locale.US, "%.1f *", manga.average_rating));
-        binding.tvDetailStats.setText(String.format(Locale.US, "%d chapters | %d views", manga.chapter_count, manga.view_count));
-        binding.tvDetailSynopsis.setText(manga.description != null && !manga.description.isEmpty() ? manga.description : "No description provided.");
+        binding.tvDetailStatusBadge.setText(
+                manga.status != null ? manga.status.toUpperCase(Locale.US) : "ONGOING");
+        binding.tvDetailDemographicBadge.setText(
+                manga.publication_demographic != null
+                        ? manga.publication_demographic.toUpperCase(Locale.US)
+                        : "MANGA");
+        binding.tvDetailRatingBadge.setText(
+                String.format(Locale.US, "★ %.1f", manga.average_rating));
+        binding.tvDetailStats.setText(
+                String.format(Locale.US, "%d chapters • %d views", manga.chapter_count, manga.view_count));
+
+        String synopsis = (manga.description != null && !manga.description.isEmpty())
+                ? manga.description
+                : "No description provided.";
+        synopsisExpanded = false;
+        binding.tvDetailSynopsis.setMaxLines(4);
+        binding.tvDetailSynopsis.setText(synopsis);
+        binding.tvSynopsisToggle.setVisibility(synopsis.length() > 160 ? View.VISIBLE : View.GONE);
+        binding.tvSynopsisToggle.setText("EXPAND ▾");
 
         Glide.with(this)
                 .load(manga.cover_url)
-                .placeholder(R.color.surface_elevated)
+                .placeholder(R.drawable.bg_cover_placeholder)
+                .error(R.drawable.bg_cover_placeholder)
+                .transition(DrawableTransitionOptions.withCrossFade(180))
                 .into(binding.imgDetailCover);
     }
 
@@ -203,16 +248,31 @@ public class MangaDetailActivity extends AppCompatActivity {
                 .enqueue(new Callback<ChapterListResponse>() {
                     @Override
                     public void onResponse(@NonNull Call<ChapterListResponse> call, @NonNull Response<ChapterListResponse> response) {
+                        if (isFinishing() || isDestroyed()) return;
                         if (response.isSuccessful() && response.body() != null) {
                             rawChapters.clear();
                             rawChapters.addAll(response.body().items);
                             chapterAdapter.setChapters(rawChapters);
+                            UiMotionUtils.replayLayoutAnimation(binding.rvDetailChapters);
                             binding.tvChaptersHeader.setText(String.format(Locale.US, "CHAPTERS (%d)", rawChapters.size()));
+                        } else {
+                            UiMotionUtils.showError(
+                                    binding.getRoot(),
+                                    "Could not load chapters",
+                                    "RETRY",
+                                    v -> loadChapters());
                         }
                     }
 
                     @Override
-                    public void onFailure(@NonNull Call<ChapterListResponse> call, @NonNull Throwable t) {}
+                    public void onFailure(@NonNull Call<ChapterListResponse> call, @NonNull Throwable t) {
+                        if (isFinishing() || isDestroyed()) return;
+                        UiMotionUtils.showError(
+                                binding.getRoot(),
+                                "Chapter network error",
+                                "RETRY",
+                                v -> loadChapters());
+                    }
                 });
     }
 
@@ -221,6 +281,7 @@ public class MangaDetailActivity extends AppCompatActivity {
         RetrofitClient.getApi().getComments(currentManga.poolMangaId, 1, 50).enqueue(new Callback<CommentListResponse>() {
             @Override
             public void onResponse(@NonNull Call<CommentListResponse> call, @NonNull Response<CommentListResponse> response) {
+                if (isFinishing() || isDestroyed()) return;
                 if (response.isSuccessful() && response.body() != null) {
                     commentAdapter.setComments(response.body().items);
                 }
@@ -236,7 +297,9 @@ public class MangaDetailActivity extends AppCompatActivity {
         RetrofitClient.getApi().getContentRecommendations(currentManga.poolMangaId).enqueue(new Callback<RecommendationsResponse>() {
             @Override
             public void onResponse(@NonNull Call<RecommendationsResponse> call, @NonNull Response<RecommendationsResponse> response) {
+                if (isFinishing() || isDestroyed()) return;
                 if (response.isSuccessful() && response.body() != null && response.body().items != null && !response.body().items.isEmpty()) {
+                    UiMotionUtils.transitionLayout(binding.layoutDetailRoot);
                     binding.layoutSimilarTitles.setVisibility(View.VISIBLE);
                     similarAdapter.setMangaList(response.body().items);
                 } else {
@@ -246,6 +309,7 @@ public class MangaDetailActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(@NonNull Call<RecommendationsResponse> call, @NonNull Throwable t) {
+                if (isFinishing() || isDestroyed()) return;
                 binding.layoutSimilarTitles.setVisibility(View.GONE);
             }
         });
@@ -257,24 +321,16 @@ public class MangaDetailActivity extends AppCompatActivity {
             @Override
             public void onResponse(@NonNull Call<ReadPointerResponse> call, @NonNull Response<ReadPointerResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    Intent intent = new Intent(MangaDetailActivity.this, ReaderActivity.class);
-                    intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, response.body().chapter_id);
-                    startActivity(intent);
+                    openReaderChapter(response.body().chapter_id);
                 } else if (!rawChapters.isEmpty()) {
-                    ChapterItem first = rawChapters.get(rawChapters.size() - 1);
-                    Intent intent = new Intent(MangaDetailActivity.this, ReaderActivity.class);
-                    intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, first.poolChapterId);
-                    startActivity(intent);
+                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId);
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<ReadPointerResponse> call, @NonNull Throwable t) {
                 if (!rawChapters.isEmpty()) {
-                    ChapterItem first = rawChapters.get(rawChapters.size() - 1);
-                    Intent intent = new Intent(MangaDetailActivity.this, ReaderActivity.class);
-                    intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, first.poolChapterId);
-                    startActivity(intent);
+                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId);
                 }
             }
         });
@@ -286,9 +342,7 @@ public class MangaDetailActivity extends AppCompatActivity {
             @Override
             public void onResponse(@NonNull Call<ReadPointerResponse> call, @NonNull Response<ReadPointerResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    Intent intent = new Intent(MangaDetailActivity.this, ReaderActivity.class);
-                    intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, response.body().chapter_id);
-                    startActivity(intent);
+                    openReaderChapter(response.body().chapter_id);
                 } else {
                     handleReadFirst();
                 }
@@ -302,133 +356,141 @@ public class MangaDetailActivity extends AppCompatActivity {
     }
 
     private void showRatingDialog() {
+        if (currentManga == null) return;
         if (!MangaReaderApp.getInstance().isAuthenticated()) {
-            Toast.makeText(this, "Please sign in from the Account tab to submit a rating.", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please sign in from the Account tab to submit a rating.");
             return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Rate Manga (1 - 10)");
-
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 20);
+        layout.setPadding(56, 32, 56, 20);
 
         final TextView tvScore = new TextView(this);
-        tvScore.setText("10 *");
-        tvScore.setTextSize(18);
-        tvScore.setTextColor(getResources().getColor(R.color.accent_amber, null));
+        tvScore.setText("★ 10 / 10");
+        tvScore.setTextSize(18f);
+        tvScore.setTextColor(ContextCompat.getColor(this, R.color.accent_amber));
         layout.addView(tvScore);
 
         final SeekBar seekBar = new SeekBar(this);
-        seekBar.setMax(9); // 0 to 9 -> 1 to 10
+        seekBar.setMax(9);
         seekBar.setProgress(9);
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int progress, boolean fromUser) {
-                tvScore.setText(String.format(Locale.US, "%d *", progress + 1));
+                tvScore.setText(String.format(Locale.US, "★ %d / 10", progress + 1));
             }
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {}
         });
         layout.addView(seekBar);
 
-        builder.setView(layout);
-        builder.setPositiveButton("Submit", (dialog, which) -> {
-            int score = seekBar.getProgress() + 1;
-            RetrofitClient.getApi().rateManga(currentManga.poolMangaId, new RateMangaRequest(score))
-                    .enqueue(new Callback<Map<String, Object>>() {
-                        @Override
-                        public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                            if (response.isSuccessful()) {
-                                Toast.makeText(MangaDetailActivity.this, "Rating saved!", Toast.LENGTH_SHORT).show();
-                                loadMangaDetails();
-                            } else {
-                                Toast.makeText(MangaDetailActivity.this, "Failed to submit rating", Toast.LENGTH_SHORT).show();
-                            }
-                        }
+        UiMotionUtils.dialogBuilder(this)
+                .setTitle("Rate Manga (1 - 10)")
+                .setView(layout)
+                .setPositiveButton("Submit", (dialog, which) -> {
+                    int score = seekBar.getProgress() + 1;
+                    RetrofitClient.getApi().rateManga(currentManga.poolMangaId, new RateMangaRequest(score))
+                            .enqueue(new Callback<Map<String, Object>>() {
+                                @Override
+                                public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                    if (response.isSuccessful()) {
+                                        UiMotionUtils.showInfo(binding.getRoot(), "Rating saved!");
+                                        loadMangaDetails();
+                                    } else {
+                                        UiMotionUtils.showError(binding.getRoot(), "Failed to submit rating", null, null);
+                                    }
+                                }
 
-                        @Override
-                        public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
-                            Toast.makeText(MangaDetailActivity.this, "Network error", Toast.LENGTH_SHORT).show();
-                        }
-                    });
-        });
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+                                @Override
+                                public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                    UiMotionUtils.showError(binding.getRoot(), "Network error", null, null);
+                                }
+                            });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showReportMangaDialog() {
+        if (currentManga == null) return;
         if (!MangaReaderApp.getInstance().isAuthenticated()) {
-            Toast.makeText(this, "Please sign in to submit content reports.", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please sign in to submit content reports.");
             return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Report Manga Content");
-
         final EditText etReason = new EditText(this);
         etReason.setHint("Violation reason (e.g. copyright, broken images)...");
-        builder.setView(etReason);
+        etReason.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        etReason.setPadding(44, 28, 44, 24);
 
-        builder.setPositiveButton("Report", (dialog, which) -> {
-            String reason = etReason.getText().toString().trim();
-            if (!reason.isEmpty()) {
-                RetrofitClient.getApi().reportManga(currentManga.poolMangaId, new ReportMangaRequest(reason, null))
-                        .enqueue(new Callback<Map<String, Object>>() {
-                            @Override
-                            public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                                if (response.isSuccessful()) {
-                                    Toast.makeText(MangaDetailActivity.this, "Report queued for administrator review.", Toast.LENGTH_LONG).show();
-                                }
-                            }
+        UiMotionUtils.dialogBuilder(this)
+                .setTitle("Report Manga Content")
+                .setView(etReason)
+                .setPositiveButton("Report", (dialog, which) -> {
+                    String reason = etReason.getText().toString().trim();
+                    if (!reason.isEmpty()) {
+                        RetrofitClient.getApi().reportManga(currentManga.poolMangaId, new ReportMangaRequest(reason, null))
+                                .enqueue(new Callback<Map<String, Object>>() {
+                                    @Override
+                                    public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                        if (response.isSuccessful()) {
+                                            UiMotionUtils.showInfo(binding.getRoot(), "Report queued for administrator review.");
+                                        }
+                                    }
 
-                            @Override
-                            public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {}
-                        });
-            }
-        });
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+                                    @Override
+                                    public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                        UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
+                                    }
+                                });
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showReportCommentDialog(CommentItem comment) {
         if (!MangaReaderApp.getInstance().isAuthenticated()) {
-            Toast.makeText(this, "Please sign in first.", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please sign in first.");
             return;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Report Comment");
-
         final EditText etReason = new EditText(this);
         etReason.setHint("Reason (harassment, unmasked spoiler)...");
-        builder.setView(etReason);
+        etReason.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        etReason.setPadding(44, 28, 44, 24);
 
-        builder.setPositiveButton("Submit", (dialog, which) -> {
-            String reason = etReason.getText().toString().trim();
-            if (!reason.isEmpty()) {
-                RetrofitClient.getApi().reportComment(comment.comment_id, new ReportCommentRequest(reason, null))
-                        .enqueue(new Callback<Map<String, Object>>() {
-                            @Override
-                            public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                                if (response.isSuccessful()) {
-                                    Toast.makeText(MangaDetailActivity.this, "Comment report submitted.", Toast.LENGTH_SHORT).show();
-                                }
-                            }
+        UiMotionUtils.dialogBuilder(this)
+                .setTitle("Report Comment")
+                .setView(etReason)
+                .setPositiveButton("Submit", (dialog, which) -> {
+                    String reason = etReason.getText().toString().trim();
+                    if (!reason.isEmpty()) {
+                        RetrofitClient.getApi().reportComment(comment.comment_id, new ReportCommentRequest(reason, null))
+                                .enqueue(new Callback<Map<String, Object>>() {
+                                    @Override
+                                    public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                        if (response.isSuccessful()) {
+                                            UiMotionUtils.showInfo(binding.getRoot(), "Comment report submitted.");
+                                        }
+                                    }
 
-                            @Override
-                            public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {}
-                        });
-            }
-        });
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+                                    @Override
+                                    public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                        UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
+                                    }
+                                });
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void handlePostComment() {
+        if (currentManga == null) return;
         if (!MangaReaderApp.getInstance().isAuthenticated()) {
-            Toast.makeText(this, "Please sign in to post comments.", Toast.LENGTH_SHORT).show();
+            UiMotionUtils.showInfo(binding.getRoot(), "Please sign in to post comments.");
             return;
         }
 
@@ -447,18 +509,23 @@ public class MangaDetailActivity extends AppCompatActivity {
                             binding.etNewCommentContent.setText("");
                             binding.cbIsSpoiler.setChecked(false);
                             loadComments();
-                            Toast.makeText(MangaDetailActivity.this, "Comment posted", Toast.LENGTH_SHORT).show();
+                            UiMotionUtils.showInfo(binding.getRoot(), "Comment posted");
                         } else {
-                            Toast.makeText(MangaDetailActivity.this, "Failed to post comment", Toast.LENGTH_SHORT).show();
+                            UiMotionUtils.showError(binding.getRoot(), "Failed to post comment", null, null);
                         }
                     }
 
                     @Override
                     public void onFailure(@NonNull Call<CommentItem> call, @NonNull Throwable t) {
                         binding.btnSubmitComment.setEnabled(true);
-                        Toast.makeText(MangaDetailActivity.this, "Network error", Toast.LENGTH_SHORT).show();
+                        UiMotionUtils.showError(binding.getRoot(), "Network error posting comment", null, null);
                     }
                 });
     }
-}
 
+    @Override
+    public void finish() {
+        super.finish();
+        UiMotionUtils.applyActivityCloseTransition(this);
+    }
+}

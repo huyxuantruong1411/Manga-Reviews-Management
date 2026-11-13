@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.model.ReadingListModels.ReadingHistoryItem;
 import com.example.mangareader_android.databinding.ItemHistoryBinding;
@@ -73,8 +74,9 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.HistoryV
 
             Glide.with(itemView.getContext())
                     .load(item.cover_url)
-                    .placeholder(R.color.surface_elevated)
-                    .error(R.color.surface_elevated)
+                    .placeholder(R.drawable.bg_cover_placeholder)
+                    .error(R.drawable.bg_cover_placeholder)
+                    .transition(DrawableTransitionOptions.withCrossFade(180))
                     .into(binding.imgHistoryCover);
 
             binding.btnResumeReading.setOnClickListener(v -> {

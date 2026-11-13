@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollAccount"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
     android:fillViewport="true">
 
     <LinearLayout
+        android:id="@+id/layoutAccountRoot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -206,7 +208,7 @@
                     android:id="@+id/imgProfileAvatar"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:background="@color/surface_elevated"
+                    android:background="@drawable/bg_cover_placeholder"
                     android:contentDescription="Avatar" />
 
                 <LinearLayout
