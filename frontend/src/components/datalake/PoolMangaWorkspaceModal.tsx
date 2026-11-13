@@ -33,6 +33,7 @@ import {
 	verifyPoolMangaIntegrity,
 } from "../../api/datalakePool";
 import { useAlert } from "../../hooks/useAlert";
+import { useConfirm } from "../../hooks/useConfirm";
 import type {
 	PoolChapterItem,
 	PoolDuplicateGroup,
@@ -52,6 +53,7 @@ export const PoolMangaWorkspaceModal: React.FC<
 	PoolMangaWorkspaceModalProps
 > = ({ poolMangaId, onClose, onUpdated }) => {
 	const { showToast } = useAlert();
+	const { confirm } = useConfirm();
 	const [activeTab, setActiveTab] = useState<
 		"metadata" | "chapters" | "manifest"
 	>("metadata");
@@ -233,11 +235,14 @@ export const PoolMangaWorkspaceModal: React.FC<
 	// Delete pages
 	const handleDeletePages = async () => {
 		if (!expandedChapterId || selectedPageNumbers.length === 0) return;
-		if (
-			!window.confirm(
-				`Bạn có chắc chắn muốn xóa ${selectedPageNumbers.length} trang khỏi chương này trong Pool?\n(Lưu ý: Chỉ gỡ ánh xạ trong Pool, không xóa file gốc trên MinIO)`,
-			)
-		) {
+		const ok = await confirm({
+			title: "Gỡ các trang đã chọn khỏi Pool?",
+			message: `Bạn có chắc chắn muốn xóa ${selectedPageNumbers.length} trang khỏi chương này trong Pool?\n(Lưu ý: Chỉ gỡ ánh xạ trong Pool, không xóa file gốc trên MinIO)`,
+			confirmLabel: "Xóa trang khỏi Pool",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) {
 			return;
 		}
 
@@ -269,11 +274,14 @@ export const PoolMangaWorkspaceModal: React.FC<
 		chapterId: string,
 		chapterNumber: string,
 	) => {
-		if (
-			!window.confirm(
-				`Bạn có chắc chắn muốn gỡ Chương ${chapterNumber} khỏi Pool?\n(Lưu ý: File gốc trên MinIO và dữ liệu Review System vẫn được bảo vệ an toàn)`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Gỡ Chương ${chapterNumber} khỏi Pool?`,
+			message: `Bạn có chắc chắn muốn gỡ Chương ${chapterNumber} khỏi Pool?\n(Lưu ý: File gốc trên MinIO và dữ liệu Review System vẫn được bảo vệ an toàn)`,
+			confirmLabel: "Gỡ chương",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) {
 			return;
 		}
 
@@ -330,11 +338,14 @@ export const PoolMangaWorkspaceModal: React.FC<
 	// Cleanup duplicates
 	const handleCleanupDuplicates = async () => {
 		if (!poolMangaId || selectedDuplicateTargets.length === 0) return;
-		if (
-			!window.confirm(
-				`Xác nhận xóa ${selectedDuplicateTargets.length} trang ảnh trùng lặp được chọn khỏi Pool?\n(Hệ thống sẽ tự động đánh số lại trang cho các chương bị ảnh hưởng)`,
-			)
-		) {
+		const ok = await confirm({
+			title: "Dọn dẹp ảnh trùng lặp trong Pool?",
+			message: `Xác nhận xóa ${selectedDuplicateTargets.length} trang ảnh trùng lặp được chọn khỏi Pool?\n(Hệ thống sẽ tự động đánh số lại trang cho các chương bị ảnh hưởng)`,
+			confirmLabel: "Xác nhận dọn dẹp",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) {
 			return;
 		}
 

@@ -36,8 +36,13 @@ import {
 	Zap,
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
+import {
+	AnimatedTabPill,
+	AnimatedViewSwitcher,
+} from "@/components/motion/MotionPrimitives";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+import { useConfirm } from "../../hooks/useConfirm";
 import type {
 	Chapter,
 	DetectedChapter,
@@ -153,6 +158,7 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 	onChaptersCountChange,
 }) => {
 	const { showAlert } = useAlert();
+	const { confirm } = useConfirm();
 
 	// State
 	const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -1609,28 +1615,46 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 							</button>
 
 							{/* Grid / List Switcher */}
-							<div className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden p-0.5 bg-[var(--bg-primary)]">
+							<div
+								role="group"
+								aria-label="Chế độ hiển thị chương"
+								className="flex items-center border border-[var(--border-primary)] rounded-xl overflow-hidden p-0.5 bg-[var(--bg-primary)]"
+							>
 								<button
 									type="button"
+									aria-pressed={viewMode === "grid"}
 									onClick={() => setViewMode("grid")}
-									className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+									className={`relative px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
 										viewMode === "grid"
-											? "bg-[var(--brand-orange)] text-white shadow-sm"
+											? "text-white"
 											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 									}`}
 								>
-									Grid
+									{viewMode === "grid" && (
+										<AnimatedTabPill
+											layoutId="chapter-storage-view-mode"
+											className="rounded-lg bg-[var(--brand-orange)] shadow-sm"
+										/>
+									)}
+									<span className="relative z-10">Grid</span>
 								</button>
 								<button
 									type="button"
+									aria-pressed={viewMode === "list"}
 									onClick={() => setViewMode("list")}
-									className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+									className={`relative px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
 										viewMode === "list"
-											? "bg-[var(--brand-orange)] text-white shadow-sm"
+											? "text-white"
 											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 									}`}
 								>
-									List
+									{viewMode === "list" && (
+										<AnimatedTabPill
+											layoutId="chapter-storage-view-mode"
+											className="rounded-lg bg-[var(--brand-orange)] shadow-sm"
+										/>
+									)}
+									<span className="relative z-10">List</span>
 								</button>
 							</div>
 						</div>
@@ -2198,10 +2222,13 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 							</div>
 						);
 
-						const renderChapters = (chapList: Chapter[]) =>
-							viewMode === "grid"
-								? renderChapterGrid(chapList)
-								: renderChapterTable(chapList);
+						const renderChapters = (chapList: Chapter[]) => (
+							<AnimatedViewSwitcher viewKey={viewMode}>
+								{viewMode === "grid"
+									? renderChapterGrid(chapList)
+									: renderChapterTable(chapList)}
+							</AnimatedViewSwitcher>
+						);
 
 						if (loading) {
 							return (
@@ -2985,13 +3012,18 @@ export const ChapterStorageManager: React.FC<ChapterStorageManagerProps> = ({
 								</div>
 							</div>
 							<button
-								onClick={() => {
+								type="button"
+								onClick={async () => {
 									if (importProgress && importProgress.status === "running") {
-										if (
-											window.confirm(
+										const accepted = await confirm({
+											title: "Đóng cửa sổ import?",
+											message:
 												"Tiến trình import đang chạy ngầm. Bạn có chắc muốn đóng cửa sổ này?",
-											)
-										) {
+											confirmLabel: "Đóng cửa sổ",
+											cancelLabel: "Tiếp tục theo dõi",
+											variant: "warning",
+										});
+										if (accepted) {
 											handleResetImportModal();
 										}
 									} else {

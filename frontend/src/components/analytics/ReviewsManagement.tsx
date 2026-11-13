@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
+import { useConfirm } from "../../hooks/useConfirm";
 
 export interface ReviewManagementItem {
 	id: string;
@@ -69,6 +70,7 @@ const tiptapToPlainText = (node: any): string => {
 export const ReviewsManagement: React.FC = () => {
 	const navigate = useNavigate();
 	const { showToast } = useAlert();
+	const { confirm } = useConfirm();
 
 	const [reviews, setReviews] = useState<ReviewManagementItem[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -110,11 +112,14 @@ export const ReviewsManagement: React.FC = () => {
 	}, [fetchReviews]);
 
 	const handleDeleteReview = async (review: ReviewManagementItem) => {
-		if (
-			!window.confirm(
-				`Bạn có chắc chắn muốn xóa bài review "${review.review_title}" của bộ "${review.manga_title}" không? Hành động này có thể khôi phục qua thùng rác.`,
-			)
-		) {
+		const ok = await confirm({
+			title: "Xóa bài review?",
+			message: `Bạn có chắc chắn muốn xóa bài review "${review.review_title}" của bộ "${review.manga_title}" không? Hành động này có thể khôi phục qua thùng rác.`,
+			confirmLabel: "Xóa review",
+			cancelLabel: "Giữ lại",
+			variant: "danger",
+		});
+		if (!ok) {
 			return;
 		}
 

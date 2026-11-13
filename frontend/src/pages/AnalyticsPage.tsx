@@ -14,6 +14,7 @@ import {
 	TrendingUp,
 	User,
 } from "lucide-react";
+import { motion } from "motion/react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -31,6 +32,10 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import {
+	AnimatedTabPanel,
+	MOTION_PILL_SPRING,
+} from "@/components/motion/MotionPrimitives";
 import client from "../api/client";
 import { MetadataDistributionCard } from "../components/analytics/MetadataDistributionCard";
 import { RatingDistributionCard } from "../components/analytics/RatingDistributionCard";
@@ -1789,62 +1794,90 @@ export const AnalyticsPage: React.FC = () => {
 				<button
 					type="button"
 					onClick={() => setSearchParams({ tab: "manga" })}
-					className={`pb-3 px-4 font-bold text-sm flex items-center space-x-2 border-b-2 transition ${
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
 						currentTab === "manga"
-							? "border-[var(--brand-orange)] text-[var(--brand-orange)]"
-							: "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 					}`}
 				>
 					<BookOpen size={17} />
 					<span>Thư viện Manga</span>
+					{currentTab === "manga" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
 				</button>
 
 				<button
 					type="button"
 					onClick={() => setSearchParams({ tab: "reviews" })}
-					className={`pb-3 px-4 font-bold text-sm flex items-center space-x-2 border-b-2 transition ${
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
 						currentTab === "reviews"
-							? "border-[var(--brand-orange)] text-[var(--brand-orange)]"
-							: "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 					}`}
 				>
 					<Award size={17} />
 					<span>Đánh giá & Reviews</span>
+					{currentTab === "reviews" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
 				</button>
 
 				<button
 					type="button"
 					onClick={() => setSearchParams({ tab: "creators" })}
-					className={`pb-3 px-4 font-bold text-sm flex items-center space-x-2 border-b-2 transition ${
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
 						currentTab === "creators"
-							? "border-[var(--brand-orange)] text-[var(--brand-orange)]"
-							: "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 					}`}
 				>
 					<User size={17} />
 					<span>Tác giả & Họa sĩ</span>
+					{currentTab === "creators" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
 				</button>
 
 				<button
 					type="button"
 					onClick={() => setSearchParams({ tab: "tags" })}
-					className={`pb-3 px-4 font-bold text-sm flex items-center space-x-2 border-b-2 transition ${
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
 						currentTab === "tags"
-							? "border-[var(--brand-orange)] text-[var(--brand-orange)]"
-							: "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 					}`}
 				>
 					<TrendingUp size={17} />
 					<span>Thể loại & Tags</span>
+					{currentTab === "tags" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
 				</button>
 
 				<button
 					type="button"
 					onClick={() => setSearchParams({ tab: "ai-export" })}
-					className={`pb-3 px-4 font-bold text-sm flex items-center space-x-2 border-b-2 transition relative ${
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
 						currentTab === "ai-export"
-							? "border-[var(--brand-orange)] text-[var(--brand-orange)]"
-							: "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 					}`}
 				>
 					<Bot size={17} />
@@ -1852,462 +1885,1104 @@ export const AnalyticsPage: React.FC = () => {
 					<span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[var(--brand-orange)]/15 text-[var(--brand-orange)]">
 						AI Ready
 					</span>
+					{currentTab === "ai-export" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
 				</button>
 			</div>
 
-			{/* TAB 1: THỐNG KÊ MANGA */}
-			{currentTab === "manga" && (
-				<div className="space-y-8 animate-in fade-in duration-200">
-					{renderFiltersPool()}
-					{/* Storytelling Banner & Interactive KPI Deck */}
-					{overview && (
-						<div className="space-y-6">
-							<ReadingProgressStoryBanner
-								overview={overview}
-								topTags={topTags}
-								onFilterStatus={(st) => {
-									setSelectedReadStatuses([st]);
+			{/* TAB PANELS */}
+			<AnimatedTabPanel tabKey={currentTab}>
+				{/* TAB 1: THỐNG KÊ MANGA */}
+				{currentTab === "manga" && (
+					<div className="space-y-8">
+						{renderFiltersPool()}
+						{/* Storytelling Banner & Interactive KPI Deck */}
+						{overview && (
+							<div className="space-y-6">
+								<ReadingProgressStoryBanner
+									overview={overview}
+									topTags={topTags}
+									onFilterStatus={(st) => {
+										setSelectedReadStatuses([st]);
+										setExcludeReadStatuses([]);
+									}}
+								/>
+								<StorytellingKPIDeck overview={overview} />
+							</div>
+						)}
+
+						{/* Read Status Distribution Multi-View Card */}
+						<div className="w-full">
+							<ReadStatusDistributionCard
+								data={pieData}
+								totalManga={overview?.total_manga}
+								onSelectStatus={(statusName) => {
+									const map: Record<string, string> = {
+										Unread: "unread",
+										Reading: "reading",
+										Completed: "completed",
+										Dropped: "dropped",
+										"On Hold": "on_hold",
+										"Plan to Read": "plan_to_read",
+										"Re-reading": "re_reading",
+										"Re-Reading": "re_reading",
+									};
+									const key =
+										map[statusName] ||
+										statusName.toLowerCase().replace(/\s+/g, "_");
+									setSelectedReadStatuses([key]);
 									setExcludeReadStatuses([]);
 								}}
 							/>
-							<StorytellingKPIDeck overview={overview} />
 						</div>
-					)}
+						{/* Demographic, Publishing Status & Original Language Row */}
+						{metadataDists && (
+							<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+								<MetadataDistributionCard
+									title="Demographic Distribution"
+									subtitle="Phân bố đối tượng độc giả"
+									data={metadataDists.demographic}
+									colorMap={DEMO_COLORS}
+									onItemClick={(name) => {
+										setDemographics([name]);
+									}}
+								/>
 
-					{/* Read Status Distribution Multi-View Card */}
-					<div className="w-full">
-						<ReadStatusDistributionCard
-							data={pieData}
-							totalManga={overview?.total_manga}
-							onSelectStatus={(statusName) => {
-								const map: Record<string, string> = {
-									Unread: "unread",
-									Reading: "reading",
-									Completed: "completed",
-									Dropped: "dropped",
-									"On Hold": "on_hold",
-									"Plan to Read": "plan_to_read",
-									"Re-reading": "re_reading",
-									"Re-Reading": "re_reading",
-								};
-								const key =
-									map[statusName] ||
-									statusName.toLowerCase().replace(/\s+/g, "_");
-								setSelectedReadStatuses([key]);
-								setExcludeReadStatuses([]);
-							}}
-						/>
-					</div>
-					{/* Demographic, Publishing Status & Original Language Row */}
-					{metadataDists && (
-						<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-							<MetadataDistributionCard
-								title="Demographic Distribution"
-								subtitle="Phân bố đối tượng độc giả"
-								data={metadataDists.demographic}
-								colorMap={DEMO_COLORS}
-								onItemClick={(name) => {
-									setDemographics([name]);
-								}}
-							/>
+								<MetadataDistributionCard
+									title="Publishing Status"
+									subtitle="Tình trạng phát hành tác phẩm"
+									data={metadataDists.publishing_status}
+									colorMap={PUB_STATUS_COLORS}
+									onItemClick={(name) => {
+										setStatuses([name]);
+									}}
+								/>
 
-							<MetadataDistributionCard
-								title="Publishing Status"
-								subtitle="Tình trạng phát hành tác phẩm"
-								data={metadataDists.publishing_status}
-								colorMap={PUB_STATUS_COLORS}
-								onItemClick={(name) => {
-									setStatuses([name]);
-								}}
-							/>
+								<MetadataDistributionCard
+									title="Content Rating"
+									subtitle="Phân loại độ tuổi & nội dung"
+									data={metadataDists.content_rating || []}
+									colorMap={CONTENT_RATING_COLORS}
+									onItemClick={(name) => {
+										setContentRatings([name]);
+									}}
+								/>
+							</div>
+						)}
 
-							<MetadataDistributionCard
-								title="Content Rating"
-								subtitle="Phân loại độ tuổi & nội dung"
-								data={metadataDists.content_rating || []}
-								colorMap={CONTENT_RATING_COLORS}
-								onItemClick={(name) => {
-									setContentRatings([name]);
-								}}
-							/>
-						</div>
-					)}
-
-					{/* Publication Year Distribution Chart */}
-					{yearDist && yearDist.data && yearDist.data.length > 0 && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
-							<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-								<div className="space-y-1">
-									<h3 className="text-lg font-bold">
-										Publication Year Distribution
-									</h3>
-									<p className="text-xs text-[var(--text-secondary)] font-medium">
-										Japanese-language manga only. Matches the current library
-										filters.
-									</p>
-								</div>
-
-								<div className="flex flex-wrap items-center gap-4">
-									{/* Mode Toggle */}
-									<div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
-										{(
-											["total", "demographic", "status", "read_status"] as const
-										).map((mode) => (
-											<button
-												key={mode}
-												type="button"
-												onClick={() => setYearChartMode(mode)}
-												className={`px-3 py-1.5 text-xs font-bold rounded-lg transition capitalize focus:outline-none cursor-pointer ${
-													yearChartMode === mode
-														? "bg-[var(--brand-orange)] text-white shadow-sm"
-														: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-												}`}
-											>
-												{mode === "total"
-													? "Total"
-													: mode === "demographic"
-														? "Demographic"
-														: mode === "status"
-															? "Pub. Status"
-															: "Read Status"}
-											</button>
-										))}
+						{/* Publication Year Distribution Chart */}
+						{yearDist && yearDist.data && yearDist.data.length > 0 && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
+								<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+									<div className="space-y-1">
+										<h3 className="text-lg font-bold">
+											Publication Year Distribution
+										</h3>
+										<p className="text-xs text-[var(--text-secondary)] font-medium">
+											Japanese-language manga only. Matches the current library
+											filters.
+										</p>
 									</div>
 
-									{/* Custom Range Checkbox */}
-									<label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
-										<input
-											type="checkbox"
-											checked={useCustomRanges}
-											onChange={(e) => setUseCustomRanges(e.target.checked)}
-											className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
-										/>
-										<span>Custom Ranges</span>
-									</label>
+									<div className="flex flex-wrap items-center gap-4">
+										{/* Mode Toggle */}
+										<div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
+											{(
+												[
+													"total",
+													"demographic",
+													"status",
+													"read_status",
+												] as const
+											).map((mode) => (
+												<button
+													key={mode}
+													type="button"
+													onClick={() => setYearChartMode(mode)}
+													className={`px-3 py-1.5 text-xs font-bold rounded-lg transition capitalize focus:outline-none cursor-pointer ${
+														yearChartMode === mode
+															? "bg-[var(--brand-orange)] text-white shadow-sm"
+															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+													}`}
+												>
+													{mode === "total"
+														? "Total"
+														: mode === "demographic"
+															? "Demographic"
+															: mode === "status"
+																? "Pub. Status"
+																: "Read Status"}
+												</button>
+											))}
+										</div>
+
+										{/* Custom Range Checkbox */}
+										<label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
+											<input
+												type="checkbox"
+												checked={useCustomRanges}
+												onChange={(e) => setUseCustomRanges(e.target.checked)}
+												className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
+											/>
+											<span>Custom Ranges</span>
+										</label>
+									</div>
+								</div>
+
+								{/* Zoom controls to narrow down the publication year range */}
+								<div className="flex flex-wrap items-center gap-4 bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 text-xs">
+									<span className="font-extrabold uppercase tracking-wider text-[var(--text-secondary)] text-[10px]">
+										Zoom Timeline:
+									</span>
+
+									{(() => {
+										const min = yearDist.min_year ?? 1970;
+										const max = yearDist.max_year ?? new Date().getFullYear();
+										const years = [];
+										for (let y = min; y <= max; y++) {
+											years.push(y);
+										}
+										return (
+											<>
+												<div className="flex items-center space-x-2">
+													<span className="text-[var(--text-secondary)] font-bold">
+														Start:
+													</span>
+													<select
+														value={zoomStartYear}
+														onChange={(e) => {
+															const val = e.target.value
+																? parseInt(e.target.value, 10)
+																: "";
+															setZoomStartYear(val);
+														}}
+														className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+													>
+														<option value="">Min ({min})</option>
+														{years.map((y) => (
+															<option
+																key={y}
+																value={y}
+																disabled={zoomEndYear !== "" && y > zoomEndYear}
+															>
+																{y}
+															</option>
+														))}
+													</select>
+												</div>
+
+												<div className="flex items-center space-x-2">
+													<span className="text-[var(--text-secondary)] font-bold">
+														End:
+													</span>
+													<select
+														value={zoomEndYear}
+														onChange={(e) => {
+															const val = e.target.value
+																? parseInt(e.target.value, 10)
+																: "";
+															setZoomEndYear(val);
+														}}
+														className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+													>
+														<option value="">Max ({max})</option>
+														{years.map((y) => (
+															<option
+																key={y}
+																value={y}
+																disabled={
+																	zoomStartYear !== "" && y < zoomStartYear
+																}
+															>
+																{y}
+															</option>
+														))}
+													</select>
+												</div>
+											</>
+										);
+									})()}
+
+									{(zoomStartYear !== "" || zoomEndYear !== "") && (
+										<button
+											type="button"
+											onClick={() => {
+												setZoomStartYear("");
+												setZoomEndYear("");
+											}}
+											className="px-3 py-1 bg-[var(--bg-card)] hover:bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--brand-orange)] text-[var(--brand-orange)] text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
+										>
+											Reset Zoom
+										</button>
+									)}
+								</div>
+
+								{/* Custom Ranges Input and Helper Text */}
+								{useCustomRanges && (
+									<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-3 transition-all duration-300">
+										<div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+											<div className="space-y-0.5">
+												<span className="text-xs font-bold text-[var(--text-primary)]">
+													Configure Year Epochs
+												</span>
+												{yearDist.min_year !== null &&
+													yearDist.max_year !== null && (
+														<p className="text-[10px] text-[var(--text-secondary)] font-medium">
+															Manga publication range in pool:{" "}
+															<span className="font-bold text-[var(--brand-orange)]">
+																{yearDist.min_year}
+															</span>{" "}
+															to{" "}
+															<span className="font-bold text-[var(--brand-orange)]">
+																{yearDist.max_year}
+															</span>
+														</p>
+													)}
+											</div>
+
+											<input
+												type="text"
+												value={customRangeInput}
+												onChange={(e) => setCustomRangeInput(e.target.value)}
+												placeholder="e.g. 1990-1999, 2000-2009, 2010-2025"
+												className="flex-1 md:max-w-md px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+											/>
+										</div>
+
+										{templates.length > 0 && (
+											<div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[var(--border-primary)]/40">
+												<span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+													Quick Fill:
+												</span>
+												<div className="flex flex-wrap gap-1.5">
+													{templates.map((tpl) => (
+														<button
+															key={tpl.name}
+															type="button"
+															onClick={() => setCustomRangeInput(tpl.value)}
+															className="px-2 py-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-lg text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)] transition focus:outline-none cursor-pointer"
+														>
+															{tpl.name}
+														</button>
+													))}
+												</div>
+											</div>
+										)}
+
+										{rangeValidation.error ? (
+											<div className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
+												<span>⚠</span>
+												<span>{rangeValidation.error}</span>
+											</div>
+										) : (
+											<div className="text-[10px] text-[var(--text-secondary)] font-medium">
+												Enter comma-separated ranges format:{" "}
+												<code className="bg-[var(--bg-card)] px-1 py-0.5 rounded border border-[var(--border-primary)] text-xs">
+													YYYY-YYYY
+												</code>
+												. Non-overlapping ranges between min/max years.
+											</div>
+										)}
+									</div>
+								)}
+
+								{/* Legend chips for filtering in stacked mode */}
+								{yearChartMode !== "total" && (
+									<div className="flex flex-wrap items-center gap-2.5 pb-2 border-b border-[var(--border-primary)]">
+										<span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+											Toggle Breakdown Elements:
+										</span>
+
+										{yearChartMode === "demographic" &&
+											Object.keys(DEMO_COLORS).map((demo) => {
+												const isActive = activeDemoFilters.has(demo);
+												const color = DEMO_COLORS[demo];
+												return (
+													<button
+														key={demo}
+														type="button"
+														onClick={() => {
+															const newFilters = new Set(activeDemoFilters);
+															if (isActive) {
+																newFilters.delete(demo);
+															} else {
+																newFilters.add(demo);
+															}
+															setActiveDemoFilters(newFilters);
+														}}
+														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+															isActive
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																: "opacity-40 line-through text-[var(--text-secondary)]"
+														}`}
+														style={{
+															borderColor: isActive
+																? color
+																: "var(--border-primary)",
+														}}
+													>
+														<span
+															className="w-2 h-2 rounded-full"
+															style={{ backgroundColor: color }}
+														/>
+														<span>{demo}</span>
+													</button>
+												);
+											})}
+
+										{yearChartMode === "status" &&
+											Object.keys(PUB_STATUS_COLORS).map((status) => {
+												const isActive = activeStatusFilters.has(status);
+												const color = PUB_STATUS_COLORS[status];
+												return (
+													<button
+														key={status}
+														type="button"
+														onClick={() => {
+															const newFilters = new Set(activeStatusFilters);
+															if (isActive) {
+																newFilters.delete(status);
+															} else {
+																newFilters.add(status);
+															}
+															setActiveStatusFilters(newFilters);
+														}}
+														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+															isActive
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																: "opacity-40 line-through text-[var(--text-secondary)]"
+														}`}
+														style={{
+															borderColor: isActive
+																? color
+																: "var(--border-primary)",
+														}}
+													>
+														<span
+															className="w-2 h-2 rounded-full"
+															style={{ backgroundColor: color }}
+														/>
+														<span>{status}</span>
+													</button>
+												);
+											})}
+
+										{yearChartMode === "read_status" &&
+											Object.keys(READ_STATUS_COLORS).map((status) => {
+												const isActive = activeReadStatusFilters.has(status);
+												const color = READ_STATUS_COLORS[status];
+												return (
+													<button
+														key={status}
+														type="button"
+														onClick={() => {
+															const newFilters = new Set(
+																activeReadStatusFilters,
+															);
+															if (isActive) {
+																newFilters.delete(status);
+															} else {
+																newFilters.add(status);
+															}
+															setActiveReadStatusFilters(newFilters);
+														}}
+														className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
+															isActive
+																? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
+																: "opacity-40 line-through text-[var(--text-secondary)]"
+														}`}
+														style={{
+															borderColor: isActive
+																? color
+																: "var(--border-primary)",
+														}}
+													>
+														<span
+															className="w-2 h-2 rounded-full"
+															style={{ backgroundColor: color }}
+														/>
+														<span>{READ_STATUS_LABELS[status] || status}</span>
+													</button>
+												);
+											})}
+									</div>
+								)}
+
+								{/* Chart display */}
+								<div className="h-96 w-full flex items-center justify-center">
+									{useCustomRanges && rangeValidation.error ? (
+										<div className="text-center text-[var(--text-secondary)] text-sm">
+											Please resolve the custom range error above to show the
+											chart.
+										</div>
+									) : useCustomRanges && !customRangeInput.trim() ? (
+										<div className="text-center text-[var(--text-secondary)] text-sm">
+											Enter some year ranges (e.g.{" "}
+											<span className="font-semibold">
+												2000-2010, 2011-2020
+											</span>
+											) to begin bucketing.
+										</div>
+									) : yearChartData.length === 0 ? (
+										<div className="text-center text-[var(--text-secondary)] text-sm">
+											No publication year data fits the active filters and year
+											ranges.
+										</div>
+									) : (
+										<ResponsiveContainer width="100%" height="100%">
+											<BarChart
+												data={yearChartData}
+												margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+											>
+												<CartesianGrid
+													strokeDasharray="3 3"
+													stroke="var(--border-primary)"
+													opacity={0.3}
+													vertical={false}
+												/>
+												<XAxis
+													dataKey="name"
+													stroke="var(--text-secondary)"
+													fontSize={11}
+													tickLine={false}
+													axisLine={{ stroke: "var(--border-primary)" }}
+												/>
+												<YAxis
+													allowDecimals={false}
+													stroke="var(--text-secondary)"
+													fontSize={11}
+													tickLine={false}
+													axisLine={{ stroke: "var(--border-primary)" }}
+												/>
+												<Tooltip
+													contentStyle={{
+														backgroundColor: "var(--bg-card)",
+														borderColor: "var(--border-primary)",
+														color: "var(--text-primary)",
+														borderRadius: "12px",
+														fontSize: "12px",
+														boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+													}}
+													itemStyle={{ color: "var(--text-primary)" }}
+													labelStyle={{
+														color: "var(--text-secondary)",
+														fontWeight: "bold",
+													}}
+												/>
+
+												{yearChartMode === "total" && (
+													<Bar
+														dataKey="count"
+														name="Manga Count"
+														fill="var(--brand-orange)"
+														radius={[4, 4, 0, 0]}
+													/>
+												)}
+
+												{yearChartMode === "demographic" &&
+													Object.keys(DEMO_COLORS).map((demo) => {
+														if (!activeDemoFilters.has(demo)) return null;
+														return (
+															<Bar
+																key={demo}
+																dataKey={demo}
+																name={demo}
+																stackId="year_stack"
+																fill={DEMO_COLORS[demo] || "#6B7280"}
+															/>
+														);
+													})}
+
+												{yearChartMode === "status" &&
+													Object.keys(PUB_STATUS_COLORS).map((status) => {
+														if (!activeStatusFilters.has(status)) return null;
+														return (
+															<Bar
+																key={status}
+																dataKey={status}
+																name={status}
+																stackId="year_stack"
+																fill={PUB_STATUS_COLORS[status] || "#6B7280"}
+															/>
+														);
+													})}
+
+												{yearChartMode === "read_status" &&
+													Object.keys(READ_STATUS_COLORS).map((status) => {
+														if (!activeReadStatusFilters.has(status))
+															return null;
+														const dataKey =
+															status === "completed" ? "completed_rs" : status;
+														return (
+															<Bar
+																key={status}
+																dataKey={dataKey}
+																name={READ_STATUS_LABELS[status] || status}
+																stackId="year_stack"
+																fill={READ_STATUS_COLORS[status] || "#6B7280"}
+															/>
+														);
+													})}
+											</BarChart>
+										</ResponsiveContainer>
+									)}
 								</div>
 							</div>
+						)}
 
-							{/* Zoom controls to narrow down the publication year range */}
-							<div className="flex flex-wrap items-center gap-4 bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 text-xs">
-								<span className="font-extrabold uppercase tracking-wider text-[var(--text-secondary)] text-[10px]">
-									Zoom Timeline:
-								</span>
+						{/* Timeline Controls & Charts */}
+						<div className="space-y-6">
+							{/* Timeline Filters Toolbelt */}
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-4 shadow-sm">
+								{/* Header Row */}
+								<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+									<div className="flex items-center space-x-2">
+										<Calendar
+											size={18}
+											className="text-[var(--brand-orange)]"
+										/>
+										<h3 className="font-spartan font-bold text-sm">
+											Timeline Configuration
+										</h3>
+										{maxLookbackUnits > 0 && (
+											<span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--bg-primary)] px-2 py-0.5 rounded-md border border-[var(--border-primary)]">
+												Data spans ~{maxLookbackUnits} {timelineGroupBy}
+												{maxLookbackUnits !== 1 ? "s" : ""}
+											</span>
+										)}
+									</div>
 
-								{(() => {
-									const min = yearDist.min_year ?? 1970;
-									const max = yearDist.max_year ?? new Date().getFullYear();
-									const years = [];
-									for (let y = min; y <= max; y++) {
-										years.push(y);
-									}
-									return (
-										<>
-											<div className="flex items-center space-x-2">
-												<span className="text-[var(--text-secondary)] font-bold">
-													Start:
-												</span>
-												<select
-													value={zoomStartYear}
-													onChange={(e) => {
-														const val = e.target.value
-															? parseInt(e.target.value, 10)
-															: "";
-														setZoomStartYear(val);
-													}}
-													className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
-												>
-													<option value="">Min ({min})</option>
-													{years.map((y) => (
-														<option
-															key={y}
-															value={y}
-															disabled={zoomEndYear !== "" && y > zoomEndYear}
+									<div className="flex flex-wrap items-center gap-4">
+										{/* Timeline Grouping Option */}
+										<div className="flex items-center space-x-2">
+											<span className="text-xs font-semibold text-[var(--text-secondary)]">
+												Group by:
+											</span>
+											<div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
+												{["hour", "day", "week", "month", "year"].map(
+													(unit) => (
+														<button
+															key={unit}
+															onClick={() => setTimelineGroupBy(unit)}
+															className={`px-3 py-1 text-xs font-bold rounded-lg transition capitalize ${
+																timelineGroupBy === unit
+																	? "bg-[var(--brand-orange)] text-white shadow-sm"
+																	: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+															}`}
 														>
-															{y}
-														</option>
-													))}
-												</select>
+															{unit}
+														</button>
+													),
+												)}
+											</div>
+										</div>
+
+										{/* Show All Checkbox */}
+										<label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
+											<input
+												type="checkbox"
+												checked={showAllTimelineData}
+												onChange={(e) => {
+													setShowAllTimelineData(e.target.checked);
+													if (e.target.checked) {
+														setTimelineLookback("all");
+													} else {
+														setTimelineLookback(
+															Math.min(30, maxLookbackUnits || 30),
+														);
+													}
+												}}
+												className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
+											/>
+											<span>Show All Data</span>
+										</label>
+									</div>
+								</div>
+
+								{/* Range Controls Row — only when NOT showing all */}
+								{!showAllTimelineData && (
+									<div className="bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 space-y-3">
+										{/* Quick Lookback Presets */}
+										<div className="flex flex-wrap items-center gap-2">
+											<span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+												Quick Lookback:
+											</span>
+											<div className="flex flex-wrap gap-1.5">
+												{lookbackPresets.map((n) => {
+													const unitLabel =
+														timelineGroupBy === "hour"
+															? "h"
+															: timelineGroupBy === "day"
+																? "d"
+																: timelineGroupBy === "week"
+																	? "w"
+																	: timelineGroupBy === "month"
+																		? "m"
+																		: "y";
+													const isActive = timelineLookback === n;
+													return (
+														<button
+															key={n}
+															type="button"
+															onClick={() => setTimelineLookback(n)}
+															className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+																isActive
+																	? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
+																	: "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)]"
+															}`}
+														>
+															{n}
+															{unitLabel}
+														</button>
+													);
+												})}
+												{lookbackPresets.length === 0 && (
+													<span className="text-[10px] text-zinc-400 font-medium italic">
+														Not enough data for presets
+													</span>
+												)}
+											</div>
+										</div>
+
+										{/* Custom Lookback & Group Size */}
+										<div className="flex flex-wrap items-end gap-4">
+											{/* Custom Lookback Input */}
+											<div className="space-y-1">
+												<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+													Show last
+												</label>
+												<div className="flex items-center space-x-1.5">
+													<input
+														type="number"
+														min={1}
+														max={maxLookbackUnits || undefined}
+														value={
+															typeof timelineLookback === "number"
+																? timelineLookback
+																: ""
+														}
+														onChange={(e) => {
+															const val =
+																e.target.value === ""
+																	? 1
+																	: parseInt(e.target.value, 10);
+															if (!isNaN(val)) setTimelineLookback(val);
+														}}
+														className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
+													/>
+													<span className="text-xs font-bold text-[var(--text-secondary)] capitalize">
+														{timelineGroupBy}(s)
+													</span>
+												</div>
+												{!lookbackValidation.valid && (
+													<span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
+														⚠ {lookbackValidation.error}
+													</span>
+												)}
 											</div>
 
-											<div className="flex items-center space-x-2">
-												<span className="text-[var(--text-secondary)] font-bold">
-													End:
-												</span>
-												<select
-													value={zoomEndYear}
-													onChange={(e) => {
-														const val = e.target.value
-															? parseInt(e.target.value, 10)
-															: "";
-														setZoomEndYear(val);
-													}}
-													className="px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
-												>
-													<option value="">Max ({max})</option>
-													{years.map((y) => (
-														<option
-															key={y}
-															value={y}
-															disabled={
-																zoomStartYear !== "" && y < zoomStartYear
-															}
-														>
-															{y}
-														</option>
-													))}
-												</select>
+											{/* Group Size Input */}
+											<div className="space-y-1">
+												<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+													Group every
+												</label>
+												<div className="flex items-center space-x-1.5">
+													<input
+														type="number"
+														min={1}
+														max={
+															typeof effectiveLookback === "number"
+																? effectiveLookback
+																: maxLookbackUnits || undefined
+														}
+														value={timelineGroupSize}
+														onChange={(e) => {
+															const val = parseInt(e.target.value, 10);
+															if (!isNaN(val))
+																setTimelineGroupSize(Math.max(1, val));
+														}}
+														className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
+													/>
+													<span className="text-xs font-bold text-[var(--text-secondary)] capitalize">
+														{timelineGroupBy}(s)
+													</span>
+												</div>
+												{!groupSizeValidation.valid && (
+													<span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
+														⚠ {groupSizeValidation.error}
+													</span>
+												)}
 											</div>
-										</>
-									);
-								})()}
 
-								{(zoomStartYear !== "" || zoomEndYear !== "") && (
-									<button
-										type="button"
-										onClick={() => {
-											setZoomStartYear("");
-											setZoomEndYear("");
-										}}
-										className="px-3 py-1 bg-[var(--bg-card)] hover:bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--brand-orange)] text-[var(--brand-orange)] text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
-									>
-										Reset Zoom
-									</button>
+											{/* Quick Group Size presets */}
+											<div className="space-y-1">
+												<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+													Quick Group
+												</label>
+												<div className="flex gap-1">
+													{[1, 2, 3, 4, 6]
+														.filter((g) => {
+															const eff =
+																typeof effectiveLookback === "number"
+																	? effectiveLookback
+																	: maxLookbackUnits;
+															return g <= eff;
+														})
+														.map((g) => (
+															<button
+																key={g}
+																type="button"
+																onClick={() => setTimelineGroupSize(g)}
+																className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+																	timelineGroupSize === g
+																		? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
+																		: "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-orange)]"
+																}`}
+															>
+																{g === 1 ? "×1" : `×${g}`}
+															</button>
+														))}
+												</div>
+											</div>
+										</div>
+									</div>
 								)}
 							</div>
 
-							{/* Custom Ranges Input and Helper Text */}
-							{useCustomRanges && (
-								<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-3 transition-all duration-300">
-									<div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-										<div className="space-y-0.5">
-											<span className="text-xs font-bold text-[var(--text-primary)]">
-												Configure Year Epochs
-											</span>
-											{yearDist.min_year !== null &&
-												yearDist.max_year !== null && (
-													<p className="text-[10px] text-[var(--text-secondary)] font-medium">
-														Manga publication range in pool:{" "}
-														<span className="font-bold text-[var(--brand-orange)]">
-															{yearDist.min_year}
-														</span>{" "}
-														to{" "}
-														<span className="font-bold text-[var(--brand-orange)]">
-															{yearDist.max_year}
-														</span>
-													</p>
-												)}
-										</div>
+							{/* Timeline Charts Grid */}
+							<div className="grid grid-cols-1 gap-8">
+								{/* Library Growth Area Chart */}
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
+									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+										<h3 className="text-lg font-bold">
+											Library Growth (Manga Added)
+										</h3>
 
-										<input
-											type="text"
-											value={customRangeInput}
-											onChange={(e) => setCustomRangeInput(e.target.value)}
-											placeholder="e.g. 1990-1999, 2000-2009, 2010-2025"
-											className="flex-1 md:max-w-md px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
-										/>
+										{/* Added date range */}
+										<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
+											<input
+												type="date"
+												value={addedStartDate}
+												onChange={(e) => setAddedStartDate(e.target.value)}
+												min={datePickerMins.added}
+												max={addedEndDate || todayStr}
+												className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+											/>
+											<span>-</span>
+											<input
+												type="date"
+												value={addedEndDate}
+												onChange={(e) => setAddedEndDate(e.target.value)}
+												min={addedStartDate || datePickerMins.added}
+												max={todayStr}
+												className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+											/>
+										</div>
 									</div>
 
-									{templates.length > 0 && (
-										<div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[var(--border-primary)]/40">
-											<span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-												Quick Fill:
-											</span>
-											<div className="flex flex-wrap gap-1.5">
-												{templates.map((tpl) => (
-													<button
-														key={tpl.name}
-														type="button"
-														onClick={() => setCustomRangeInput(tpl.value)}
-														className="px-2 py-1 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-lg text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)] transition focus:outline-none cursor-pointer"
-													>
-														{tpl.name}
-													</button>
-												))}
+									<div className="h-72">
+										{processedMangaTimeline.length > 0 ? (
+											<ResponsiveContainer width="100%" height="100%">
+												<AreaChart data={processedMangaTimeline}>
+													<defs>
+														<linearGradient
+															id="colorManga"
+															x1="0"
+															y1="0"
+															x2="0"
+															y2="1"
+														>
+															<stop
+																offset="5%"
+																stopColor="var(--brand-orange)"
+																stopOpacity={0.4}
+															/>
+															<stop
+																offset="95%"
+																stopColor="var(--brand-orange)"
+																stopOpacity={0}
+															/>
+														</linearGradient>
+													</defs>
+													<CartesianGrid
+														strokeDasharray="3 3"
+														vertical={false}
+													/>
+													<XAxis dataKey="period" />
+													<YAxis allowDecimals={false} />
+													<Tooltip
+														contentStyle={{
+															backgroundColor: "var(--bg-card)",
+															borderColor: "var(--border-primary)",
+															color: "var(--text-primary)",
+															borderRadius: "12px",
+															fontSize: "12px",
+															boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+														}}
+														itemStyle={{ color: "var(--text-primary)" }}
+														labelStyle={{
+															color: "var(--text-secondary)",
+															fontWeight: "bold",
+														}}
+													/>
+													<Area
+														type="monotone"
+														dataKey="count"
+														stroke="var(--brand-orange)"
+														fillOpacity={1}
+														fill="url(#colorManga)"
+														strokeWidth={2}
+													/>
+												</AreaChart>
+											</ResponsiveContainer>
+										) : (
+											<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
+												No additions found in selected dates.
 											</div>
-										</div>
-									)}
+										)}
+									</div>
+								</div>
 
-									{rangeValidation.error ? (
-										<div className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
-											<span>⚠</span>
-											<span>{rangeValidation.error}</span>
+								{/* Reading Progress (Completed Manga) Area Chart */}
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
+									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+										<h3 className="text-lg font-bold">
+											Reading Progress (Completed Manga)
+										</h3>
+
+										{/* Completed date range */}
+										<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
+											<input
+												type="date"
+												value={completedStartDate}
+												onChange={(e) => setCompletedStartDate(e.target.value)}
+												min={datePickerMins.completed}
+												max={completedEndDate || todayStr}
+												className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+											/>
+											<span>-</span>
+											<input
+												type="date"
+												value={completedEndDate}
+												onChange={(e) => setCompletedEndDate(e.target.value)}
+												min={completedStartDate || datePickerMins.completed}
+												max={todayStr}
+												className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+											/>
 										</div>
-									) : (
-										<div className="text-[10px] text-[var(--text-secondary)] font-medium">
-											Enter comma-separated ranges format:{" "}
-											<code className="bg-[var(--bg-card)] px-1 py-0.5 rounded border border-[var(--border-primary)] text-xs">
-												YYYY-YYYY
-											</code>
-											. Non-overlapping ranges between min/max years.
+									</div>
+
+									<div className="h-72">
+										{processedCompletedTimeline.length > 0 ? (
+											<ResponsiveContainer width="100%" height="100%">
+												<AreaChart data={processedCompletedTimeline}>
+													<defs>
+														<linearGradient
+															id="colorCompleted"
+															x1="0"
+															y1="0"
+															x2="0"
+															y2="1"
+														>
+															<stop
+																offset="5%"
+																stopColor="#10B981"
+																stopOpacity={0.4}
+															/>
+															<stop
+																offset="95%"
+																stopColor="#10B981"
+																stopOpacity={0}
+															/>
+														</linearGradient>
+													</defs>
+													<CartesianGrid
+														strokeDasharray="3 3"
+														vertical={false}
+													/>
+													<XAxis dataKey="period" />
+													<YAxis allowDecimals={false} />
+													<Tooltip
+														contentStyle={{
+															backgroundColor: "var(--bg-card)",
+															borderColor: "var(--border-primary)",
+															color: "var(--text-primary)",
+															borderRadius: "12px",
+															fontSize: "12px",
+															boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+														}}
+														itemStyle={{ color: "var(--text-primary)" }}
+														labelStyle={{
+															color: "var(--text-secondary)",
+															fontWeight: "bold",
+														}}
+													/>
+													<Area
+														type="monotone"
+														dataKey="count"
+														stroke="#10B981"
+														fillOpacity={1}
+														fill="url(#colorCompleted)"
+														strokeWidth={2}
+													/>
+												</AreaChart>
+											</ResponsiveContainer>
+										) : (
+											<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
+												No completions found in selected dates.
+											</div>
+										)}
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* TAB 2: ĐÁNH GIÁ & REVIEWS */}
+				{currentTab === "reviews" && (
+					<div className="space-y-8 animate-in fade-in duration-200">
+						<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+							{/* Score Distribution Chart with Multiple Views */}
+							<RatingDistributionCard
+								data={scoreDist}
+								averageRating={overview?.average_rating}
+								totalManga={overview?.total_manga}
+								onSelectScore={(score) => {
+									setRatingMin(score);
+									setRatingMax(score);
+								}}
+							/>
+
+							{/* Rating averages by demographics and statuses */}
+							{ratingInsights && (
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
+									<h3 className="text-lg font-bold flex items-center space-x-2">
+										<Award size={20} className="text-yellow-500" />
+										<span>Score Averages Insights</span>
+									</h3>
+
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+										{/* Demographic averages */}
+										<div className="space-y-3">
+											<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+												Avg Rating by Demographic
+											</h4>
+											{ratingInsights.demographic_ratings.length > 0 ? (
+												<div className="space-y-2">
+													{ratingInsights.demographic_ratings.map(
+														(item, idx) => (
+															<div
+																key={idx}
+																className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
+															>
+																<div className="flex items-center space-x-2 min-w-0">
+																	<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
+																		{idx + 1}
+																	</span>
+																	<span className="text-xs font-semibold truncate">
+																		{item.name}
+																	</span>
+																</div>
+																<span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
+																	{item.avg_rating}{" "}
+																	<Star
+																		size={10}
+																		className="fill-yellow-500 text-yellow-500 ml-0.5"
+																	/>
+																</span>
+															</div>
+														),
+													)}
+												</div>
+											) : (
+												<p className="text-xs text-zinc-400 italic">
+													No ratings found.
+												</p>
+											)}
 										</div>
-									)}
+
+										{/* Status averages */}
+										<div className="space-y-3">
+											<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+												Avg Rating by Pub Status
+											</h4>
+											{ratingInsights.status_ratings.length > 0 ? (
+												<div className="space-y-2">
+													{ratingInsights.status_ratings.map((item, idx) => (
+														<div
+															key={idx}
+															className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
+														>
+															<div className="flex items-center space-x-2 min-w-0">
+																<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
+																	{idx + 1}
+																</span>
+																<span className="text-xs font-semibold truncate">
+																	{item.name}
+																</span>
+															</div>
+															<span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
+																{item.avg_rating}{" "}
+																<Star
+																	size={10}
+																	className="fill-yellow-500 text-yellow-500 ml-0.5"
+																/>
+															</span>
+														</div>
+													))}
+												</div>
+											) : (
+												<p className="text-xs text-zinc-400 italic">
+													No ratings found.
+												</p>
+											)}
+										</div>
+									</div>
 								</div>
 							)}
+						</div>
+						{/* Review Activity Line Chart */}
+						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
+							<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+								<h3 className="text-lg font-bold">
+									Review Activity (Reviews Created)
+								</h3>
 
-							{/* Legend chips for filtering in stacked mode */}
-							{yearChartMode !== "total" && (
-								<div className="flex flex-wrap items-center gap-2.5 pb-2 border-b border-[var(--border-primary)]">
-									<span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
-										Toggle Breakdown Elements:
-									</span>
-
-									{yearChartMode === "demographic" &&
-										Object.keys(DEMO_COLORS).map((demo) => {
-											const isActive = activeDemoFilters.has(demo);
-											const color = DEMO_COLORS[demo];
-											return (
-												<button
-													key={demo}
-													type="button"
-													onClick={() => {
-														const newFilters = new Set(activeDemoFilters);
-														if (isActive) {
-															newFilters.delete(demo);
-														} else {
-															newFilters.add(demo);
-														}
-														setActiveDemoFilters(newFilters);
-													}}
-													className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
-														isActive
-															? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
-															: "opacity-40 line-through text-[var(--text-secondary)]"
-													}`}
-													style={{
-														borderColor: isActive
-															? color
-															: "var(--border-primary)",
-													}}
-												>
-													<span
-														className="w-2 h-2 rounded-full"
-														style={{ backgroundColor: color }}
-													/>
-													<span>{demo}</span>
-												</button>
-											);
-										})}
-
-									{yearChartMode === "status" &&
-										Object.keys(PUB_STATUS_COLORS).map((status) => {
-											const isActive = activeStatusFilters.has(status);
-											const color = PUB_STATUS_COLORS[status];
-											return (
-												<button
-													key={status}
-													type="button"
-													onClick={() => {
-														const newFilters = new Set(activeStatusFilters);
-														if (isActive) {
-															newFilters.delete(status);
-														} else {
-															newFilters.add(status);
-														}
-														setActiveStatusFilters(newFilters);
-													}}
-													className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
-														isActive
-															? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
-															: "opacity-40 line-through text-[var(--text-secondary)]"
-													}`}
-													style={{
-														borderColor: isActive
-															? color
-															: "var(--border-primary)",
-													}}
-												>
-													<span
-														className="w-2 h-2 rounded-full"
-														style={{ backgroundColor: color }}
-													/>
-													<span>{status}</span>
-												</button>
-											);
-										})}
-
-									{yearChartMode === "read_status" &&
-										Object.keys(READ_STATUS_COLORS).map((status) => {
-											const isActive = activeReadStatusFilters.has(status);
-											const color = READ_STATUS_COLORS[status];
-											return (
-												<button
-													key={status}
-													type="button"
-													onClick={() => {
-														const newFilters = new Set(activeReadStatusFilters);
-														if (isActive) {
-															newFilters.delete(status);
-														} else {
-															newFilters.add(status);
-														}
-														setActiveReadStatusFilters(newFilters);
-													}}
-													className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition select-none cursor-pointer ${
-														isActive
-															? "bg-[var(--bg-primary)] text-[var(--text-primary)] animate-[pulse_2s_infinite]"
-															: "opacity-40 line-through text-[var(--text-secondary)]"
-													}`}
-													style={{
-														borderColor: isActive
-															? color
-															: "var(--border-primary)",
-													}}
-												>
-													<span
-														className="w-2 h-2 rounded-full"
-														style={{ backgroundColor: color }}
-													/>
-													<span>{READ_STATUS_LABELS[status] || status}</span>
-												</button>
-											);
-										})}
+								{/* Review date range */}
+								<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
+									<input
+										type="date"
+										value={reviewStartDate}
+										onChange={(e) => setReviewStartDate(e.target.value)}
+										min={datePickerMins.review}
+										max={reviewEndDate || todayStr}
+										className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+									/>
+									<span>-</span>
+									<input
+										type="date"
+										value={reviewEndDate}
+										onChange={(e) => setReviewEndDate(e.target.value)}
+										min={reviewStartDate || datePickerMins.review}
+										max={todayStr}
+										className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
+									/>
 								</div>
-							)}
+							</div>
 
-							{/* Chart display */}
-							<div className="h-96 w-full flex items-center justify-center">
-								{useCustomRanges && rangeValidation.error ? (
-									<div className="text-center text-[var(--text-secondary)] text-sm">
-										Please resolve the custom range error above to show the
-										chart.
-									</div>
-								) : useCustomRanges && !customRangeInput.trim() ? (
-									<div className="text-center text-[var(--text-secondary)] text-sm">
-										Enter some year ranges (e.g.{" "}
-										<span className="font-semibold">2000-2010, 2011-2020</span>)
-										to begin bucketing.
-									</div>
-								) : yearChartData.length === 0 ? (
-									<div className="text-center text-[var(--text-secondary)] text-sm">
-										No publication year data fits the active filters and year
-										ranges.
-									</div>
-								) : (
+							<div className="h-72">
+								{processedReviewTimeline.length > 0 ? (
 									<ResponsiveContainer width="100%" height="100%">
-										<BarChart
-											data={yearChartData}
-											margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-										>
-											<CartesianGrid
-												strokeDasharray="3 3"
-												stroke="var(--border-primary)"
-												opacity={0.3}
-												vertical={false}
-											/>
-											<XAxis
-												dataKey="name"
-												stroke="var(--text-secondary)"
-												fontSize={11}
-												tickLine={false}
-												axisLine={{ stroke: "var(--border-primary)" }}
-											/>
-											<YAxis
-												allowDecimals={false}
-												stroke="var(--text-secondary)"
-												fontSize={11}
-												tickLine={false}
-												axisLine={{ stroke: "var(--border-primary)" }}
-											/>
+										<LineChart data={processedReviewTimeline}>
+											<CartesianGrid strokeDasharray="3 3" vertical={false} />
+											<XAxis dataKey="period" />
+											<YAxis allowDecimals={false} />
 											<Tooltip
 												contentStyle={{
 													backgroundColor: "var(--bg-card)",
@@ -2323,671 +2998,861 @@ export const AnalyticsPage: React.FC = () => {
 													fontWeight: "bold",
 												}}
 											/>
-
-											{yearChartMode === "total" && (
-												<Bar
-													dataKey="count"
-													name="Manga Count"
-													fill="var(--brand-orange)"
-													radius={[4, 4, 0, 0]}
-												/>
-											)}
-
-											{yearChartMode === "demographic" &&
-												Object.keys(DEMO_COLORS).map((demo) => {
-													if (!activeDemoFilters.has(demo)) return null;
-													return (
-														<Bar
-															key={demo}
-															dataKey={demo}
-															name={demo}
-															stackId="year_stack"
-															fill={DEMO_COLORS[demo] || "#6B7280"}
-														/>
-													);
-												})}
-
-											{yearChartMode === "status" &&
-												Object.keys(PUB_STATUS_COLORS).map((status) => {
-													if (!activeStatusFilters.has(status)) return null;
-													return (
-														<Bar
-															key={status}
-															dataKey={status}
-															name={status}
-															stackId="year_stack"
-															fill={PUB_STATUS_COLORS[status] || "#6B7280"}
-														/>
-													);
-												})}
-
-											{yearChartMode === "read_status" &&
-												Object.keys(READ_STATUS_COLORS).map((status) => {
-													if (!activeReadStatusFilters.has(status)) return null;
-													const dataKey =
-														status === "completed" ? "completed_rs" : status;
-													return (
-														<Bar
-															key={status}
-															dataKey={dataKey}
-															name={READ_STATUS_LABELS[status] || status}
-															stackId="year_stack"
-															fill={READ_STATUS_COLORS[status] || "#6B7280"}
-														/>
-													);
-												})}
-										</BarChart>
+											<Line
+												type="monotone"
+												dataKey="count"
+												stroke="var(--brand-coral)"
+												strokeWidth={2}
+												activeDot={{ r: 8 }}
+											/>
+										</LineChart>
 									</ResponsiveContainer>
+								) : (
+									<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
+										No reviews found in selected dates.
+									</div>
 								)}
 							</div>
 						</div>
-					)}
 
-					{/* Timeline Controls & Charts */}
-					<div className="space-y-6">
-						{/* Timeline Filters Toolbelt */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-4 shadow-sm">
-							{/* Header Row */}
-							<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-								<div className="flex items-center space-x-2">
-									<Calendar size={18} className="text-[var(--brand-orange)]" />
-									<h3 className="font-spartan font-bold text-sm">
-										Timeline Configuration
-									</h3>
-									{maxLookbackUnits > 0 && (
-										<span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--bg-primary)] px-2 py-0.5 rounded-md border border-[var(--border-primary)]">
-											Data spans ~{maxLookbackUnits} {timelineGroupBy}
-											{maxLookbackUnits !== 1 ? "s" : ""}
+						<ReviewsManagement />
+					</div>
+				)}
+
+				{/* TAB 3: TÁC GIẢ & HỌA SĨ */}
+				{currentTab === "creators" && (
+					<div className="space-y-8 animate-in fade-in duration-200">
+						{renderFiltersPool()}
+						{/* Library Creator Distributions Section */}
+						{topCreators && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
+								<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+									<h3 className="text-lg font-bold flex items-center space-x-2">
+										<User size={20} className="text-[var(--brand-orange)]" />
+										<span>
+											{showAllCreators
+												? "Library Creator Distributions Dashboard"
+												: "Library Creator Distributions"}
 										</span>
-									)}
+									</h3>
+
+									<div className="flex flex-wrap items-center gap-4">
+										{/* Show all creators toggle */}
+										<button
+											onClick={() => setShowAllCreators(!showAllCreators)}
+											className={`px-4 py-2 rounded-xl text-xs font-bold border transition duration-200 ${
+												showAllCreators
+													? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-md shadow-orange-500/20"
+													: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+											}`}
+										>
+											{showAllCreators
+												? "Show Top 5 Summary"
+												: "Show All & Analyze Distributions"}
+										</button>
+
+										{/* Search filter for creators */}
+										{showAllCreators && (
+											<div className="relative w-full md:w-56">
+												<Search
+													size={14}
+													className="absolute left-3 top-2.5 text-zinc-400"
+												/>
+												<input
+													type="text"
+													placeholder="Search creators..."
+													value={creatorSearch}
+													onChange={(e) => setCreatorSearch(e.target.value)}
+													className="w-full pl-8 pr-4 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+												/>
+											</div>
+										)}
+									</div>
 								</div>
 
-								<div className="flex flex-wrap items-center gap-4">
-									{/* Timeline Grouping Option */}
-									<div className="flex items-center space-x-2">
-										<span className="text-xs font-semibold text-[var(--text-secondary)]">
-											Group by:
-										</span>
-										<div className="flex rounded-xl overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-primary)]">
-											{["hour", "day", "week", "month", "year"].map((unit) => (
-												<button
-													key={unit}
-													onClick={() => setTimelineGroupBy(unit)}
-													className={`px-3 py-1 text-xs font-bold rounded-lg transition capitalize ${
-														timelineGroupBy === unit
-															? "bg-[var(--brand-orange)] text-white shadow-sm"
-															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-													}`}
-												>
-													{unit}
-												</button>
-											))}
+								{!showAllCreators ? (
+									/* Standard top 5 summary columns side-by-side */
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+										{/* Authors List */}
+										<div className="space-y-3">
+											<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+												Top Authors
+											</h4>
+											{topCreators.authors.length > 0 ? (
+												<div className="space-y-2">
+													{(() => {
+														const poolTotal = overview?.total_manga || 0;
+														return topCreators.authors.map((item, idx) => (
+															<div
+																key={idx}
+																className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
+															>
+																<div className="flex items-center space-x-2 min-w-0">
+																	<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
+																		{idx + 1}
+																	</span>
+																	<span
+																		className="text-xs font-semibold truncate"
+																		title={item.name}
+																	>
+																		{item.name}
+																	</span>
+																</div>
+																<span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
+																	{item.count}{" "}
+																	{item.count === 1 ? "title" : "titles"}
+																	{poolTotal > 0 &&
+																		` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
+																</span>
+															</div>
+														));
+													})()}
+												</div>
+											) : (
+												<p className="text-xs text-zinc-400 italic">
+													No creator details.
+												</p>
+											)}
+										</div>
+
+										{/* Artists List */}
+										<div className="space-y-3">
+											<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+												Top Artists
+											</h4>
+											{topCreators.artists.length > 0 ? (
+												<div className="space-y-2">
+													{(() => {
+														const poolTotal = overview?.total_manga || 0;
+														return topCreators.artists.map((item, idx) => (
+															<div
+																key={idx}
+																className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
+															>
+																<div className="flex items-center space-x-2 min-w-0">
+																	<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
+																		{idx + 1}
+																	</span>
+																	<span
+																		className="text-xs font-semibold truncate"
+																		title={item.name}
+																	>
+																		{item.name}
+																	</span>
+																</div>
+																<span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
+																	{item.count}{" "}
+																	{item.count === 1 ? "title" : "titles"}
+																	{poolTotal > 0 &&
+																		` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
+																</span>
+															</div>
+														));
+													})()}
+												</div>
+											) : (
+												<p className="text-xs text-zinc-400 italic">
+													No creator details.
+												</p>
+											)}
 										</div>
 									</div>
+								) : /* Show All & Analyze Distributions layout */
+								creatorsDetailsLoading ? (
+									<TableRowsSkeleton
+										rows={6}
+										cols={4}
+										label="Đang tải danh sách tác giả và họa sĩ..."
+									/>
+								) : (
+									(() => {
+										const list =
+											creatorTab === "authors"
+												? creatorsDetails.authors
+												: creatorsDetails.artists;
+										const filtered = list.filter((c) =>
+											c.name
+												.toLowerCase()
+												.includes(creatorSearch.toLowerCase()),
+										);
 
-									{/* Show All Checkbox */}
-									<label className="flex items-center space-x-2 cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition select-none">
-										<input
-											type="checkbox"
-											checked={showAllTimelineData}
-											onChange={(e) => {
-												setShowAllTimelineData(e.target.checked);
-												if (e.target.checked) {
-													setTimelineLookback("all");
-												} else {
-													setTimelineLookback(
-														Math.min(30, maxLookbackUnits || 30),
-													);
-												}
-											}}
-											className="rounded border-[var(--border-primary)] text-[var(--brand-orange)] focus:ring-[var(--brand-orange)] h-4 w-4 bg-[var(--bg-primary)]"
-										/>
-										<span>Show All Data</span>
-									</label>
-								</div>
-							</div>
-
-							{/* Range Controls Row — only when NOT showing all */}
-							{!showAllTimelineData && (
-								<div className="bg-[var(--bg-primary)]/50 border border-[var(--border-primary)] rounded-xl p-3 space-y-3">
-									{/* Quick Lookback Presets */}
-									<div className="flex flex-wrap items-center gap-2">
-										<span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
-											Quick Lookback:
-										</span>
-										<div className="flex flex-wrap gap-1.5">
-											{lookbackPresets.map((n) => {
-												const unitLabel =
-													timelineGroupBy === "hour"
-														? "h"
-														: timelineGroupBy === "day"
-															? "d"
-															: timelineGroupBy === "week"
-																? "w"
-																: timelineGroupBy === "month"
-																	? "m"
-																	: "y";
-												const isActive = timelineLookback === n;
-												return (
+										return (
+											<div className="space-y-4">
+												{/* Tab selection */}
+												<div className="flex space-x-2 p-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl w-fit">
 													<button
-														key={n}
-														type="button"
-														onClick={() => setTimelineLookback(n)}
-														className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-															isActive
-																? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-sm"
-																: "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--brand-orange)] hover:border-[var(--brand-orange)]"
+														onClick={() => {
+															setCreatorTab("authors");
+															setExpandedCreatorId(null);
+														}}
+														className={`px-4 py-1.5 text-xs font-bold rounded-lg transition ${
+															creatorTab === "authors"
+																? "bg-[var(--brand-orange)] text-white shadow-sm"
+																: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 														}`}
 													>
-														{n}
-														{unitLabel}
+														Authors
 													</button>
-												);
-											})}
-											{lookbackPresets.length === 0 && (
-												<span className="text-[10px] text-zinc-400 font-medium italic">
-													Not enough data for presets
-												</span>
-											)}
-										</div>
-									</div>
-
-									{/* Custom Lookback & Group Size */}
-									<div className="flex flex-wrap items-end gap-4">
-										{/* Custom Lookback Input */}
-										<div className="space-y-1">
-											<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-												Show last
-											</label>
-											<div className="flex items-center space-x-1.5">
-												<input
-													type="number"
-													min={1}
-													max={maxLookbackUnits || undefined}
-													value={
-														typeof timelineLookback === "number"
-															? timelineLookback
-															: ""
-													}
-													onChange={(e) => {
-														const val =
-															e.target.value === ""
-																? 1
-																: parseInt(e.target.value, 10);
-														if (!isNaN(val)) setTimelineLookback(val);
-													}}
-													className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
-												/>
-												<span className="text-xs font-bold text-[var(--text-secondary)] capitalize">
-													{timelineGroupBy}(s)
-												</span>
-											</div>
-											{!lookbackValidation.valid && (
-												<span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
-													⚠ {lookbackValidation.error}
-												</span>
-											)}
-										</div>
-
-										{/* Group Size Input */}
-										<div className="space-y-1">
-											<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-												Group every
-											</label>
-											<div className="flex items-center space-x-1.5">
-												<input
-													type="number"
-													min={1}
-													max={
-														typeof effectiveLookback === "number"
-															? effectiveLookback
-															: maxLookbackUnits || undefined
-													}
-													value={timelineGroupSize}
-													onChange={(e) => {
-														const val = parseInt(e.target.value, 10);
-														if (!isNaN(val))
-															setTimelineGroupSize(Math.max(1, val));
-													}}
-													className="w-20 px-2 py-1 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-xs font-semibold text-center focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)]"
-												/>
-												<span className="text-xs font-bold text-[var(--text-secondary)] capitalize">
-													{timelineGroupBy}(s)
-												</span>
-											</div>
-											{!groupSizeValidation.valid && (
-												<span className="text-[10px] text-rose-500 font-semibold flex items-center gap-1">
-													⚠ {groupSizeValidation.error}
-												</span>
-											)}
-										</div>
-
-										{/* Quick Group Size presets */}
-										<div className="space-y-1">
-											<label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-												Quick Group
-											</label>
-											<div className="flex gap-1">
-												{[1, 2, 3, 4, 6]
-													.filter((g) => {
-														const eff =
-															typeof effectiveLookback === "number"
-																? effectiveLookback
-																: maxLookbackUnits;
-														return g <= eff;
-													})
-													.map((g) => (
-														<button
-															key={g}
-															type="button"
-															onClick={() => setTimelineGroupSize(g)}
-															className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-																timelineGroupSize === g
-																	? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
-																	: "bg-[var(--bg-card)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-orange)]"
-															}`}
-														>
-															{g === 1 ? "×1" : `×${g}`}
-														</button>
-													))}
-											</div>
-										</div>
-									</div>
-								</div>
-							)}
-						</div>
-
-						{/* Timeline Charts Grid */}
-						<div className="grid grid-cols-1 gap-8">
-							{/* Library Growth Area Chart */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-								<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-									<h3 className="text-lg font-bold">
-										Library Growth (Manga Added)
-									</h3>
-
-									{/* Added date range */}
-									<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
-										<input
-											type="date"
-											value={addedStartDate}
-											onChange={(e) => setAddedStartDate(e.target.value)}
-											min={datePickerMins.added}
-											max={addedEndDate || todayStr}
-											className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-										/>
-										<span>-</span>
-										<input
-											type="date"
-											value={addedEndDate}
-											onChange={(e) => setAddedEndDate(e.target.value)}
-											min={addedStartDate || datePickerMins.added}
-											max={todayStr}
-											className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-										/>
-									</div>
-								</div>
-
-								<div className="h-72">
-									{processedMangaTimeline.length > 0 ? (
-										<ResponsiveContainer width="100%" height="100%">
-											<AreaChart data={processedMangaTimeline}>
-												<defs>
-													<linearGradient
-														id="colorManga"
-														x1="0"
-														y1="0"
-														x2="0"
-														y2="1"
+													<button
+														onClick={() => {
+															setCreatorTab("artists");
+															setExpandedCreatorId(null);
+														}}
+														className={`px-4 py-1.5 text-xs font-bold rounded-lg transition ${
+															creatorTab === "artists"
+																? "bg-[var(--brand-orange)] text-white shadow-sm"
+																: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+														}`}
 													>
-														<stop
-															offset="5%"
-															stopColor="var(--brand-orange)"
-															stopOpacity={0.4}
-														/>
-														<stop
-															offset="95%"
-															stopColor="var(--brand-orange)"
-															stopOpacity={0}
-														/>
-													</linearGradient>
-												</defs>
-												<CartesianGrid strokeDasharray="3 3" vertical={false} />
-												<XAxis dataKey="period" />
-												<YAxis allowDecimals={false} />
-												<Tooltip
-													contentStyle={{
-														backgroundColor: "var(--bg-card)",
-														borderColor: "var(--border-primary)",
-														color: "var(--text-primary)",
-														borderRadius: "12px",
-														fontSize: "12px",
-														boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-													}}
-													itemStyle={{ color: "var(--text-primary)" }}
-													labelStyle={{
-														color: "var(--text-secondary)",
-														fontWeight: "bold",
-													}}
-												/>
-												<Area
-													type="monotone"
-													dataKey="count"
-													stroke="var(--brand-orange)"
-													fillOpacity={1}
-													fill="url(#colorManga)"
-													strokeWidth={2}
-												/>
-											</AreaChart>
-										</ResponsiveContainer>
-									) : (
-										<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
-											No additions found in selected dates.
-										</div>
-									)}
-								</div>
-							</div>
+														Artists
+													</button>
+												</div>
 
-							{/* Reading Progress (Completed Manga) Area Chart */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-								<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-									<h3 className="text-lg font-bold">
-										Reading Progress (Completed Manga)
-									</h3>
-
-									{/* Completed date range */}
-									<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
-										<input
-											type="date"
-											value={completedStartDate}
-											onChange={(e) => setCompletedStartDate(e.target.value)}
-											min={datePickerMins.completed}
-											max={completedEndDate || todayStr}
-											className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-										/>
-										<span>-</span>
-										<input
-											type="date"
-											value={completedEndDate}
-											onChange={(e) => setCompletedEndDate(e.target.value)}
-											min={completedStartDate || datePickerMins.completed}
-											max={todayStr}
-											className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-										/>
-									</div>
-								</div>
-
-								<div className="h-72">
-									{processedCompletedTimeline.length > 0 ? (
-										<ResponsiveContainer width="100%" height="100%">
-											<AreaChart data={processedCompletedTimeline}>
-												<defs>
-													<linearGradient
-														id="colorCompleted"
-														x1="0"
-														y1="0"
-														x2="0"
-														y2="1"
-													>
-														<stop
-															offset="5%"
-															stopColor="#10B981"
-															stopOpacity={0.4}
-														/>
-														<stop
-															offset="95%"
-															stopColor="#10B981"
-															stopOpacity={0}
-														/>
-													</linearGradient>
-												</defs>
-												<CartesianGrid strokeDasharray="3 3" vertical={false} />
-												<XAxis dataKey="period" />
-												<YAxis allowDecimals={false} />
-												<Tooltip
-													contentStyle={{
-														backgroundColor: "var(--bg-card)",
-														borderColor: "var(--border-primary)",
-														color: "var(--text-primary)",
-														borderRadius: "12px",
-														fontSize: "12px",
-														boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-													}}
-													itemStyle={{ color: "var(--text-primary)" }}
-													labelStyle={{
-														color: "var(--text-secondary)",
-														fontWeight: "bold",
-													}}
-												/>
-												<Area
-													type="monotone"
-													dataKey="count"
-													stroke="#10B981"
-													fillOpacity={1}
-													fill="url(#colorCompleted)"
-													strokeWidth={2}
-												/>
-											</AreaChart>
-										</ResponsiveContainer>
-									) : (
-										<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
-											No completions found in selected dates.
-										</div>
-									)}
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* TAB 2: ĐÁNH GIÁ & REVIEWS */}
-			{currentTab === "reviews" && (
-				<div className="space-y-8 animate-in fade-in duration-200">
-					<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-						{/* Score Distribution Chart with Multiple Views */}
-						<RatingDistributionCard
-							data={scoreDist}
-							averageRating={overview?.average_rating}
-							totalManga={overview?.total_manga}
-							onSelectScore={(score) => {
-								setRatingMin(score);
-								setRatingMax(score);
-							}}
-						/>
-
-						{/* Rating averages by demographics and statuses */}
-						{ratingInsights && (
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
-								<h3 className="text-lg font-bold flex items-center space-x-2">
-									<Award size={20} className="text-yellow-500" />
-									<span>Score Averages Insights</span>
-								</h3>
-
-								<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-									{/* Demographic averages */}
-									<div className="space-y-3">
-										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-											Avg Rating by Demographic
-										</h4>
-										{ratingInsights.demographic_ratings.length > 0 ? (
-											<div className="space-y-2">
-												{ratingInsights.demographic_ratings.map((item, idx) => (
-													<div
-														key={idx}
-														className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
-													>
-														<div className="flex items-center space-x-2 min-w-0">
-															<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
-																{idx + 1}
-															</span>
-															<span className="text-xs font-semibold truncate">
-																{item.name}
-															</span>
-														</div>
-														<span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
-															{item.avg_rating}{" "}
-															<Star
-																size={10}
-																className="fill-yellow-500 text-yellow-500 ml-0.5"
-															/>
-														</span>
+												{filtered.length === 0 ? (
+													<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
+														{list.length === 0
+															? "No creators found in this pool."
+															: "No creators match your search query."}
 													</div>
-												))}
-											</div>
-										) : (
-											<p className="text-xs text-zinc-400 italic">
-												No ratings found.
-											</p>
-										)}
-									</div>
+												) : (
+													<div className="space-y-4">
+														{filtered.map((creator) => {
+															const isExpanded =
+																expandedCreatorId === creator.name;
+															const globalRank =
+																list.findIndex((c) => c.name === creator.name) +
+																1;
+															const poolTotal = overview?.total_manga || 0;
 
-									{/* Status averages */}
-									<div className="space-y-3">
-										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-											Avg Rating by Pub Status
-										</h4>
-										{ratingInsights.status_ratings.length > 0 ? (
-											<div className="space-y-2">
-												{ratingInsights.status_ratings.map((item, idx) => (
-													<div
-														key={idx}
-														className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
-													>
-														<div className="flex items-center space-x-2 min-w-0">
-															<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold font-mono">
-																{idx + 1}
-															</span>
-															<span className="text-xs font-semibold truncate">
-																{item.name}
-															</span>
-														</div>
-														<span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 flex items-center shrink-0">
-															{item.avg_rating}{" "}
-															<Star
-																size={10}
-																className="fill-yellow-500 text-yellow-500 ml-0.5"
-															/>
-														</span>
+															// Compute role labels based on roles array
+															const roleLabels = creator.roles
+																.filter((r: any) => r.value > 0)
+																.map((r: any) => `${r.name}: ${r.value}`)
+																.join(" • ");
+
+															return (
+																<div
+																	key={creator.name}
+																	className={`border rounded-2xl bg-[var(--bg-primary)] overflow-hidden transition-all duration-300 ${
+																		isExpanded
+																			? "border-[var(--brand-orange)] shadow-md shadow-orange-500/5"
+																			: "border-[var(--border-primary)] hover:border-zinc-400"
+																	}`}
+																>
+																	{/* Accordion header */}
+																	<div
+																		onClick={() =>
+																			setExpandedCreatorId(
+																				isExpanded ? null : creator.name,
+																			)
+																		}
+																		className="flex items-center justify-between p-4 cursor-pointer select-none"
+																	>
+																		<div className="flex items-center space-x-3 min-w-0">
+																			<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
+																				{globalRank}
+																			</span>
+																			<span
+																				className="text-xs font-semibold truncate text-[var(--text-primary)]"
+																				title={creator.name}
+																			>
+																				{creator.name}
+																			</span>
+																			<span className="text-[10px] text-[var(--text-secondary)] font-bold shrink-0">
+																				({creator.count}{" "}
+																				{creator.count === 1
+																					? "title"
+																					: "titles"}
+																				)
+																				{poolTotal > 0 &&
+																					` (${((creator.count / poolTotal) * 100).toFixed(1)}%)`}
+																			</span>
+																			{roleLabels && (
+																				<span className="hidden md:inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-[var(--bg-card)] border border-[var(--border-primary)] text-[var(--text-secondary)]">
+																					{roleLabels}
+																				</span>
+																			)}
+																		</div>
+
+																		<div className="flex items-center space-x-2 text-[var(--text-secondary)]">
+																			<span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+																				{isExpanded
+																					? "Collapse Analysis"
+																					: "Deep Analyze"}
+																			</span>
+																			{isExpanded ? (
+																				<ChevronUp size={16} />
+																			) : (
+																				<ChevronDown size={16} />
+																			)}
+																		</div>
+																	</div>
+
+																	{/* Expanded panel */}
+																	{isExpanded && (
+																		<div className="p-6 bg-[var(--bg-card)] border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-350">
+																			<DeferredChartsWrapper>
+																				<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+																					{/* Demographics Breakdown */}
+																					<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																						<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																							Demographics
+																						</span>
+																						<div className="h-44">
+																							{creator.demographics &&
+																							creator.demographics.length >
+																								0 ? (
+																								<ResponsiveContainer
+																									width="100%"
+																									height="100%"
+																								>
+																									<BarChart
+																										data={creator.demographics}
+																										layout="vertical"
+																										margin={{
+																											left: 10,
+																											right: 10,
+																											top: 5,
+																											bottom: 5,
+																										}}
+																									>
+																										<CartesianGrid
+																											strokeDasharray="3 3"
+																											horizontal={false}
+																											vertical={true}
+																										/>
+																										<XAxis
+																											type="number"
+																											allowDecimals={false}
+																										/>
+																										<YAxis
+																											dataKey="name"
+																											type="category"
+																											width={120}
+																											style={{
+																												fontSize: "10px",
+																												fontWeight: "bold",
+																											}}
+																											tickFormatter={(name) => {
+																												const entry =
+																													creator.demographics.find(
+																														(d: any) =>
+																															d.name === name,
+																													);
+																												const total =
+																													creator.demographics.reduce(
+																														(
+																															sum: number,
+																															d: any,
+																														) => sum + d.value,
+																														0,
+																													);
+																												return entry &&
+																													total > 0
+																													? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																													: name;
+																											}}
+																										/>
+																										<Tooltip
+																											contentStyle={{
+																												backgroundColor:
+																													"var(--bg-card)",
+																												borderColor:
+																													"var(--border-primary)",
+																												color:
+																													"var(--text-primary)",
+																												borderRadius: "12px",
+																												fontSize: "12px",
+																											}}
+																											itemStyle={{
+																												color:
+																													"var(--text-primary)",
+																											}}
+																											labelStyle={{
+																												color:
+																													"var(--text-secondary)",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<Bar
+																											dataKey="value"
+																											radius={[0, 4, 4, 0]}
+																										>
+																											{creator.demographics.map(
+																												(
+																													entry: any,
+																													idx: number,
+																												) => (
+																													<Cell
+																														key={`cell-${idx}`}
+																														fill={
+																															DEMO_COLORS[
+																																entry.name
+																															] || "#3B82F6"
+																														}
+																													/>
+																												),
+																											)}
+																										</Bar>
+																									</BarChart>
+																								</ResponsiveContainer>
+																							) : (
+																								<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																									No demographic data.
+																								</div>
+																							)}
+																						</div>
+																					</div>
+
+																					{/* Content Ratings Breakdown */}
+																					<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																						<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																							Content Ratings
+																						</span>
+																						<div className="h-44">
+																							{creator.content_ratings &&
+																							creator.content_ratings.length >
+																								0 ? (
+																								<ResponsiveContainer
+																									width="100%"
+																									height="100%"
+																								>
+																									<BarChart
+																										data={
+																											creator.content_ratings
+																										}
+																										layout="vertical"
+																										margin={{
+																											left: 10,
+																											right: 10,
+																											top: 5,
+																											bottom: 5,
+																										}}
+																									>
+																										<CartesianGrid
+																											strokeDasharray="3 3"
+																											horizontal={false}
+																											vertical={true}
+																										/>
+																										<XAxis
+																											type="number"
+																											allowDecimals={false}
+																										/>
+																										<YAxis
+																											dataKey="name"
+																											type="category"
+																											width={120}
+																											style={{
+																												fontSize: "10px",
+																												fontWeight: "bold",
+																											}}
+																											tickFormatter={(name) => {
+																												const entry =
+																													creator.content_ratings.find(
+																														(c: any) =>
+																															c.name === name,
+																													);
+																												const total =
+																													creator.content_ratings.reduce(
+																														(
+																															sum: number,
+																															c: any,
+																														) => sum + c.value,
+																														0,
+																													);
+																												return entry &&
+																													total > 0
+																													? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																													: name;
+																											}}
+																										/>
+																										<Tooltip
+																											contentStyle={{
+																												backgroundColor:
+																													"var(--bg-card)",
+																												borderColor:
+																													"var(--border-primary)",
+																												color:
+																													"var(--text-primary)",
+																												borderRadius: "12px",
+																												fontSize: "12px",
+																											}}
+																											itemStyle={{
+																												color:
+																													"var(--text-primary)",
+																											}}
+																											labelStyle={{
+																												color:
+																													"var(--text-secondary)",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<Bar
+																											dataKey="value"
+																											radius={[0, 4, 4, 0]}
+																										>
+																											{creator.content_ratings.map(
+																												(
+																													entry: any,
+																													idx: number,
+																												) => (
+																													<Cell
+																														key={`cell-${idx}`}
+																														fill={
+																															CONTENT_RATING_COLORS[
+																																entry.name
+																															] || "#10B981"
+																														}
+																													/>
+																												),
+																											)}
+																										</Bar>
+																									</BarChart>
+																								</ResponsiveContainer>
+																							) : (
+																								<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																									No content rating data.
+																								</div>
+																							)}
+																						</div>
+																					</div>
+
+																					{/* Read Status Breakdown */}
+																					<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																						<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																							Read Statuses
+																						</span>
+																						<div className="h-44">
+																							{creator.read_statuses &&
+																							creator.read_statuses.length >
+																								0 ? (
+																								<ResponsiveContainer
+																									width="100%"
+																									height="100%"
+																								>
+																									<BarChart
+																										data={creator.read_statuses}
+																										layout="vertical"
+																										margin={{
+																											left: 10,
+																											right: 10,
+																											top: 5,
+																											bottom: 5,
+																										}}
+																									>
+																										<CartesianGrid
+																											strokeDasharray="3 3"
+																											horizontal={false}
+																											vertical={true}
+																										/>
+																										<XAxis
+																											type="number"
+																											allowDecimals={false}
+																										/>
+																										<YAxis
+																											dataKey="name"
+																											type="category"
+																											width={120}
+																											style={{
+																												fontSize: "10px",
+																												fontWeight: "bold",
+																											}}
+																											tickFormatter={(name) => {
+																												const entry =
+																													creator.read_statuses.find(
+																														(r: any) =>
+																															r.name === name,
+																													);
+																												const total =
+																													creator.read_statuses.reduce(
+																														(
+																															sum: number,
+																															r: any,
+																														) => sum + r.value,
+																														0,
+																													);
+																												return entry &&
+																													total > 0
+																													? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																													: name;
+																											}}
+																										/>
+																										<Tooltip
+																											contentStyle={{
+																												backgroundColor:
+																													"var(--bg-card)",
+																												borderColor:
+																													"var(--border-primary)",
+																												color:
+																													"var(--text-primary)",
+																												borderRadius: "12px",
+																												fontSize: "12px",
+																											}}
+																											itemStyle={{
+																												color:
+																													"var(--text-primary)",
+																											}}
+																											labelStyle={{
+																												color:
+																													"var(--text-secondary)",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<Bar
+																											dataKey="value"
+																											radius={[0, 4, 4, 0]}
+																										>
+																											{creator.read_statuses.map(
+																												(
+																													entry: any,
+																													idx: number,
+																												) => (
+																													<Cell
+																														key={`cell-${idx}`}
+																														fill={getReadStatusColor(
+																															entry.name,
+																														)}
+																													/>
+																												),
+																											)}
+																										</Bar>
+																									</BarChart>
+																								</ResponsiveContainer>
+																							) : (
+																								<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																									No read status data.
+																								</div>
+																							)}
+																						</div>
+																					</div>
+
+																					{/* Top Genres / Tags Breakdown */}
+																					<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																						<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																							Top Genres / Tags
+																						</span>
+																						<div className="h-44">
+																							{creator.tags &&
+																							creator.tags.length > 0 ? (
+																								<ResponsiveContainer
+																									width="100%"
+																									height="100%"
+																								>
+																									<BarChart
+																										data={creator.tags}
+																										layout="vertical"
+																										margin={{
+																											left: 10,
+																											right: 10,
+																											top: 5,
+																											bottom: 5,
+																										}}
+																									>
+																										<CartesianGrid
+																											strokeDasharray="3 3"
+																											horizontal={false}
+																											vertical={true}
+																										/>
+																										<XAxis
+																											type="number"
+																											allowDecimals={false}
+																										/>
+																										<YAxis
+																											dataKey="name"
+																											type="category"
+																											width={130}
+																											style={{
+																												fontSize: "10px",
+																												fontWeight: "bold",
+																											}}
+																											tickFormatter={(name) => {
+																												const entry =
+																													creator.tags.find(
+																														(t: any) =>
+																															t.name === name,
+																													);
+																												return entry &&
+																													creator.count > 0
+																													? `${name} (${Math.round((entry.count / creator.count) * 100)}%)`
+																													: name;
+																											}}
+																										/>
+																										<Tooltip
+																											contentStyle={{
+																												backgroundColor:
+																													"var(--bg-card)",
+																												borderColor:
+																													"var(--border-primary)",
+																												color:
+																													"var(--text-primary)",
+																												borderRadius: "12px",
+																												fontSize: "12px",
+																											}}
+																											itemStyle={{
+																												color:
+																													"var(--text-primary)",
+																											}}
+																											labelStyle={{
+																												color:
+																													"var(--text-secondary)",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<Bar
+																											dataKey="count"
+																											radius={[0, 4, 4, 0]}
+																										>
+																											{creator.tags.map(
+																												(
+																													entry: any,
+																													idx: number,
+																												) => (
+																													<Cell
+																														key={`cell-${idx}`}
+																														fill={
+																															entry.color ||
+																															"var(--brand-orange)"
+																														}
+																													/>
+																												),
+																											)}
+																										</Bar>
+																									</BarChart>
+																								</ResponsiveContainer>
+																							) : (
+																								<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																									No tag data.
+																								</div>
+																							)}
+																						</div>
+																					</div>
+
+																					{/* Personal Score Distribution (Full Width) */}
+																					<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2 md:col-span-2">
+																						<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																							Personal Scores (Completed)
+																						</span>
+																						<div className="h-44">
+																							{creator.ratings &&
+																							creator.ratings.length > 0 ? (
+																								<ResponsiveContainer
+																									width="100%"
+																									height="100%"
+																								>
+																									<BarChart
+																										data={creator.ratings}
+																										margin={{
+																											left: 5,
+																											right: 5,
+																											top: 10,
+																											bottom: 5,
+																										}}
+																									>
+																										<CartesianGrid
+																											strokeDasharray="3 3"
+																											horizontal={true}
+																											vertical={false}
+																										/>
+																										<XAxis
+																											dataKey="score"
+																											style={{
+																												fontSize: "10px",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<YAxis
+																											allowDecimals={false}
+																										/>
+																										<Tooltip
+																											contentStyle={{
+																												backgroundColor:
+																													"var(--bg-card)",
+																												borderColor:
+																													"var(--border-primary)",
+																												color:
+																													"var(--text-primary)",
+																												borderRadius: "12px",
+																												fontSize: "12px",
+																											}}
+																											itemStyle={{
+																												color:
+																													"var(--text-primary)",
+																											}}
+																											labelStyle={{
+																												color:
+																													"var(--text-secondary)",
+																												fontWeight: "bold",
+																											}}
+																										/>
+																										<Bar
+																											dataKey="count"
+																											fill="var(--brand-orange)"
+																											radius={[4, 4, 0, 0]}
+																										/>
+																									</BarChart>
+																								</ResponsiveContainer>
+																							) : (
+																								<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																									No ratings on completed
+																									mangas.
+																								</div>
+																							)}
+																						</div>
+																					</div>
+																				</div>
+																			</DeferredChartsWrapper>
+																		</div>
+																	)}
+																</div>
+															);
+														})}
 													</div>
-												))}
+												)}
 											</div>
-										) : (
-											<p className="text-xs text-zinc-400 italic">
-												No ratings found.
-											</p>
-										)}
-									</div>
-								</div>
+										);
+									})()
+								)}
 							</div>
 						)}
 					</div>
-					{/* Review Activity Line Chart */}
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-4 shadow-sm">
-						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-							<h3 className="text-lg font-bold">
-								Review Activity (Reviews Created)
-							</h3>
+				)}
 
-							{/* Review date range */}
-							<div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)]">
-								<input
-									type="date"
-									value={reviewStartDate}
-									onChange={(e) => setReviewStartDate(e.target.value)}
-									min={datePickerMins.review}
-									max={reviewEndDate || todayStr}
-									className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-								/>
-								<span>-</span>
-								<input
-									type="date"
-									value={reviewEndDate}
-									onChange={(e) => setReviewEndDate(e.target.value)}
-									min={reviewStartDate || datePickerMins.review}
-									max={todayStr}
-									className="px-2 py-0.5 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-md focus:outline-none"
-								/>
-							</div>
-						</div>
-
-						<div className="h-72">
-							{processedReviewTimeline.length > 0 ? (
-								<ResponsiveContainer width="100%" height="100%">
-									<LineChart data={processedReviewTimeline}>
-										<CartesianGrid strokeDasharray="3 3" vertical={false} />
-										<XAxis dataKey="period" />
-										<YAxis allowDecimals={false} />
-										<Tooltip
-											contentStyle={{
-												backgroundColor: "var(--bg-card)",
-												borderColor: "var(--border-primary)",
-												color: "var(--text-primary)",
-												borderRadius: "12px",
-												fontSize: "12px",
-												boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-											}}
-											itemStyle={{ color: "var(--text-primary)" }}
-											labelStyle={{
-												color: "var(--text-secondary)",
-												fontWeight: "bold",
-											}}
-										/>
-										<Line
-											type="monotone"
-											dataKey="count"
-											stroke="var(--brand-coral)"
-											strokeWidth={2}
-											activeDot={{ r: 8 }}
-										/>
-									</LineChart>
-								</ResponsiveContainer>
-							) : (
-								<div className="flex h-full items-center justify-center text-[var(--text-secondary)] text-sm">
-									No reviews found in selected dates.
-								</div>
-							)}
-						</div>
-					</div>
-
-					<ReviewsManagement />
-				</div>
-			)}
-
-			{/* TAB 3: TÁC GIẢ & HỌA SĨ */}
-			{currentTab === "creators" && (
-				<div className="space-y-8 animate-in fade-in duration-200">
-					{renderFiltersPool()}
-					{/* Library Creator Distributions Section */}
-					{topCreators && (
+				{/* TAB 4: THỂ LOẠI & TAGS */}
+				{currentTab === "tags" && (
+					<div className="space-y-8 animate-in fade-in duration-200">
+						{renderFiltersPool()}
+						{/* Genres / Tags in Pool Section */}
 						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
 							<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 								<h3 className="text-lg font-bold flex items-center space-x-2">
-									<User size={20} className="text-[var(--brand-orange)]" />
+									<TrendingUp
+										size={20}
+										className="text-[var(--brand-orange)]"
+									/>
 									<span>
-										{showAllCreators
-											? "Library Creator Distributions Dashboard"
-											: "Library Creator Distributions"}
+										{showAllTagDetails
+											? "Genres / Tags Analysis Dashboard"
+											: "Top 10 Genres / Tags in Pool"}
 									</span>
 								</h3>
 
 								<div className="flex flex-wrap items-center gap-4">
-									{/* Show all creators toggle */}
+									{/* Show all tag details toggle */}
 									<button
-										onClick={() => setShowAllCreators(!showAllCreators)}
+										onClick={() => setShowAllTagDetails(!showAllTagDetails)}
 										className={`px-4 py-2 rounded-xl text-xs font-bold border transition duration-200 ${
-											showAllCreators
+											showAllTagDetails
 												? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-md shadow-orange-500/20"
 												: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 										}`}
 									>
-										{showAllCreators
-											? "Show Top 5 Summary"
+										{showAllTagDetails
+											? "Show Top 10 Summary"
 											: "Show All & Analyze Distributions"}
 									</button>
 
-									{/* Search filter for creators */}
-									{showAllCreators && (
+									{/* Search filter for all tags (only shown when showAllTagDetails is true) */}
+									{showAllTagDetails && (
 										<div className="relative w-full md:w-56">
 											<Search
 												size={14}
@@ -2995,9 +3860,9 @@ export const AnalyticsPage: React.FC = () => {
 											/>
 											<input
 												type="text"
-												placeholder="Search creators..."
-												value={creatorSearch}
-												onChange={(e) => setCreatorSearch(e.target.value)}
+												placeholder="Search tags..."
+												value={tagDetailsSearch}
+												onChange={(e) => setTagDetailsSearch(e.target.value)}
 												className="w-full pl-8 pr-4 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
 											/>
 										</div>
@@ -3005,1429 +3870,671 @@ export const AnalyticsPage: React.FC = () => {
 								</div>
 							</div>
 
-							{!showAllCreators ? (
-								/* Standard top 5 summary columns side-by-side */
-								<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-									{/* Authors List */}
-									<div className="space-y-3">
-										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-											Top Authors
-										</h4>
-										{topCreators.authors.length > 0 ? (
-											<div className="space-y-2">
-												{(() => {
-													const poolTotal = overview?.total_manga || 0;
-													return topCreators.authors.map((item, idx) => (
-														<div
-															key={idx}
-															className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
-														>
-															<div className="flex items-center space-x-2 min-w-0">
-																<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
-																	{idx + 1}
-																</span>
-																<span
-																	className="text-xs font-semibold truncate"
-																	title={item.name}
-																>
-																	{item.name}
-																</span>
-															</div>
-															<span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
-																{item.count}{" "}
-																{item.count === 1 ? "title" : "titles"}
-																{poolTotal > 0 &&
-																	` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
-															</span>
-														</div>
-													));
-												})()}
+							{!showAllTagDetails ? (
+								/* Render simple list of Top 10 tags */
+								topTags.length > 0 ? (
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+										{topTags.map((tag, idx) => (
+											<div
+												key={idx}
+												className="flex items-center justify-between p-3 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl"
+											>
+												<div className="flex items-center space-x-3">
+													<span className="w-6 h-6 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
+														{idx + 1}
+													</span>
+													<span
+														className="px-2 py-0.5 rounded text-xs font-semibold text-white"
+														style={{
+															backgroundColor:
+																tag.color || "var(--brand-orange)",
+														}}
+													>
+														{tag.name}
+													</span>
+												</div>
+												<span className="text-sm font-semibold text-[var(--text-secondary)]">
+													{tag.count} {tag.count === 1 ? "manga" : "mangas"}
+												</span>
 											</div>
-										) : (
-											<p className="text-xs text-zinc-400 italic">
-												No creator details.
-											</p>
-										)}
+										))}
 									</div>
-
-									{/* Artists List */}
-									<div className="space-y-3">
-										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-											Top Artists
-										</h4>
-										{topCreators.artists.length > 0 ? (
-											<div className="space-y-2">
-												{(() => {
-													const poolTotal = overview?.total_manga || 0;
-													return topCreators.artists.map((item, idx) => (
-														<div
-															key={idx}
-															className="flex justify-between items-center p-2 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-lg space-x-3"
-														>
-															<div className="flex items-center space-x-2 min-w-0">
-																<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
-																	{idx + 1}
-																</span>
-																<span
-																	className="text-xs font-semibold truncate"
-																	title={item.name}
-																>
-																	{item.name}
-																</span>
-															</div>
-															<span className="text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
-																{item.count}{" "}
-																{item.count === 1 ? "title" : "titles"}
-																{poolTotal > 0 &&
-																	` (${((item.count / poolTotal) * 100).toFixed(1)}%)`}
-															</span>
-														</div>
-													));
-												})()}
-											</div>
-										) : (
-											<p className="text-xs text-zinc-400 italic">
-												No creator details.
-											</p>
-										)}
+								) : (
+									<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
+										No tags aggregated in the selected pool.
 									</div>
-								</div>
-							) : /* Show All & Analyze Distributions layout */
-							creatorsDetailsLoading ? (
+								)
+							) : /* Render detailed interactive tag dashboard */
+							tagDetailsLoading ? (
 								<TableRowsSkeleton
 									rows={6}
-									cols={4}
-									label="Đang tải danh sách tác giả và họa sĩ..."
+									cols={3}
+									label="Đang tải dữ liệu phân tích tag..."
 								/>
 							) : (
 								(() => {
-									const list =
-										creatorTab === "authors"
-											? creatorsDetails.authors
-											: creatorsDetails.artists;
-									const filtered = list.filter((c) =>
-										c.name.toLowerCase().includes(creatorSearch.toLowerCase()),
+									const filteredTagDetails = tagDetails.filter((t) =>
+										t.name
+											.toLowerCase()
+											.includes(tagDetailsSearch.toLowerCase()),
 									);
+
+									if (filteredTagDetails.length === 0) {
+										return (
+											<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
+												{tagDetails.length === 0
+													? "No tags found in this pool."
+													: "No tags match your search query."}
+											</div>
+										);
+									}
 
 									return (
 										<div className="space-y-4">
-											{/* Tab selection */}
-											<div className="flex space-x-2 p-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl w-fit">
-												<button
-													onClick={() => {
-														setCreatorTab("authors");
-														setExpandedCreatorId(null);
-													}}
-													className={`px-4 py-1.5 text-xs font-bold rounded-lg transition ${
-														creatorTab === "authors"
-															? "bg-[var(--brand-orange)] text-white shadow-sm"
-															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-													}`}
-												>
-													Authors
-												</button>
-												<button
-													onClick={() => {
-														setCreatorTab("artists");
-														setExpandedCreatorId(null);
-													}}
-													className={`px-4 py-1.5 text-xs font-bold rounded-lg transition ${
-														creatorTab === "artists"
-															? "bg-[var(--brand-orange)] text-white shadow-sm"
-															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-													}`}
-												>
-													Artists
-												</button>
-											</div>
-
-											{filtered.length === 0 ? (
-												<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
-													{list.length === 0
-														? "No creators found in this pool."
-														: "No creators match your search query."}
-												</div>
-											) : (
-												<div className="space-y-4">
-													{filtered.map((creator) => {
-														const isExpanded =
-															expandedCreatorId === creator.name;
-														const globalRank =
-															list.findIndex((c) => c.name === creator.name) +
-															1;
-														const poolTotal = overview?.total_manga || 0;
-
-														// Compute role labels based on roles array
-														const roleLabels = creator.roles
-															.filter((r: any) => r.value > 0)
-															.map((r: any) => `${r.name}: ${r.value}`)
-															.join(" • ");
-
-														return (
-															<div
-																key={creator.name}
-																className={`border rounded-2xl bg-[var(--bg-primary)] overflow-hidden transition-all duration-300 ${
-																	isExpanded
-																		? "border-[var(--brand-orange)] shadow-md shadow-orange-500/5"
-																		: "border-[var(--border-primary)] hover:border-zinc-400"
-																}`}
-															>
-																{/* Accordion header */}
-																<div
-																	onClick={() =>
-																		setExpandedCreatorId(
-																			isExpanded ? null : creator.name,
-																		)
-																	}
-																	className="flex items-center justify-between p-4 cursor-pointer select-none"
+											{filteredTagDetails.map((tag) => {
+												const isExpanded = expandedTagId === tag.tag_id;
+												const tagGlobalRank =
+													tagDetails.findIndex((t) => t.tag_id === tag.tag_id) +
+													1;
+												return (
+													<div
+														key={tag.tag_id}
+														className={`border rounded-2xl bg-[var(--bg-primary)] overflow-hidden transition-all duration-300 ${
+															isExpanded
+																? "border-[var(--brand-orange)] shadow-md shadow-orange-500/5"
+																: "border-[var(--border-primary)] hover:border-zinc-400"
+														}`}
+													>
+														{/* Tag Header Accordion Trigger */}
+														<div
+															onClick={() =>
+																setExpandedTagId(isExpanded ? null : tag.tag_id)
+															}
+															className="flex items-center justify-between p-4 cursor-pointer select-none"
+														>
+															<div className="flex items-center space-x-3 min-w-0">
+																<span className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
+																	{tagGlobalRank}
+																</span>
+																<span
+																	className="px-3 py-1 rounded-lg text-xs font-bold text-white shadow-sm"
+																	style={{
+																		backgroundColor:
+																			tag.color || "var(--brand-orange)",
+																	}}
 																>
-																	<div className="flex items-center space-x-3 min-w-0">
-																		<span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded text-[10px] font-bold font-mono">
-																			{globalRank}
-																		</span>
-																		<span
-																			className="text-xs font-semibold truncate text-[var(--text-primary)]"
-																			title={creator.name}
-																		>
-																			{creator.name}
-																		</span>
-																		<span className="text-[10px] text-[var(--text-secondary)] font-bold shrink-0">
-																			({creator.count}{" "}
-																			{creator.count === 1 ? "title" : "titles"}
-																			)
-																			{poolTotal > 0 &&
-																				` (${((creator.count / poolTotal) * 100).toFixed(1)}%)`}
-																		</span>
-																		{roleLabels && (
-																			<span className="hidden md:inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-[var(--bg-card)] border border-[var(--border-primary)] text-[var(--text-secondary)]">
-																				{roleLabels}
-																			</span>
-																		)}
-																	</div>
+																	{tag.name}
+																</span>
+																<span className="text-xs text-[var(--text-secondary)] font-semibold">
+																	({tag.count}{" "}
+																	{tag.count === 1 ? "title" : "titles"})
+																</span>
+															</div>
 
-																	<div className="flex items-center space-x-2 text-[var(--text-secondary)]">
-																		<span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
-																			{isExpanded
-																				? "Collapse Analysis"
-																				: "Deep Analyze"}
-																		</span>
-																		{isExpanded ? (
-																			<ChevronUp size={16} />
-																		) : (
-																			<ChevronDown size={16} />
-																		)}
-																	</div>
-																</div>
-
-																{/* Expanded panel */}
-																{isExpanded && (
-																	<div className="p-6 bg-[var(--bg-card)] border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-350">
-																		<DeferredChartsWrapper>
-																			<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-																				{/* Demographics Breakdown */}
-																				<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																					<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																						Demographics
-																					</span>
-																					<div className="h-44">
-																						{creator.demographics &&
-																						creator.demographics.length > 0 ? (
-																							<ResponsiveContainer
-																								width="100%"
-																								height="100%"
-																							>
-																								<BarChart
-																									data={creator.demographics}
-																									layout="vertical"
-																									margin={{
-																										left: 10,
-																										right: 10,
-																										top: 5,
-																										bottom: 5,
-																									}}
-																								>
-																									<CartesianGrid
-																										strokeDasharray="3 3"
-																										horizontal={false}
-																										vertical={true}
-																									/>
-																									<XAxis
-																										type="number"
-																										allowDecimals={false}
-																									/>
-																									<YAxis
-																										dataKey="name"
-																										type="category"
-																										width={120}
-																										style={{
-																											fontSize: "10px",
-																											fontWeight: "bold",
-																										}}
-																										tickFormatter={(name) => {
-																											const entry =
-																												creator.demographics.find(
-																													(d: any) =>
-																														d.name === name,
-																												);
-																											const total =
-																												creator.demographics.reduce(
-																													(
-																														sum: number,
-																														d: any,
-																													) => sum + d.value,
-																													0,
-																												);
-																											return entry && total > 0
-																												? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																												: name;
-																										}}
-																									/>
-																									<Tooltip
-																										contentStyle={{
-																											backgroundColor:
-																												"var(--bg-card)",
-																											borderColor:
-																												"var(--border-primary)",
-																											color:
-																												"var(--text-primary)",
-																											borderRadius: "12px",
-																											fontSize: "12px",
-																										}}
-																										itemStyle={{
-																											color:
-																												"var(--text-primary)",
-																										}}
-																										labelStyle={{
-																											color:
-																												"var(--text-secondary)",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<Bar
-																										dataKey="value"
-																										radius={[0, 4, 4, 0]}
-																									>
-																										{creator.demographics.map(
-																											(
-																												entry: any,
-																												idx: number,
-																											) => (
-																												<Cell
-																													key={`cell-${idx}`}
-																													fill={
-																														DEMO_COLORS[
-																															entry.name
-																														] || "#3B82F6"
-																													}
-																												/>
-																											),
-																										)}
-																									</Bar>
-																								</BarChart>
-																							</ResponsiveContainer>
-																						) : (
-																							<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																								No demographic data.
-																							</div>
-																						)}
-																					</div>
-																				</div>
-
-																				{/* Content Ratings Breakdown */}
-																				<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																					<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																						Content Ratings
-																					</span>
-																					<div className="h-44">
-																						{creator.content_ratings &&
-																						creator.content_ratings.length >
-																							0 ? (
-																							<ResponsiveContainer
-																								width="100%"
-																								height="100%"
-																							>
-																								<BarChart
-																									data={creator.content_ratings}
-																									layout="vertical"
-																									margin={{
-																										left: 10,
-																										right: 10,
-																										top: 5,
-																										bottom: 5,
-																									}}
-																								>
-																									<CartesianGrid
-																										strokeDasharray="3 3"
-																										horizontal={false}
-																										vertical={true}
-																									/>
-																									<XAxis
-																										type="number"
-																										allowDecimals={false}
-																									/>
-																									<YAxis
-																										dataKey="name"
-																										type="category"
-																										width={120}
-																										style={{
-																											fontSize: "10px",
-																											fontWeight: "bold",
-																										}}
-																										tickFormatter={(name) => {
-																											const entry =
-																												creator.content_ratings.find(
-																													(c: any) =>
-																														c.name === name,
-																												);
-																											const total =
-																												creator.content_ratings.reduce(
-																													(
-																														sum: number,
-																														c: any,
-																													) => sum + c.value,
-																													0,
-																												);
-																											return entry && total > 0
-																												? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																												: name;
-																										}}
-																									/>
-																									<Tooltip
-																										contentStyle={{
-																											backgroundColor:
-																												"var(--bg-card)",
-																											borderColor:
-																												"var(--border-primary)",
-																											color:
-																												"var(--text-primary)",
-																											borderRadius: "12px",
-																											fontSize: "12px",
-																										}}
-																										itemStyle={{
-																											color:
-																												"var(--text-primary)",
-																										}}
-																										labelStyle={{
-																											color:
-																												"var(--text-secondary)",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<Bar
-																										dataKey="value"
-																										radius={[0, 4, 4, 0]}
-																									>
-																										{creator.content_ratings.map(
-																											(
-																												entry: any,
-																												idx: number,
-																											) => (
-																												<Cell
-																													key={`cell-${idx}`}
-																													fill={
-																														CONTENT_RATING_COLORS[
-																															entry.name
-																														] || "#10B981"
-																													}
-																												/>
-																											),
-																										)}
-																									</Bar>
-																								</BarChart>
-																							</ResponsiveContainer>
-																						) : (
-																							<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																								No content rating data.
-																							</div>
-																						)}
-																					</div>
-																				</div>
-
-																				{/* Read Status Breakdown */}
-																				<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																					<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																						Read Statuses
-																					</span>
-																					<div className="h-44">
-																						{creator.read_statuses &&
-																						creator.read_statuses.length > 0 ? (
-																							<ResponsiveContainer
-																								width="100%"
-																								height="100%"
-																							>
-																								<BarChart
-																									data={creator.read_statuses}
-																									layout="vertical"
-																									margin={{
-																										left: 10,
-																										right: 10,
-																										top: 5,
-																										bottom: 5,
-																									}}
-																								>
-																									<CartesianGrid
-																										strokeDasharray="3 3"
-																										horizontal={false}
-																										vertical={true}
-																									/>
-																									<XAxis
-																										type="number"
-																										allowDecimals={false}
-																									/>
-																									<YAxis
-																										dataKey="name"
-																										type="category"
-																										width={120}
-																										style={{
-																											fontSize: "10px",
-																											fontWeight: "bold",
-																										}}
-																										tickFormatter={(name) => {
-																											const entry =
-																												creator.read_statuses.find(
-																													(r: any) =>
-																														r.name === name,
-																												);
-																											const total =
-																												creator.read_statuses.reduce(
-																													(
-																														sum: number,
-																														r: any,
-																													) => sum + r.value,
-																													0,
-																												);
-																											return entry && total > 0
-																												? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																												: name;
-																										}}
-																									/>
-																									<Tooltip
-																										contentStyle={{
-																											backgroundColor:
-																												"var(--bg-card)",
-																											borderColor:
-																												"var(--border-primary)",
-																											color:
-																												"var(--text-primary)",
-																											borderRadius: "12px",
-																											fontSize: "12px",
-																										}}
-																										itemStyle={{
-																											color:
-																												"var(--text-primary)",
-																										}}
-																										labelStyle={{
-																											color:
-																												"var(--text-secondary)",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<Bar
-																										dataKey="value"
-																										radius={[0, 4, 4, 0]}
-																									>
-																										{creator.read_statuses.map(
-																											(
-																												entry: any,
-																												idx: number,
-																											) => (
-																												<Cell
-																													key={`cell-${idx}`}
-																													fill={getReadStatusColor(
-																														entry.name,
-																													)}
-																												/>
-																											),
-																										)}
-																									</Bar>
-																								</BarChart>
-																							</ResponsiveContainer>
-																						) : (
-																							<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																								No read status data.
-																							</div>
-																						)}
-																					</div>
-																				</div>
-
-																				{/* Top Genres / Tags Breakdown */}
-																				<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																					<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																						Top Genres / Tags
-																					</span>
-																					<div className="h-44">
-																						{creator.tags &&
-																						creator.tags.length > 0 ? (
-																							<ResponsiveContainer
-																								width="100%"
-																								height="100%"
-																							>
-																								<BarChart
-																									data={creator.tags}
-																									layout="vertical"
-																									margin={{
-																										left: 10,
-																										right: 10,
-																										top: 5,
-																										bottom: 5,
-																									}}
-																								>
-																									<CartesianGrid
-																										strokeDasharray="3 3"
-																										horizontal={false}
-																										vertical={true}
-																									/>
-																									<XAxis
-																										type="number"
-																										allowDecimals={false}
-																									/>
-																									<YAxis
-																										dataKey="name"
-																										type="category"
-																										width={130}
-																										style={{
-																											fontSize: "10px",
-																											fontWeight: "bold",
-																										}}
-																										tickFormatter={(name) => {
-																											const entry =
-																												creator.tags.find(
-																													(t: any) =>
-																														t.name === name,
-																												);
-																											return entry &&
-																												creator.count > 0
-																												? `${name} (${Math.round((entry.count / creator.count) * 100)}%)`
-																												: name;
-																										}}
-																									/>
-																									<Tooltip
-																										contentStyle={{
-																											backgroundColor:
-																												"var(--bg-card)",
-																											borderColor:
-																												"var(--border-primary)",
-																											color:
-																												"var(--text-primary)",
-																											borderRadius: "12px",
-																											fontSize: "12px",
-																										}}
-																										itemStyle={{
-																											color:
-																												"var(--text-primary)",
-																										}}
-																										labelStyle={{
-																											color:
-																												"var(--text-secondary)",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<Bar
-																										dataKey="count"
-																										radius={[0, 4, 4, 0]}
-																									>
-																										{creator.tags.map(
-																											(
-																												entry: any,
-																												idx: number,
-																											) => (
-																												<Cell
-																													key={`cell-${idx}`}
-																													fill={
-																														entry.color ||
-																														"var(--brand-orange)"
-																													}
-																												/>
-																											),
-																										)}
-																									</Bar>
-																								</BarChart>
-																							</ResponsiveContainer>
-																						) : (
-																							<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																								No tag data.
-																							</div>
-																						)}
-																					</div>
-																				</div>
-
-																				{/* Personal Score Distribution (Full Width) */}
-																				<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2 md:col-span-2">
-																					<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																						Personal Scores (Completed)
-																					</span>
-																					<div className="h-44">
-																						{creator.ratings &&
-																						creator.ratings.length > 0 ? (
-																							<ResponsiveContainer
-																								width="100%"
-																								height="100%"
-																							>
-																								<BarChart
-																									data={creator.ratings}
-																									margin={{
-																										left: 5,
-																										right: 5,
-																										top: 10,
-																										bottom: 5,
-																									}}
-																								>
-																									<CartesianGrid
-																										strokeDasharray="3 3"
-																										horizontal={true}
-																										vertical={false}
-																									/>
-																									<XAxis
-																										dataKey="score"
-																										style={{
-																											fontSize: "10px",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<YAxis
-																										allowDecimals={false}
-																									/>
-																									<Tooltip
-																										contentStyle={{
-																											backgroundColor:
-																												"var(--bg-card)",
-																											borderColor:
-																												"var(--border-primary)",
-																											color:
-																												"var(--text-primary)",
-																											borderRadius: "12px",
-																											fontSize: "12px",
-																										}}
-																										itemStyle={{
-																											color:
-																												"var(--text-primary)",
-																										}}
-																										labelStyle={{
-																											color:
-																												"var(--text-secondary)",
-																											fontWeight: "bold",
-																										}}
-																									/>
-																									<Bar
-																										dataKey="count"
-																										fill="var(--brand-orange)"
-																										radius={[4, 4, 0, 0]}
-																									/>
-																								</BarChart>
-																							</ResponsiveContainer>
-																						) : (
-																							<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																								No ratings on completed mangas.
-																							</div>
-																						)}
-																					</div>
-																				</div>
-																			</div>
-																		</DeferredChartsWrapper>
-																	</div>
+															<div className="flex items-center space-x-2 text-[var(--text-secondary)]">
+																<span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+																	{isExpanded
+																		? "Collapse Analysis"
+																		: "Deep Analyze"}
+																</span>
+																{isExpanded ? (
+																	<ChevronUp size={16} />
+																) : (
+																	<ChevronDown size={16} />
 																)}
 															</div>
-														);
-													})}
-												</div>
-											)}
+														</div>
+
+														{/* Tag Distributions Panel */}
+														{isExpanded && (
+															<div className="p-6 bg-[var(--bg-card)] border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-350">
+																<DeferredChartsWrapper>
+																	<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+																		{/* Demographic Chart */}
+																		<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																			<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																				Demographics
+																			</span>
+																			<div className="h-44">
+																				{tag.demographics &&
+																				tag.demographics.length > 0 ? (
+																					<ResponsiveContainer
+																						width="100%"
+																						height="100%"
+																					>
+																						<BarChart
+																							data={tag.demographics}
+																							layout="vertical"
+																							margin={{
+																								left: 10,
+																								right: 10,
+																								top: 5,
+																								bottom: 5,
+																							}}
+																						>
+																							<CartesianGrid
+																								strokeDasharray="3 3"
+																								horizontal={false}
+																								vertical={true}
+																							/>
+																							<XAxis
+																								type="number"
+																								allowDecimals={false}
+																							/>
+																							<YAxis
+																								dataKey="name"
+																								type="category"
+																								width={120}
+																								style={{
+																									fontSize: "10px",
+																									fontWeight: "bold",
+																								}}
+																								tickFormatter={(name) => {
+																									const entry =
+																										tag.demographics.find(
+																											(d: any) =>
+																												d.name === name,
+																										);
+																									const total =
+																										tag.demographics.reduce(
+																											(sum: number, d: any) =>
+																												sum + d.value,
+																											0,
+																										);
+																									return entry && total > 0
+																										? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																										: name;
+																								}}
+																							/>
+																							<Tooltip
+																								contentStyle={{
+																									backgroundColor:
+																										"var(--bg-card)",
+																									borderColor:
+																										"var(--border-primary)",
+																									color: "var(--text-primary)",
+																									borderRadius: "12px",
+																									fontSize: "12px",
+																								}}
+																								itemStyle={{
+																									color: "var(--text-primary)",
+																								}}
+																								labelStyle={{
+																									color:
+																										"var(--text-secondary)",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<Bar
+																								dataKey="value"
+																								radius={[0, 4, 4, 0]}
+																							>
+																								{tag.demographics.map(
+																									(
+																										entry: any,
+																										index: number,
+																									) => {
+																										const demoColors: Record<
+																											string,
+																											string
+																										> = {
+																											Shounen: "#3B82F6",
+																											Seinen: "#8B5CF6",
+																											Shoujo: "#EC4899",
+																											Josei: "#F43F5E",
+																											Unknown: "#9CA3AF",
+																										};
+																										return (
+																											<Cell
+																												key={`cell-${index}`}
+																												fill={
+																													demoColors[
+																														entry.name
+																													] || "#3B82F6"
+																												}
+																											/>
+																										);
+																									},
+																								)}
+																							</Bar>
+																						</BarChart>
+																					</ResponsiveContainer>
+																				) : (
+																					<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																						No demographic data.
+																					</div>
+																				)}
+																			</div>
+																		</div>
+
+																		{/* Content Rating Chart */}
+																		<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																			<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																				Content Ratings
+																			</span>
+																			<div className="h-44">
+																				{tag.content_ratings &&
+																				tag.content_ratings.length > 0 ? (
+																					<ResponsiveContainer
+																						width="100%"
+																						height="100%"
+																					>
+																						<BarChart
+																							data={tag.content_ratings}
+																							layout="vertical"
+																							margin={{
+																								left: 10,
+																								right: 10,
+																								top: 5,
+																								bottom: 5,
+																							}}
+																						>
+																							<CartesianGrid
+																								strokeDasharray="3 3"
+																								horizontal={false}
+																								vertical={true}
+																							/>
+																							<XAxis
+																								type="number"
+																								allowDecimals={false}
+																							/>
+																							<YAxis
+																								dataKey="name"
+																								type="category"
+																								width={120}
+																								style={{
+																									fontSize: "10px",
+																									fontWeight: "bold",
+																								}}
+																								tickFormatter={(name) => {
+																									const entry =
+																										tag.content_ratings.find(
+																											(c: any) =>
+																												c.name === name,
+																										);
+																									const total =
+																										tag.content_ratings.reduce(
+																											(sum: number, c: any) =>
+																												sum + c.value,
+																											0,
+																										);
+																									return entry && total > 0
+																										? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																										: name;
+																								}}
+																							/>
+																							<Tooltip
+																								contentStyle={{
+																									backgroundColor:
+																										"var(--bg-card)",
+																									borderColor:
+																										"var(--border-primary)",
+																									color: "var(--text-primary)",
+																									borderRadius: "12px",
+																									fontSize: "12px",
+																								}}
+																								itemStyle={{
+																									color: "var(--text-primary)",
+																								}}
+																								labelStyle={{
+																									color:
+																										"var(--text-secondary)",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<Bar
+																								dataKey="value"
+																								radius={[0, 4, 4, 0]}
+																							>
+																								{tag.content_ratings.map(
+																									(
+																										entry: any,
+																										index: number,
+																									) => {
+																										const ratingColors: Record<
+																											string,
+																											string
+																										> = {
+																											Safe: "#10B981",
+																											Suggestive: "#F59E0B",
+																											Erotica: "#D946EF",
+																											Pornographic: "#EF4444",
+																											Unknown: "#9CA3AF",
+																										};
+																										return (
+																											<Cell
+																												key={`cell-${index}`}
+																												fill={
+																													ratingColors[
+																														entry.name
+																													] || "#10B981"
+																												}
+																											/>
+																										);
+																									},
+																								)}
+																							</Bar>
+																						</BarChart>
+																					</ResponsiveContainer>
+																				) : (
+																					<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																						No content rating data.
+																					</div>
+																				)}
+																			</div>
+																		</div>
+
+																		{/* Publication Status Chart */}
+																		<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																			<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																				Publication Status
+																			</span>
+																			<div className="h-44">
+																				{tag.statuses &&
+																				tag.statuses.length > 0 ? (
+																					<ResponsiveContainer
+																						width="100%"
+																						height="100%"
+																					>
+																						<BarChart
+																							data={tag.statuses}
+																							layout="vertical"
+																							margin={{
+																								left: 10,
+																								right: 10,
+																								top: 5,
+																								bottom: 5,
+																							}}
+																						>
+																							<CartesianGrid
+																								strokeDasharray="3 3"
+																								horizontal={false}
+																								vertical={true}
+																							/>
+																							<XAxis
+																								type="number"
+																								allowDecimals={false}
+																							/>
+																							<YAxis
+																								dataKey="name"
+																								type="category"
+																								width={120}
+																								style={{
+																									fontSize: "10px",
+																									fontWeight: "bold",
+																								}}
+																								tickFormatter={(name) => {
+																									const entry =
+																										tag.statuses.find(
+																											(s: any) =>
+																												s.name === name,
+																										);
+																									const total =
+																										tag.statuses.reduce(
+																											(sum: number, s: any) =>
+																												sum + s.value,
+																											0,
+																										);
+																									return entry && total > 0
+																										? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																										: name;
+																								}}
+																							/>
+																							<Tooltip
+																								contentStyle={{
+																									backgroundColor:
+																										"var(--bg-card)",
+																									borderColor:
+																										"var(--border-primary)",
+																									color: "var(--text-primary)",
+																									borderRadius: "12px",
+																									fontSize: "12px",
+																								}}
+																								itemStyle={{
+																									color: "var(--text-primary)",
+																								}}
+																								labelStyle={{
+																									color:
+																										"var(--text-secondary)",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<Bar
+																								dataKey="value"
+																								radius={[0, 4, 4, 0]}
+																							>
+																								{tag.statuses.map(
+																									(
+																										entry: any,
+																										index: number,
+																									) => {
+																										const statusColors: Record<
+																											string,
+																											string
+																										> = {
+																											Ongoing: "#3B82F6",
+																											Completed: "#10B981",
+																											Hiatus: "#F59E0B",
+																											Cancelled: "#EF4444",
+																											Unknown: "#9CA3AF",
+																										};
+																										return (
+																											<Cell
+																												key={`cell-${index}`}
+																												fill={
+																													statusColors[
+																														entry.name
+																													] || "#3B82F6"
+																												}
+																											/>
+																										);
+																									},
+																								)}
+																							</Bar>
+																						</BarChart>
+																					</ResponsiveContainer>
+																				) : (
+																					<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																						No status data.
+																					</div>
+																				)}
+																			</div>
+																		</div>
+
+																		{/* Read Statuses Chart */}
+																		<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
+																			<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																				Read Statuses
+																			</span>
+																			<div className="h-44">
+																				{tag.read_statuses &&
+																				tag.read_statuses.length > 0 ? (
+																					<ResponsiveContainer
+																						width="100%"
+																						height="100%"
+																					>
+																						<BarChart
+																							data={tag.read_statuses}
+																							layout="vertical"
+																							margin={{
+																								left: 10,
+																								right: 10,
+																								top: 5,
+																								bottom: 5,
+																							}}
+																						>
+																							<CartesianGrid
+																								strokeDasharray="3 3"
+																								horizontal={false}
+																								vertical={true}
+																							/>
+																							<XAxis
+																								type="number"
+																								allowDecimals={false}
+																							/>
+																							<YAxis
+																								dataKey="name"
+																								type="category"
+																								width={120}
+																								style={{
+																									fontSize: "10px",
+																									fontWeight: "bold",
+																								}}
+																								tickFormatter={(name) => {
+																									const entry =
+																										tag.read_statuses.find(
+																											(r: any) =>
+																												r.name === name,
+																										);
+																									const total =
+																										tag.read_statuses.reduce(
+																											(sum: number, r: any) =>
+																												sum + r.value,
+																											0,
+																										);
+																									return entry && total > 0
+																										? `${name} (${Math.round((entry.value / total) * 100)}%)`
+																										: name;
+																								}}
+																							/>
+																							<Tooltip
+																								contentStyle={{
+																									backgroundColor:
+																										"var(--bg-card)",
+																									borderColor:
+																										"var(--border-primary)",
+																									color: "var(--text-primary)",
+																									borderRadius: "12px",
+																									fontSize: "12px",
+																								}}
+																								itemStyle={{
+																									color: "var(--text-primary)",
+																								}}
+																								labelStyle={{
+																									color:
+																										"var(--text-secondary)",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<Bar
+																								dataKey="value"
+																								radius={[0, 4, 4, 0]}
+																							>
+																								{tag.read_statuses.map(
+																									(
+																										entry: any,
+																										index: number,
+																									) => {
+																										return (
+																											<Cell
+																												key={`cell-${index}`}
+																												fill={getReadStatusColor(
+																													entry.name,
+																												)}
+																											/>
+																										);
+																									},
+																								)}
+																							</Bar>
+																						</BarChart>
+																					</ResponsiveContainer>
+																				) : (
+																					<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																						No read status data.
+																					</div>
+																				)}
+																			</div>
+																		</div>
+
+																		{/* Score Distribution Chart */}
+																		<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2 md:col-span-2">
+																			<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+																				Personal Scores (Completed)
+																			</span>
+																			<div className="h-44">
+																				{tag.ratings &&
+																				tag.ratings.length > 0 ? (
+																					<ResponsiveContainer
+																						width="100%"
+																						height="100%"
+																					>
+																						<BarChart
+																							data={tag.ratings}
+																							margin={{
+																								left: 5,
+																								right: 5,
+																								top: 10,
+																								bottom: 5,
+																							}}
+																						>
+																							<CartesianGrid
+																								strokeDasharray="3 3"
+																								horizontal={true}
+																								vertical={false}
+																							/>
+																							<XAxis
+																								dataKey="score"
+																								style={{
+																									fontSize: "10px",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<YAxis allowDecimals={false} />
+																							<Tooltip
+																								contentStyle={{
+																									backgroundColor:
+																										"var(--bg-card)",
+																									borderColor:
+																										"var(--border-primary)",
+																									color: "var(--text-primary)",
+																									borderRadius: "12px",
+																									fontSize: "12px",
+																								}}
+																								itemStyle={{
+																									color: "var(--text-primary)",
+																								}}
+																								labelStyle={{
+																									color:
+																										"var(--text-secondary)",
+																									fontWeight: "bold",
+																								}}
+																							/>
+																							<Bar
+																								dataKey="count"
+																								fill="var(--brand-orange)"
+																								radius={[4, 4, 0, 0]}
+																							/>
+																						</BarChart>
+																					</ResponsiveContainer>
+																				) : (
+																					<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
+																						No ratings on completed mangas.
+																					</div>
+																				)}
+																			</div>
+																		</div>
+																	</div>
+																</DeferredChartsWrapper>
+															</div>
+														)}
+													</div>
+												);
+											})}
 										</div>
 									);
 								})()
 							)}
 						</div>
-					)}
-				</div>
-			)}
-
-			{/* TAB 4: THỂ LOẠI & TAGS */}
-			{currentTab === "tags" && (
-				<div className="space-y-8 animate-in fade-in duration-200">
-					{renderFiltersPool()}
-					{/* Genres / Tags in Pool Section */}
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 space-y-6 shadow-sm">
-						<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-							<h3 className="text-lg font-bold flex items-center space-x-2">
-								<TrendingUp size={20} className="text-[var(--brand-orange)]" />
-								<span>
-									{showAllTagDetails
-										? "Genres / Tags Analysis Dashboard"
-										: "Top 10 Genres / Tags in Pool"}
-								</span>
-							</h3>
-
-							<div className="flex flex-wrap items-center gap-4">
-								{/* Show all tag details toggle */}
-								<button
-									onClick={() => setShowAllTagDetails(!showAllTagDetails)}
-									className={`px-4 py-2 rounded-xl text-xs font-bold border transition duration-200 ${
-										showAllTagDetails
-											? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white shadow-md shadow-orange-500/20"
-											: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-									}`}
-								>
-									{showAllTagDetails
-										? "Show Top 10 Summary"
-										: "Show All & Analyze Distributions"}
-								</button>
-
-								{/* Search filter for all tags (only shown when showAllTagDetails is true) */}
-								{showAllTagDetails && (
-									<div className="relative w-full md:w-56">
-										<Search
-											size={14}
-											className="absolute left-3 top-2.5 text-zinc-400"
-										/>
-										<input
-											type="text"
-											placeholder="Search tags..."
-											value={tagDetailsSearch}
-											onChange={(e) => setTagDetailsSearch(e.target.value)}
-											className="w-full pl-8 pr-4 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
-										/>
-									</div>
-								)}
-							</div>
-						</div>
-
-						{!showAllTagDetails ? (
-							/* Render simple list of Top 10 tags */
-							topTags.length > 0 ? (
-								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-									{topTags.map((tag, idx) => (
-										<div
-											key={idx}
-											className="flex items-center justify-between p-3 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl"
-										>
-											<div className="flex items-center space-x-3">
-												<span className="w-6 h-6 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
-													{idx + 1}
-												</span>
-												<span
-													className="px-2 py-0.5 rounded text-xs font-semibold text-white"
-													style={{
-														backgroundColor: tag.color || "var(--brand-orange)",
-													}}
-												>
-													{tag.name}
-												</span>
-											</div>
-											<span className="text-sm font-semibold text-[var(--text-secondary)]">
-												{tag.count} {tag.count === 1 ? "manga" : "mangas"}
-											</span>
-										</div>
-									))}
-								</div>
-							) : (
-								<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
-									No tags aggregated in the selected pool.
-								</div>
-							)
-						) : /* Render detailed interactive tag dashboard */
-						tagDetailsLoading ? (
-							<TableRowsSkeleton
-								rows={6}
-								cols={3}
-								label="Đang tải dữ liệu phân tích tag..."
-							/>
-						) : (
-							(() => {
-								const filteredTagDetails = tagDetails.filter((t) =>
-									t.name.toLowerCase().includes(tagDetailsSearch.toLowerCase()),
-								);
-
-								if (filteredTagDetails.length === 0) {
-									return (
-										<div className="text-center py-8 text-[var(--text-secondary)] text-sm">
-											{tagDetails.length === 0
-												? "No tags found in this pool."
-												: "No tags match your search query."}
-										</div>
-									);
-								}
-
-								return (
-									<div className="space-y-4">
-										{filteredTagDetails.map((tag) => {
-											const isExpanded = expandedTagId === tag.tag_id;
-											const tagGlobalRank =
-												tagDetails.findIndex((t) => t.tag_id === tag.tag_id) +
-												1;
-											return (
-												<div
-													key={tag.tag_id}
-													className={`border rounded-2xl bg-[var(--bg-primary)] overflow-hidden transition-all duration-300 ${
-														isExpanded
-															? "border-[var(--brand-orange)] shadow-md shadow-orange-500/5"
-															: "border-[var(--border-primary)] hover:border-zinc-400"
-													}`}
-												>
-													{/* Tag Header Accordion Trigger */}
-													<div
-														onClick={() =>
-															setExpandedTagId(isExpanded ? null : tag.tag_id)
-														}
-														className="flex items-center justify-between p-4 cursor-pointer select-none"
-													>
-														<div className="flex items-center space-x-3 min-w-0">
-															<span className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-orange-50 dark:bg-zinc-800 text-[var(--brand-orange)] rounded-lg text-xs font-bold font-mono">
-																{tagGlobalRank}
-															</span>
-															<span
-																className="px-3 py-1 rounded-lg text-xs font-bold text-white shadow-sm"
-																style={{
-																	backgroundColor:
-																		tag.color || "var(--brand-orange)",
-																}}
-															>
-																{tag.name}
-															</span>
-															<span className="text-xs text-[var(--text-secondary)] font-semibold">
-																({tag.count}{" "}
-																{tag.count === 1 ? "title" : "titles"})
-															</span>
-														</div>
-
-														<div className="flex items-center space-x-2 text-[var(--text-secondary)]">
-															<span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
-																{isExpanded
-																	? "Collapse Analysis"
-																	: "Deep Analyze"}
-															</span>
-															{isExpanded ? (
-																<ChevronUp size={16} />
-															) : (
-																<ChevronDown size={16} />
-															)}
-														</div>
-													</div>
-
-													{/* Tag Distributions Panel */}
-													{isExpanded && (
-														<div className="p-6 bg-[var(--bg-card)] border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-350">
-															<DeferredChartsWrapper>
-																<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-																	{/* Demographic Chart */}
-																	<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																		<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																			Demographics
-																		</span>
-																		<div className="h-44">
-																			{tag.demographics &&
-																			tag.demographics.length > 0 ? (
-																				<ResponsiveContainer
-																					width="100%"
-																					height="100%"
-																				>
-																					<BarChart
-																						data={tag.demographics}
-																						layout="vertical"
-																						margin={{
-																							left: 10,
-																							right: 10,
-																							top: 5,
-																							bottom: 5,
-																						}}
-																					>
-																						<CartesianGrid
-																							strokeDasharray="3 3"
-																							horizontal={false}
-																							vertical={true}
-																						/>
-																						<XAxis
-																							type="number"
-																							allowDecimals={false}
-																						/>
-																						<YAxis
-																							dataKey="name"
-																							type="category"
-																							width={120}
-																							style={{
-																								fontSize: "10px",
-																								fontWeight: "bold",
-																							}}
-																							tickFormatter={(name) => {
-																								const entry =
-																									tag.demographics.find(
-																										(d: any) => d.name === name,
-																									);
-																								const total =
-																									tag.demographics.reduce(
-																										(sum: number, d: any) =>
-																											sum + d.value,
-																										0,
-																									);
-																								return entry && total > 0
-																									? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																									: name;
-																							}}
-																						/>
-																						<Tooltip
-																							contentStyle={{
-																								backgroundColor:
-																									"var(--bg-card)",
-																								borderColor:
-																									"var(--border-primary)",
-																								color: "var(--text-primary)",
-																								borderRadius: "12px",
-																								fontSize: "12px",
-																							}}
-																							itemStyle={{
-																								color: "var(--text-primary)",
-																							}}
-																							labelStyle={{
-																								color: "var(--text-secondary)",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<Bar
-																							dataKey="value"
-																							radius={[0, 4, 4, 0]}
-																						>
-																							{tag.demographics.map(
-																								(entry: any, index: number) => {
-																									const demoColors: Record<
-																										string,
-																										string
-																									> = {
-																										Shounen: "#3B82F6",
-																										Seinen: "#8B5CF6",
-																										Shoujo: "#EC4899",
-																										Josei: "#F43F5E",
-																										Unknown: "#9CA3AF",
-																									};
-																									return (
-																										<Cell
-																											key={`cell-${index}`}
-																											fill={
-																												demoColors[
-																													entry.name
-																												] || "#3B82F6"
-																											}
-																										/>
-																									);
-																								},
-																							)}
-																						</Bar>
-																					</BarChart>
-																				</ResponsiveContainer>
-																			) : (
-																				<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																					No demographic data.
-																				</div>
-																			)}
-																		</div>
-																	</div>
-
-																	{/* Content Rating Chart */}
-																	<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																		<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																			Content Ratings
-																		</span>
-																		<div className="h-44">
-																			{tag.content_ratings &&
-																			tag.content_ratings.length > 0 ? (
-																				<ResponsiveContainer
-																					width="100%"
-																					height="100%"
-																				>
-																					<BarChart
-																						data={tag.content_ratings}
-																						layout="vertical"
-																						margin={{
-																							left: 10,
-																							right: 10,
-																							top: 5,
-																							bottom: 5,
-																						}}
-																					>
-																						<CartesianGrid
-																							strokeDasharray="3 3"
-																							horizontal={false}
-																							vertical={true}
-																						/>
-																						<XAxis
-																							type="number"
-																							allowDecimals={false}
-																						/>
-																						<YAxis
-																							dataKey="name"
-																							type="category"
-																							width={120}
-																							style={{
-																								fontSize: "10px",
-																								fontWeight: "bold",
-																							}}
-																							tickFormatter={(name) => {
-																								const entry =
-																									tag.content_ratings.find(
-																										(c: any) => c.name === name,
-																									);
-																								const total =
-																									tag.content_ratings.reduce(
-																										(sum: number, c: any) =>
-																											sum + c.value,
-																										0,
-																									);
-																								return entry && total > 0
-																									? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																									: name;
-																							}}
-																						/>
-																						<Tooltip
-																							contentStyle={{
-																								backgroundColor:
-																									"var(--bg-card)",
-																								borderColor:
-																									"var(--border-primary)",
-																								color: "var(--text-primary)",
-																								borderRadius: "12px",
-																								fontSize: "12px",
-																							}}
-																							itemStyle={{
-																								color: "var(--text-primary)",
-																							}}
-																							labelStyle={{
-																								color: "var(--text-secondary)",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<Bar
-																							dataKey="value"
-																							radius={[0, 4, 4, 0]}
-																						>
-																							{tag.content_ratings.map(
-																								(entry: any, index: number) => {
-																									const ratingColors: Record<
-																										string,
-																										string
-																									> = {
-																										Safe: "#10B981",
-																										Suggestive: "#F59E0B",
-																										Erotica: "#D946EF",
-																										Pornographic: "#EF4444",
-																										Unknown: "#9CA3AF",
-																									};
-																									return (
-																										<Cell
-																											key={`cell-${index}`}
-																											fill={
-																												ratingColors[
-																													entry.name
-																												] || "#10B981"
-																											}
-																										/>
-																									);
-																								},
-																							)}
-																						</Bar>
-																					</BarChart>
-																				</ResponsiveContainer>
-																			) : (
-																				<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																					No content rating data.
-																				</div>
-																			)}
-																		</div>
-																	</div>
-
-																	{/* Publication Status Chart */}
-																	<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																		<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																			Publication Status
-																		</span>
-																		<div className="h-44">
-																			{tag.statuses &&
-																			tag.statuses.length > 0 ? (
-																				<ResponsiveContainer
-																					width="100%"
-																					height="100%"
-																				>
-																					<BarChart
-																						data={tag.statuses}
-																						layout="vertical"
-																						margin={{
-																							left: 10,
-																							right: 10,
-																							top: 5,
-																							bottom: 5,
-																						}}
-																					>
-																						<CartesianGrid
-																							strokeDasharray="3 3"
-																							horizontal={false}
-																							vertical={true}
-																						/>
-																						<XAxis
-																							type="number"
-																							allowDecimals={false}
-																						/>
-																						<YAxis
-																							dataKey="name"
-																							type="category"
-																							width={120}
-																							style={{
-																								fontSize: "10px",
-																								fontWeight: "bold",
-																							}}
-																							tickFormatter={(name) => {
-																								const entry = tag.statuses.find(
-																									(s: any) => s.name === name,
-																								);
-																								const total =
-																									tag.statuses.reduce(
-																										(sum: number, s: any) =>
-																											sum + s.value,
-																										0,
-																									);
-																								return entry && total > 0
-																									? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																									: name;
-																							}}
-																						/>
-																						<Tooltip
-																							contentStyle={{
-																								backgroundColor:
-																									"var(--bg-card)",
-																								borderColor:
-																									"var(--border-primary)",
-																								color: "var(--text-primary)",
-																								borderRadius: "12px",
-																								fontSize: "12px",
-																							}}
-																							itemStyle={{
-																								color: "var(--text-primary)",
-																							}}
-																							labelStyle={{
-																								color: "var(--text-secondary)",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<Bar
-																							dataKey="value"
-																							radius={[0, 4, 4, 0]}
-																						>
-																							{tag.statuses.map(
-																								(entry: any, index: number) => {
-																									const statusColors: Record<
-																										string,
-																										string
-																									> = {
-																										Ongoing: "#3B82F6",
-																										Completed: "#10B981",
-																										Hiatus: "#F59E0B",
-																										Cancelled: "#EF4444",
-																										Unknown: "#9CA3AF",
-																									};
-																									return (
-																										<Cell
-																											key={`cell-${index}`}
-																											fill={
-																												statusColors[
-																													entry.name
-																												] || "#3B82F6"
-																											}
-																										/>
-																									);
-																								},
-																							)}
-																						</Bar>
-																					</BarChart>
-																				</ResponsiveContainer>
-																			) : (
-																				<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																					No status data.
-																				</div>
-																			)}
-																		</div>
-																	</div>
-
-																	{/* Read Statuses Chart */}
-																	<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2">
-																		<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																			Read Statuses
-																		</span>
-																		<div className="h-44">
-																			{tag.read_statuses &&
-																			tag.read_statuses.length > 0 ? (
-																				<ResponsiveContainer
-																					width="100%"
-																					height="100%"
-																				>
-																					<BarChart
-																						data={tag.read_statuses}
-																						layout="vertical"
-																						margin={{
-																							left: 10,
-																							right: 10,
-																							top: 5,
-																							bottom: 5,
-																						}}
-																					>
-																						<CartesianGrid
-																							strokeDasharray="3 3"
-																							horizontal={false}
-																							vertical={true}
-																						/>
-																						<XAxis
-																							type="number"
-																							allowDecimals={false}
-																						/>
-																						<YAxis
-																							dataKey="name"
-																							type="category"
-																							width={120}
-																							style={{
-																								fontSize: "10px",
-																								fontWeight: "bold",
-																							}}
-																							tickFormatter={(name) => {
-																								const entry =
-																									tag.read_statuses.find(
-																										(r: any) => r.name === name,
-																									);
-																								const total =
-																									tag.read_statuses.reduce(
-																										(sum: number, r: any) =>
-																											sum + r.value,
-																										0,
-																									);
-																								return entry && total > 0
-																									? `${name} (${Math.round((entry.value / total) * 100)}%)`
-																									: name;
-																							}}
-																						/>
-																						<Tooltip
-																							contentStyle={{
-																								backgroundColor:
-																									"var(--bg-card)",
-																								borderColor:
-																									"var(--border-primary)",
-																								color: "var(--text-primary)",
-																								borderRadius: "12px",
-																								fontSize: "12px",
-																							}}
-																							itemStyle={{
-																								color: "var(--text-primary)",
-																							}}
-																							labelStyle={{
-																								color: "var(--text-secondary)",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<Bar
-																							dataKey="value"
-																							radius={[0, 4, 4, 0]}
-																						>
-																							{tag.read_statuses.map(
-																								(entry: any, index: number) => {
-																									return (
-																										<Cell
-																											key={`cell-${index}`}
-																											fill={getReadStatusColor(
-																												entry.name,
-																											)}
-																										/>
-																									);
-																								},
-																							)}
-																						</Bar>
-																					</BarChart>
-																				</ResponsiveContainer>
-																			) : (
-																				<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																					No read status data.
-																				</div>
-																			)}
-																		</div>
-																	</div>
-
-																	{/* Score Distribution Chart */}
-																	<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-4 space-y-2 md:col-span-2">
-																		<span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-																			Personal Scores (Completed)
-																		</span>
-																		<div className="h-44">
-																			{tag.ratings && tag.ratings.length > 0 ? (
-																				<ResponsiveContainer
-																					width="100%"
-																					height="100%"
-																				>
-																					<BarChart
-																						data={tag.ratings}
-																						margin={{
-																							left: 5,
-																							right: 5,
-																							top: 10,
-																							bottom: 5,
-																						}}
-																					>
-																						<CartesianGrid
-																							strokeDasharray="3 3"
-																							horizontal={true}
-																							vertical={false}
-																						/>
-																						<XAxis
-																							dataKey="score"
-																							style={{
-																								fontSize: "10px",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<YAxis allowDecimals={false} />
-																						<Tooltip
-																							contentStyle={{
-																								backgroundColor:
-																									"var(--bg-card)",
-																								borderColor:
-																									"var(--border-primary)",
-																								color: "var(--text-primary)",
-																								borderRadius: "12px",
-																								fontSize: "12px",
-																							}}
-																							itemStyle={{
-																								color: "var(--text-primary)",
-																							}}
-																							labelStyle={{
-																								color: "var(--text-secondary)",
-																								fontWeight: "bold",
-																							}}
-																						/>
-																						<Bar
-																							dataKey="count"
-																							fill="var(--brand-orange)"
-																							radius={[4, 4, 0, 0]}
-																						/>
-																					</BarChart>
-																				</ResponsiveContainer>
-																			) : (
-																				<div className="flex h-full items-center justify-center text-xs text-zinc-400 italic">
-																					No ratings on completed mangas.
-																				</div>
-																			)}
-																		</div>
-																	</div>
-																</div>
-															</DeferredChartsWrapper>
-														</div>
-													)}
-												</div>
-											);
-										})}
-									</div>
-								);
-							})()
-						)}
 					</div>
-				</div>
-			)}
+				)}
 
-			{/* TAB 5: TỔNG HỢP & XUẤT REVIEW AI */}
-			{currentTab === "ai-export" && (
-				<div className="animate-in fade-in duration-200">
-					<ReviewCorpusExport />
-				</div>
-			)}
+				{/* TAB 5: TỔNG HỢP & XUẤT REVIEW AI */}
+				{currentTab === "ai-export" && (
+					<div>
+						<ReviewCorpusExport />
+					</div>
+				)}
+			</AnimatedTabPanel>
 		</div>
 	);
 };

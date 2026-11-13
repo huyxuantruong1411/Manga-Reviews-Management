@@ -33,6 +33,10 @@ import {
 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+	AnimatedTabPanel,
+	AnimatedTabPill,
+} from "@/components/motion/MotionPrimitives";
 import client from "../api/client";
 import { publishToPool } from "../api/datalakePool";
 import { ReviewEditor } from "../components/editor/ReviewEditor";
@@ -50,6 +54,7 @@ import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput"
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
+import { useConfirm } from "../hooks/useConfirm";
 import { useDownload } from "../hooks/useDownload";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 import {
@@ -918,6 +923,7 @@ export const MangaDetailPage: React.FC = () => {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { showAlert, showToast } = useAlert();
+	const { confirm } = useConfirm();
 	const { settings, shouldBlur } = useMangaBlur();
 	const isRatingHidden = settings.enabled && settings.hideRating;
 
@@ -2139,12 +2145,15 @@ export const MangaDetailPage: React.FC = () => {
 	// Delete Manga
 
 	const handleDeleteManga = async () => {
-		if (
-			!window.confirm(
-				"CRITICAL WARNING: This will permanently delete this manga, all its reviews, and cover assets. Continue?",
-			)
-		)
-			return;
+		const accepted = await confirm({
+			title: "Xóa vĩnh viễn Manga?",
+			message:
+				"CẢNH BÁO: Thao tác này sẽ xóa vĩnh viễn bộ manga này, toàn bộ bài đánh giá và ảnh bìa lưu trữ. Bạn có chắc muốn tiếp tục?",
+			confirmLabel: "Xóa vĩnh viễn",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!accepted) return;
 		try {
 			await client.delete(`/api/manga/${manga?._id}`);
 			showAlert({
@@ -2595,7 +2604,15 @@ export const MangaDetailPage: React.FC = () => {
 	};
 
 	const handleDeleteReview = async (reviewId: string) => {
-		if (!window.confirm("Are you sure you want to delete this review?")) return;
+		const accepted = await confirm({
+			title: "Xóa bài đánh giá?",
+			message:
+				"Bạn có chắc chắn muốn xóa bài đánh giá này? Hành động không thể hoàn tác.",
+			confirmLabel: "Xóa bài",
+			cancelLabel: "Giữ lại",
+			variant: "danger",
+		});
+		if (!accepted) return;
 		try {
 			await client.delete(`/api/manga/${manga?._id}/reviews/${reviewId}`);
 			setReviews((prev) => prev.filter((r) => r._id !== reviewId));
@@ -3648,145 +3665,94 @@ export const MangaDetailPage: React.FC = () => {
 				{/* Left / Main Workspace Content (Full Widescreen Responsive) */}
 				<div className="flex-1 min-w-0 w-full space-y-8">
 					{/* Tab Contents */}
-					{activeTab === "details" && (
-						<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-							{/* Synopsis (Col Span 2) */}
-							<div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm">
-								<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
-									<FileText size={18} className="text-[var(--brand-orange)]" />
-									<span>Synopsis</span>
-								</h3>
-								<div className="text-sm leading-relaxed text-[var(--text-secondary)]">
-									{renderMarkdown(manga.description)}
-								</div>
-								{providers.length > 0 && (
-									<div className="pt-4 border-t border-[var(--border-primary)]/60 space-y-2">
-										<span className="text-xs font-extrabold text-[var(--text-secondary)] uppercase tracking-wider block">
-											Official Links & Retailers
-										</span>
-										<div className="flex flex-wrap gap-2.5">
-											{providers.map((link, idx) => (
-												<a
-													key={idx}
-													href={link.url}
-													target="_blank"
-													rel="noopener noreferrer"
-													className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition ${getProviderStyle(link.title)}`}
-												>
-													{getProviderIcon(link.title)}
-													<span>{link.title}</span>
-												</a>
-											))}
-										</div>
-									</div>
-								)}
-							</div>
-
-							{/* Alternative Titles (Col Span 1) */}
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm overflow-hidden">
-								<div className="flex justify-between items-center">
-									<h3 className="text-base font-bold flex items-center space-x-2 text-[var(--text-primary)]">
-										<Globe size={18} className="text-blue-500" />
-										<span>Alternative Titles</span>
+					<AnimatedTabPanel tabKey={activeTab}>
+						{activeTab === "details" && (
+							<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+								{/* Synopsis (Col Span 2) */}
+								<div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm">
+									<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
+										<FileText
+											size={18}
+											className="text-[var(--brand-orange)]"
+										/>
+										<span>Synopsis</span>
 									</h3>
-									{!isEditingAltTitles ? (
-										<button
-											type="button"
-											onClick={handleStartEditAltTitles}
-											className="flex items-center space-x-1.5 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
-										>
-											<Edit2 size={12} />
-											<span>Edit</span>
-										</button>
-									) : (
-										<div className="flex items-center space-x-2">
-											<button
-												type="button"
-												onClick={handleSaveAltTitles}
-												disabled={savingAltTitles}
-												className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-sm"
-											>
-												{savingAltTitles ? (
-													<Loader2 size={12} className="animate-spin" />
-												) : (
-													<Check size={12} />
-												)}
-												<span>Save</span>
-											</button>
-											<button
-												type="button"
-												onClick={() => setIsEditingAltTitles(false)}
-												disabled={savingAltTitles}
-												className="flex items-center space-x-1 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
-											>
-												<X size={12} />
-												<span>Cancel</span>
-											</button>
+									<div className="text-sm leading-relaxed text-[var(--text-secondary)]">
+										{renderMarkdown(manga.description)}
+									</div>
+									{providers.length > 0 && (
+										<div className="pt-4 border-t border-[var(--border-primary)]/60 space-y-2">
+											<span className="text-xs font-extrabold text-[var(--text-secondary)] uppercase tracking-wider block">
+												Official Links & Retailers
+											</span>
+											<div className="flex flex-wrap gap-2.5">
+												{providers.map((link, idx) => (
+													<a
+														key={idx}
+														href={link.url}
+														target="_blank"
+														rel="noopener noreferrer"
+														className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition ${getProviderStyle(link.title)}`}
+													>
+														{getProviderIcon(link.title)}
+														<span>{link.title}</span>
+													</a>
+												))}
+											</div>
 										</div>
 									)}
 								</div>
 
-								{!isEditingAltTitles ? (
-									manga.alt_titles && manga.alt_titles.length > 0 ? (
-										<div className="overflow-x-auto max-h-[460px] overflow-y-auto pr-1">
-											<table className="w-full text-left border-collapse">
-												<tbody>
-													{manga.alt_titles.map((alt, idx) => {
-														let lang = "en";
-														let title = alt;
-														if (alt.includes("|")) {
-															const parts = alt.split("|");
-															lang = parts[0];
-															title = parts.slice(1).join("|");
-														}
-														const flag = getFlagInfo(lang);
-														return (
-															<tr
-																key={idx}
-																className="border-b border-[var(--border-primary)]/40 last:border-0"
-															>
-																<td className="py-2.5 pr-3 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap w-[75px] align-middle">
-																	<div className="flex items-center space-x-1.5">
-																		<img
-																			src={flag.flagUrl}
-																			alt={flag.label}
-																			className="w-5 h-3.5 object-cover rounded shadow-sm shrink-0"
-																			onError={(e) => {
-																				(e.target as HTMLImageElement).src =
-																					"https://flagcdn.com/w20/us.png";
-																			}}
-																		/>
-																		<span className="min-w-[20px]">
-																			{flag.label}
-																		</span>
-																		{flag.isRomanized && (
-																			<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
-																				RO
-																			</span>
-																		)}
-																	</div>
-																</td>
-																<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium break-words align-middle">
-																	{title}
-																</td>
-															</tr>
-														);
-													})}
-												</tbody>
-											</table>
-										</div>
-									) : (
-										<div className="text-xs text-[var(--text-secondary)] italic py-4 text-center">
-											No alternative titles available. Click Edit to add titles.
-										</div>
-									)
-								) : (
-									<div className="space-y-4">
-										{localAltTitles.length > 0 ? (
-											<div className="overflow-x-auto max-h-[360px] overflow-y-auto pr-1">
+								{/* Alternative Titles (Col Span 1) */}
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 space-y-4 shadow-sm overflow-hidden">
+									<div className="flex justify-between items-center">
+										<h3 className="text-base font-bold flex items-center space-x-2 text-[var(--text-primary)]">
+											<Globe size={18} className="text-blue-500" />
+											<span>Alternative Titles</span>
+										</h3>
+										{!isEditingAltTitles ? (
+											<button
+												type="button"
+												onClick={handleStartEditAltTitles}
+												className="flex items-center space-x-1.5 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+											>
+												<Edit2 size={12} />
+												<span>Edit</span>
+											</button>
+										) : (
+											<div className="flex items-center space-x-2">
+												<button
+													type="button"
+													onClick={handleSaveAltTitles}
+													disabled={savingAltTitles}
+													className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-sm"
+												>
+													{savingAltTitles ? (
+														<Loader2 size={12} className="animate-spin" />
+													) : (
+														<Check size={12} />
+													)}
+													<span>Save</span>
+												</button>
+												<button
+													type="button"
+													onClick={() => setIsEditingAltTitles(false)}
+													disabled={savingAltTitles}
+													className="flex items-center space-x-1 px-3 py-1.5 border border-[var(--border-primary)] rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 font-bold text-xs transition text-[var(--text-secondary)]"
+												>
+													<X size={12} />
+													<span>Cancel</span>
+												</button>
+											</div>
+										)}
+									</div>
+
+									{!isEditingAltTitles ? (
+										manga.alt_titles && manga.alt_titles.length > 0 ? (
+											<div className="overflow-x-auto max-h-[460px] overflow-y-auto pr-1">
 												<table className="w-full text-left border-collapse">
 													<tbody>
-														{localAltTitles.map((alt, idx) => {
+														{manga.alt_titles.map((alt, idx) => {
 															let lang = "en";
 															let title = alt;
 															if (alt.includes("|")) {
@@ -3824,16 +3790,6 @@ export const MangaDetailPage: React.FC = () => {
 																	<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium break-words align-middle">
 																		{title}
 																	</td>
-																	<td className="py-2.5 text-right w-8 align-middle">
-																		<button
-																			type="button"
-																			onClick={() => handleDeleteAltTitle(idx)}
-																			className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 rounded transition"
-																			title="Delete alternative title"
-																		>
-																			<Trash2 size={13} />
-																		</button>
-																	</td>
 																</tr>
 															);
 														})}
@@ -3841,380 +3797,452 @@ export const MangaDetailPage: React.FC = () => {
 												</table>
 											</div>
 										) : (
-											<div className="text-xs text-[var(--text-secondary)] italic py-2 text-center">
-												No alternative titles. Use the form below to add.
+											<div className="text-xs text-[var(--text-secondary)] italic py-4 text-center">
+												No alternative titles available. Click Edit to add
+												titles.
 											</div>
-										)}
-
-										{/* Add new Alt Title Form */}
-										<div className="pt-3 border-t border-[var(--border-primary)]/40 space-y-2.5">
-											<div className="flex items-center gap-2">
-												<label
-													htmlFor="new-alt-lang-select"
-													className="text-xs font-semibold text-[var(--text-secondary)] shrink-0"
-												>
-													Language:
-												</label>
-												<select
-													id="new-alt-lang-select"
-													value={newAltLang}
-													onChange={(e) => setNewAltLang(e.target.value)}
-													className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
-												>
-													{ALT_TITLE_LANGUAGES.map((lang) => (
-														<option key={lang.code} value={lang.code}>
-															{lang.label}
-														</option>
-													))}
-												</select>
-											</div>
-											<div className="flex items-center gap-2">
-												<input
-													type="text"
-													value={newAltTitle}
-													onChange={(e) => setNewAltTitle(e.target.value)}
-													onKeyDown={(e) => {
-														if (e.key === "Enter") {
-															e.preventDefault();
-															handleAddAltTitle();
-														}
-													}}
-													placeholder="Enter alternative title..."
-													className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
-												/>
-												<button
-													type="button"
-													onClick={handleAddAltTitle}
-													className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm shrink-0 active:scale-95"
-												>
-													<Plus size={13} />
-													<span>Add</span>
-												</button>
-											</div>
-										</div>
-									</div>
-								)}
-							</div>
-						</div>
-					)}
-
-					{/* Chapters & Storage Tab */}
-					{activeTab === "chapters" && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
-							<ChapterStorageManager
-								mangaId={manga._id}
-								mangaTitle={manga.title}
-								onOpenReader={(chapId, page) => {
-									navigate(
-										`/manga/${manga._id}/read/${chapId}${page ? `?page=${page}` : ""}`,
-									);
-								}}
-								onRefreshChapters={() => {
-									client
-										.get(`/api/manga/${manga._id}/reading-progress`)
-										.then((res) => {
-											setLastReadProgress(res.data);
-										})
-										.catch(() => {});
-								}}
-								onChaptersCountChange={setStorageChaptersCount}
-							/>
-						</div>
-					)}
-
-					{/* Visual Dialogue & Panel Lexis Tab */}
-					{activeTab === "panels" && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
-							<PanelLexisTab mangaId={manga._id} mangaTitle={manga.title} />
-						</div>
-					)}
-
-					{/* Reviews Tab (Personal & External Community) */}
-					{activeTab === "reviews" && (
-						<div className="space-y-6">
-							{/* Segmented Sub-tabs Switcher */}
-							<div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-fit">
-								<button
-									type="button"
-									onClick={() => setReviewSubTab("personal")}
-									className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
-										reviewSubTab === "personal"
-											? "bg-[var(--brand-orange)] text-white shadow-xs"
-											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-									}`}
-								>
-									<FileText size={14} />
-									<span>✍️ Bài viết Cá nhân ({reviews.length})</span>
-								</button>
-
-								<button
-									type="button"
-									onClick={() => setReviewSubTab("external")}
-									className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
-										reviewSubTab === "external"
-											? "bg-blue-600 text-white shadow-xs"
-											: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-									}`}
-								>
-									<Globe size={14} />
-									<span>🌐 Đánh giá Cộng đồng (MAL)</span>
-								</button>
-							</div>
-
-							{/* Sub-tab 1: Personal Reviews */}
-							{reviewSubTab === "personal" && (
-								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
-									<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)]/60 pb-4">
-										<div>
-											<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
-												<FileText
-													size={20}
-													className="text-[var(--brand-orange)]"
-												/>
-												<span>
-													Personal Reviews & Analysis ({reviews.length})
-												</span>
-											</h3>
-											<p className="text-xs text-[var(--text-secondary)] mt-1">
-												Ghi chú, cảm nghĩ cá nhân và bài viết phân tích chi tiết
-												cho manga này
-											</p>
-										</div>
-
-										<button
-											type="button"
-											onClick={handleStartCreateReview}
-											className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl flex items-center space-x-2 transition shadow-sm self-start sm:self-auto cursor-pointer"
-										>
-											<Plus size={15} />
-											<span>Viết bài Review mới</span>
-										</button>
-									</div>
-
-									{reviews.length === 0 ? (
-										<div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
-											<FileText
-												size={40}
-												className="mx-auto text-zinc-400/50"
-											/>
-											<div className="text-sm font-bold text-[var(--text-primary)]">
-												Chưa có bài review nào
-											</div>
-											<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-												Lưu lại những cảm nghĩ, đánh giá hoặc ghi chú sâu sắc
-												của bạn về cốt truyện, nhân vật và nét vẽ.
-											</p>
-											<button
-												type="button"
-												onClick={handleStartCreateReview}
-												className="mt-2 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition shadow-sm inline-flex items-center space-x-1.5 cursor-pointer"
-											>
-												<Plus size={14} />
-												<span>Bắt đầu viết review</span>
-											</button>
-										</div>
+										)
 									) : (
-										<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-											{reviews.map((r) => (
-												<div
-													key={r._id}
-													onClick={() => handleSelectReview(r)}
-													className="group relative p-5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)]/50 hover:shadow-md transition cursor-pointer flex flex-col justify-between"
-												>
-													<div className="space-y-2.5">
-														<div className="flex items-start justify-between gap-2">
-															<h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition line-clamp-2">
-																{r.title}
-															</h4>
-															<button
-																type="button"
-																onClick={(e) => {
-																	e.stopPropagation();
-																	handleDeleteReview(r._id);
-																}}
-																className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition opacity-0 group-hover:opacity-100 shrink-0"
-																title="Delete Review"
-															>
-																<Trash2 size={14} />
-															</button>
-														</div>
-
-														<div className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)]">
-															<Clock
-																size={12}
-																className="text-zinc-400 shrink-0"
-															/>
-															<span>
-																Cập nhật:{" "}
-																{new Date(r.updated_at).toLocaleDateString()}
-															</span>
-														</div>
-													</div>
-
-													<div className="pt-4 mt-4 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-xs">
-														<span className="text-[var(--brand-orange)] font-bold group-hover:underline flex items-center space-x-1">
-															<span>Mở & Chỉnh sửa</span>
-															<ArrowRight size={13} />
-														</span>
-													</div>
+										<div className="space-y-4">
+											{localAltTitles.length > 0 ? (
+												<div className="overflow-x-auto max-h-[360px] overflow-y-auto pr-1">
+													<table className="w-full text-left border-collapse">
+														<tbody>
+															{localAltTitles.map((alt, idx) => {
+																let lang = "en";
+																let title = alt;
+																if (alt.includes("|")) {
+																	const parts = alt.split("|");
+																	lang = parts[0];
+																	title = parts.slice(1).join("|");
+																}
+																const flag = getFlagInfo(lang);
+																return (
+																	<tr
+																		key={idx}
+																		className="border-b border-[var(--border-primary)]/40 last:border-0"
+																	>
+																		<td className="py-2.5 pr-3 text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap w-[75px] align-middle">
+																			<div className="flex items-center space-x-1.5">
+																				<img
+																					src={flag.flagUrl}
+																					alt={flag.label}
+																					className="w-5 h-3.5 object-cover rounded shadow-sm shrink-0"
+																					onError={(e) => {
+																						(e.target as HTMLImageElement).src =
+																							"https://flagcdn.com/w20/us.png";
+																					}}
+																				/>
+																				<span className="min-w-[20px]">
+																					{flag.label}
+																				</span>
+																				{flag.isRomanized && (
+																					<span className="px-1 py-0.5 text-[8px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] border border-[var(--border-primary)] rounded font-mono font-bold uppercase scale-90">
+																						RO
+																					</span>
+																				)}
+																			</div>
+																		</td>
+																		<td className="py-2.5 text-xs text-[var(--text-primary)] font-medium break-words align-middle">
+																			{title}
+																		</td>
+																		<td className="py-2.5 text-right w-8 align-middle">
+																			<button
+																				type="button"
+																				onClick={() =>
+																					handleDeleteAltTitle(idx)
+																				}
+																				className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 rounded transition"
+																				title="Delete alternative title"
+																			>
+																				<Trash2 size={13} />
+																			</button>
+																		</td>
+																	</tr>
+																);
+															})}
+														</tbody>
+													</table>
 												</div>
-											))}
+											) : (
+												<div className="text-xs text-[var(--text-secondary)] italic py-2 text-center">
+													No alternative titles. Use the form below to add.
+												</div>
+											)}
+
+											{/* Add new Alt Title Form */}
+											<div className="pt-3 border-t border-[var(--border-primary)]/40 space-y-2.5">
+												<div className="flex items-center gap-2">
+													<label
+														htmlFor="new-alt-lang-select"
+														className="text-xs font-semibold text-[var(--text-secondary)] shrink-0"
+													>
+														Language:
+													</label>
+													<select
+														id="new-alt-lang-select"
+														value={newAltLang}
+														onChange={(e) => setNewAltLang(e.target.value)}
+														className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] cursor-pointer"
+													>
+														{ALT_TITLE_LANGUAGES.map((lang) => (
+															<option key={lang.code} value={lang.code}>
+																{lang.label}
+															</option>
+														))}
+													</select>
+												</div>
+												<div className="flex items-center gap-2">
+													<input
+														type="text"
+														value={newAltTitle}
+														onChange={(e) => setNewAltTitle(e.target.value)}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																e.preventDefault();
+																handleAddAltTitle();
+															}
+														}}
+														placeholder="Enter alternative title..."
+														className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] transition"
+													/>
+													<button
+														type="button"
+														onClick={handleAddAltTitle}
+														className="px-3 py-1.5 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl flex items-center space-x-1 transition shadow-sm shrink-0 active:scale-95"
+													>
+														<Plus size={13} />
+														<span>Add</span>
+													</button>
+												</div>
+											</div>
 										</div>
 									)}
 								</div>
-							)}
+							</div>
+						)}
 
-							{/* Sub-tab 2: External Reviews */}
-							{reviewSubTab === "external" && (
-								<ExternalReviewsManagerPanel
+						{/* Chapters & Storage Tab */}
+						{activeTab === "chapters" && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+								<ChapterStorageManager
 									mangaId={manga._id}
 									mangaTitle={manga.title}
-									initialMalId={
-										manga.tracker_metadata?.mal?.id
-											? String(manga.tracker_metadata.mal.id)
-											: manga.tracker_metadata?.mal_id
-												? String(manga.tracker_metadata.mal_id)
-												: undefined
-									}
-									onMetadataUpdated={fetchMangaDetails}
+									onOpenReader={(chapId, page) => {
+										navigate(
+											`/manga/${manga._id}/read/${chapId}${page ? `?page=${page}` : ""}`,
+										);
+									}}
+									onRefreshChapters={() => {
+										client
+											.get(`/api/manga/${manga._id}/reading-progress`)
+											.then((res) => {
+												setLastReadProgress(res.data);
+											})
+											.catch(() => {});
+									}}
+									onChaptersCountChange={setStorageChaptersCount}
 								/>
-							)}
-						</div>
-					)}
-
-					{/* Art & Covers Tab */}
-					{activeTab === "art" && manga.mangadex_id && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
-							<CoverArtGallery
-								key={`${id}-${manga.updated_at}`}
-								mangaId={id!}
-								onCoversCountChange={setCoversCount}
-							/>
-						</div>
-					)}
-
-					{/* Recommendations Tab */}
-					{activeTab === "recommendations" && manga.mangadex_id && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
-							<RecommendationsPanel
-								key={`${id}-${manga.updated_at}`}
-								mangaId={id!}
-								onRecommendationsCountChange={setRecsCount}
-							/>
-						</div>
-					)}
-
-					{/* Logs & Activity Tab */}
-					{activeTab === "logs" && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
-							<div className="flex items-center justify-between border-b border-[var(--border-primary)]/60 pb-4">
-								<div>
-									<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
-										<History size={20} className="text-[var(--brand-orange)]" />
-										<span>
-											Review & Metadata Activity History ({history.length})
-										</span>
-									</h3>
-									<p className="text-xs text-[var(--text-secondary)] mt-1">
-										Toàn bộ lịch sử các lần chỉnh sửa, cập nhật metadata và nhật
-										ký hoạt động của manga
-									</p>
-								</div>
 							</div>
+						)}
 
-							{history.length > 0 ? (
-								<div className="relative border-l-2 border-zinc-200 dark:border-zinc-800/80 pl-6 space-y-6 ml-3">
-									{history.map((log) => {
-										const badge = getActionBadge(log.action);
-										const formattedOld = formatHistoryValue(
-											log.field,
-											log.old_value,
-										);
-										const formattedNew = formatHistoryValue(
-											log.field,
-											log.new_value,
-										);
-										const hasDiff =
-											(log.old_value !== null &&
-												log.old_value !== undefined &&
-												log.old_value !== "") ||
-											(log.new_value !== null &&
-												log.new_value !== undefined &&
-												log.new_value !== "");
-										const isDiffMeaningful =
-											hasDiff && formattedOld !== formattedNew;
+						{/* Visual Dialogue & Panel Lexis Tab */}
+						{activeTab === "panels" && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+								<PanelLexisTab mangaId={manga._id} mangaTitle={manga.title} />
+							</div>
+						)}
 
-										return (
-											<div key={log._id} className="relative group">
-												{/* Circle marker */}
-												<div className="absolute -left-[31px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)] shadow-sm group-hover:scale-125 transition-transform" />
+						{/* Reviews Tab (Personal & External Community) */}
+						{activeTab === "reviews" && (
+							<div className="space-y-6">
+								{/* Segmented Sub-tabs Switcher */}
+								<div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-fit">
+									<button
+										type="button"
+										onClick={() => setReviewSubTab("personal")}
+										className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
+											reviewSubTab === "personal"
+												? "bg-[var(--brand-orange)] text-white shadow-xs"
+												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+										}`}
+									>
+										<FileText size={14} />
+										<span>✍️ Bài viết Cá nhân ({reviews.length})</span>
+									</button>
 
-												<div className="space-y-2 bg-[var(--bg-primary)] p-4 rounded-2xl border border-[var(--border-primary)] shadow-sm hover:border-zinc-400 dark:hover:border-zinc-700 transition">
-													{/* Header: Action badge & Timestamp */}
-													<div className="flex items-center justify-between gap-2 flex-wrap">
-														<div className="flex items-center gap-2 flex-wrap">
-															<span
-																className={`px-2.5 py-0.5 text-xs font-bold rounded-lg border ${badge.bg}`}
-															>
-																{badge.label}
-															</span>
-															{log.field && (
-																<span className="text-xs text-[var(--text-secondary)]">
-																	on{" "}
-																	<code className="px-1.5 py-0.5 bg-zinc-200/70 dark:bg-zinc-800 text-[var(--text-primary)] rounded font-mono text-[11px]">
-																		{log.field}
-																	</code>
-																</span>
-															)}
-														</div>
-														<span className="text-xs text-[var(--text-secondary)] font-medium">
-															{formatLogTimestamp(log.timestamp)}
-														</span>
-													</div>
+									<button
+										type="button"
+										onClick={() => setReviewSubTab("external")}
+										className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-2 ${
+											reviewSubTab === "external"
+												? "bg-blue-600 text-white shadow-xs"
+												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+										}`}
+									>
+										<Globe size={14} />
+										<span>🌐 Đánh giá Cộng đồng (MAL)</span>
+									</button>
+								</div>
 
-													{/* Diff changes if meaningful */}
-													{isDiffMeaningful && (
-														<div className="mt-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-[var(--border-primary)] text-xs font-mono flex items-center gap-3 flex-wrap">
-															<span
-																className="text-rose-500 line-through max-w-sm truncate"
-																title={formattedOld}
-															>
-																{formattedOld || "(empty)"}
-															</span>
-															<ArrowRight
-																size={14}
-																className="text-zinc-400 shrink-0"
-															/>
-															<span
-																className="text-emerald-500 font-semibold max-w-sm truncate"
-																title={formattedNew}
-															>
-																{formattedNew || "(empty)"}
-															</span>
-														</div>
-													)}
-
-													{/* Note / Details */}
-													{log.note && (
-														<p className="text-xs text-[var(--text-secondary)] pt-1 leading-relaxed">
-															<span className="font-bold text-[var(--text-primary)]">
-																Details:{" "}
-															</span>
-															{log.note}
-														</p>
-													)}
-												</div>
+								{/* Sub-tab 1: Personal Reviews */}
+								{reviewSubTab === "personal" && (
+									<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
+										<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)]/60 pb-4">
+											<div>
+												<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
+													<FileText
+														size={20}
+														className="text-[var(--brand-orange)]"
+													/>
+													<span>
+														Personal Reviews & Analysis ({reviews.length})
+													</span>
+												</h3>
+												<p className="text-xs text-[var(--text-secondary)] mt-1">
+													Ghi chú, cảm nghĩ cá nhân và bài viết phân tích chi
+													tiết cho manga này
+												</p>
 											</div>
-										);
-									})}
+
+											<button
+												type="button"
+												onClick={handleStartCreateReview}
+												className="px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl flex items-center space-x-2 transition shadow-sm self-start sm:self-auto cursor-pointer"
+											>
+												<Plus size={15} />
+												<span>Viết bài Review mới</span>
+											</button>
+										</div>
+
+										{reviews.length === 0 ? (
+											<div className="py-16 text-center border-2 border-dashed border-[var(--border-primary)] rounded-2xl space-y-3">
+												<FileText
+													size={40}
+													className="mx-auto text-zinc-400/50"
+												/>
+												<div className="text-sm font-bold text-[var(--text-primary)]">
+													Chưa có bài review nào
+												</div>
+												<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
+													Lưu lại những cảm nghĩ, đánh giá hoặc ghi chú sâu sắc
+													của bạn về cốt truyện, nhân vật và nét vẽ.
+												</p>
+												<button
+													type="button"
+													onClick={handleStartCreateReview}
+													className="mt-2 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white text-xs font-bold rounded-xl transition shadow-sm inline-flex items-center space-x-1.5 cursor-pointer"
+												>
+													<Plus size={14} />
+													<span>Bắt đầu viết review</span>
+												</button>
+											</div>
+										) : (
+											<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+												{reviews.map((r) => (
+													<div
+														key={r._id}
+														onClick={() => handleSelectReview(r)}
+														className="group relative p-5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--brand-orange)]/50 hover:shadow-md transition cursor-pointer flex flex-col justify-between"
+													>
+														<div className="space-y-2.5">
+															<div className="flex items-start justify-between gap-2">
+																<h4 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-orange)] transition line-clamp-2">
+																	{r.title}
+																</h4>
+																<button
+																	type="button"
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		handleDeleteReview(r._id);
+																	}}
+																	className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition opacity-0 group-hover:opacity-100 shrink-0"
+																	title="Delete Review"
+																>
+																	<Trash2 size={14} />
+																</button>
+															</div>
+
+															<div className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)]">
+																<Clock
+																	size={12}
+																	className="text-zinc-400 shrink-0"
+																/>
+																<span>
+																	Cập nhật:{" "}
+																	{new Date(r.updated_at).toLocaleDateString()}
+																</span>
+															</div>
+														</div>
+
+														<div className="pt-4 mt-4 border-t border-[var(--border-primary)]/40 flex items-center justify-between text-xs">
+															<span className="text-[var(--brand-orange)] font-bold group-hover:underline flex items-center space-x-1">
+																<span>Mở & Chỉnh sửa</span>
+																<ArrowRight size={13} />
+															</span>
+														</div>
+													</div>
+												))}
+											</div>
+										)}
+									</div>
+								)}
+
+								{/* Sub-tab 2: External Reviews */}
+								{reviewSubTab === "external" && (
+									<ExternalReviewsManagerPanel
+										mangaId={manga._id}
+										mangaTitle={manga.title}
+										initialMalId={
+											manga.tracker_metadata?.mal?.id
+												? String(manga.tracker_metadata.mal.id)
+												: manga.tracker_metadata?.mal_id
+													? String(manga.tracker_metadata.mal_id)
+													: undefined
+										}
+										onMetadataUpdated={fetchMangaDetails}
+									/>
+								)}
+							</div>
+						)}
+
+						{/* Art & Covers Tab */}
+						{activeTab === "art" && manga.mangadex_id && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+								<CoverArtGallery
+									key={`${id}-${manga.updated_at}`}
+									mangaId={id!}
+									onCoversCountChange={setCoversCount}
+								/>
+							</div>
+						)}
+
+						{/* Recommendations Tab */}
+						{activeTab === "recommendations" && manga.mangadex_id && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm">
+								<RecommendationsPanel
+									key={`${id}-${manga.updated_at}`}
+									mangaId={id!}
+									onRecommendationsCountChange={setRecsCount}
+								/>
+							</div>
+						)}
+
+						{/* Logs & Activity Tab */}
+						{activeTab === "logs" && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-3xl p-6 shadow-sm space-y-6">
+								<div className="flex items-center justify-between border-b border-[var(--border-primary)]/60 pb-4">
+									<div>
+										<h3 className="text-lg font-bold flex items-center space-x-2 text-[var(--text-primary)]">
+											<History
+												size={20}
+												className="text-[var(--brand-orange)]"
+											/>
+											<span>
+												Review & Metadata Activity History ({history.length})
+											</span>
+										</h3>
+										<p className="text-xs text-[var(--text-secondary)] mt-1">
+											Toàn bộ lịch sử các lần chỉnh sửa, cập nhật metadata và
+											nhật ký hoạt động của manga
+										</p>
+									</div>
 								</div>
-							) : (
-								<div className="py-12 text-center text-xs text-[var(--text-secondary)] border-2 border-dashed border-[var(--border-primary)] rounded-2xl">
-									Chưa có bản ghi hoạt động nào.
-								</div>
-							)}
-						</div>
-					)}
+
+								{history.length > 0 ? (
+									<div className="relative border-l-2 border-zinc-200 dark:border-zinc-800/80 pl-6 space-y-6 ml-3">
+										{history.map((log) => {
+											const badge = getActionBadge(log.action);
+											const formattedOld = formatHistoryValue(
+												log.field,
+												log.old_value,
+											);
+											const formattedNew = formatHistoryValue(
+												log.field,
+												log.new_value,
+											);
+											const hasDiff =
+												(log.old_value !== null &&
+													log.old_value !== undefined &&
+													log.old_value !== "") ||
+												(log.new_value !== null &&
+													log.new_value !== undefined &&
+													log.new_value !== "");
+											const isDiffMeaningful =
+												hasDiff && formattedOld !== formattedNew;
+
+											return (
+												<div key={log._id} className="relative group">
+													{/* Circle marker */}
+													<div className="absolute -left-[31px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[var(--bg-card)] bg-[var(--brand-orange)] shadow-sm group-hover:scale-125 transition-transform" />
+
+													<div className="space-y-2 bg-[var(--bg-primary)] p-4 rounded-2xl border border-[var(--border-primary)] shadow-sm hover:border-zinc-400 dark:hover:border-zinc-700 transition">
+														{/* Header: Action badge & Timestamp */}
+														<div className="flex items-center justify-between gap-2 flex-wrap">
+															<div className="flex items-center gap-2 flex-wrap">
+																<span
+																	className={`px-2.5 py-0.5 text-xs font-bold rounded-lg border ${badge.bg}`}
+																>
+																	{badge.label}
+																</span>
+																{log.field && (
+																	<span className="text-xs text-[var(--text-secondary)]">
+																		on{" "}
+																		<code className="px-1.5 py-0.5 bg-zinc-200/70 dark:bg-zinc-800 text-[var(--text-primary)] rounded font-mono text-[11px]">
+																			{log.field}
+																		</code>
+																	</span>
+																)}
+															</div>
+															<span className="text-xs text-[var(--text-secondary)] font-medium">
+																{formatLogTimestamp(log.timestamp)}
+															</span>
+														</div>
+
+														{/* Diff changes if meaningful */}
+														{isDiffMeaningful && (
+															<div className="mt-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-[var(--border-primary)] text-xs font-mono flex items-center gap-3 flex-wrap">
+																<span
+																	className="text-rose-500 line-through max-w-sm truncate"
+																	title={formattedOld}
+																>
+																	{formattedOld || "(empty)"}
+																</span>
+																<ArrowRight
+																	size={14}
+																	className="text-zinc-400 shrink-0"
+																/>
+																<span
+																	className="text-emerald-500 font-semibold max-w-sm truncate"
+																	title={formattedNew}
+																>
+																	{formattedNew || "(empty)"}
+																</span>
+															</div>
+														)}
+
+														{/* Note / Details */}
+														{log.note && (
+															<p className="text-xs text-[var(--text-secondary)] pt-1 leading-relaxed">
+																<span className="font-bold text-[var(--text-primary)]">
+																	Details:{" "}
+																</span>
+																{log.note}
+															</p>
+														)}
+													</div>
+												</div>
+											);
+										})}
+									</div>
+								) : (
+									<div className="py-12 text-center text-xs text-[var(--text-secondary)] border-2 border-dashed border-[var(--border-primary)] rounded-2xl">
+										Chưa có bản ghi hoạt động nào.
+									</div>
+								)}
+							</div>
+						)}
+					</AnimatedTabPanel>
 				</div>
 
 				{/* Vertical Sticky Right Navigation Sidebar */}
@@ -4229,13 +4257,19 @@ export const MangaDetailPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={() => setActiveTab("details")}
-								className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+								className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 									activeTab === "details"
-										? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+										? "text-[var(--brand-orange)]"
 										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 								}`}
 							>
-								<div className="flex items-center gap-2.5">
+								{activeTab === "details" && (
+									<AnimatedTabPill
+										layoutId="manga-detail-nav-pill"
+										className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+									/>
+								)}
+								<div className="relative z-10 flex items-center gap-2.5">
 									<Info size={16} />
 									<span>Chi tiết & Thông tin</span>
 								</div>
@@ -4245,18 +4279,24 @@ export const MangaDetailPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={() => setActiveTab("chapters")}
-								className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+								className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 									activeTab === "chapters"
-										? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+										? "text-[var(--brand-orange)]"
 										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 								}`}
 							>
-								<div className="flex items-center gap-2.5 truncate">
+								{activeTab === "chapters" && (
+									<AnimatedTabPill
+										layoutId="manga-detail-nav-pill"
+										className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+									/>
+								)}
+								<div className="relative z-10 flex items-center gap-2.5 truncate">
 									<BookOpen size={16} />
 									<span>Chapters & Lưu trữ</span>
 								</div>
 								{storageChaptersCount > 0 && (
-									<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+									<span className="relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
 										{storageChaptersCount}
 									</span>
 								)}
@@ -4266,13 +4306,19 @@ export const MangaDetailPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={() => setActiveTab("panels")}
-								className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+								className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 									activeTab === "panels"
-										? "bg-amber-500/15 text-amber-500 border border-amber-500/30 shadow-xs"
+										? "text-amber-500"
 										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 								}`}
 							>
-								<div className="flex items-center gap-2.5">
+								{activeTab === "panels" && (
+									<AnimatedTabPill
+										layoutId="manga-detail-nav-pill"
+										className="rounded-2xl bg-amber-500/15 border border-amber-500/30 shadow-xs"
+									/>
+								)}
+								<div className="relative z-10 flex items-center gap-2.5">
 									<Sparkles
 										size={16}
 										className={
@@ -4283,7 +4329,7 @@ export const MangaDetailPage: React.FC = () => {
 									/>
 									<span>Panel & Hội thoại</span>
 								</div>
-								<span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500 font-extrabold font-mono">
+								<span className="relative z-10 text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500 font-extrabold font-mono">
 									AI
 								</span>
 							</button>
@@ -4292,18 +4338,24 @@ export const MangaDetailPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={() => setActiveTab("reviews")}
-								className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+								className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 									activeTab === "reviews"
-										? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+										? "text-[var(--brand-orange)]"
 										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 								}`}
 							>
-								<div className="flex items-center gap-2.5">
+								{activeTab === "reviews" && (
+									<AnimatedTabPill
+										layoutId="manga-detail-nav-pill"
+										className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+									/>
+								)}
+								<div className="relative z-10 flex items-center gap-2.5">
 									<FileText size={16} />
 									<span>Bài đánh giá</span>
 								</div>
 								{reviews.length > 0 && (
-									<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+									<span className="relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
 										{reviews.length}
 									</span>
 								)}
@@ -4315,18 +4367,24 @@ export const MangaDetailPage: React.FC = () => {
 									<button
 										type="button"
 										onClick={() => setActiveTab("art")}
-										className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+										className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 											activeTab === "art"
-												? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+												? "text-[var(--brand-orange)]"
 												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 										}`}
 									>
-										<div className="flex items-center gap-2.5">
+										{activeTab === "art" && (
+											<AnimatedTabPill
+												layoutId="manga-detail-nav-pill"
+												className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+											/>
+										)}
+										<div className="relative z-10 flex items-center gap-2.5">
 											<ImageIcon size={16} />
 											<span>Art & Bìa truyện</span>
 										</div>
 										{coversCount > 0 && (
-											<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+											<span className="relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
 												{coversCount}
 											</span>
 										)}
@@ -4335,18 +4393,24 @@ export const MangaDetailPage: React.FC = () => {
 									<button
 										type="button"
 										onClick={() => setActiveTab("recommendations")}
-										className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+										className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 											activeTab === "recommendations"
-												? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+												? "text-[var(--brand-orange)]"
 												: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 										}`}
 									>
-										<div className="flex items-center gap-2.5">
+										{activeTab === "recommendations" && (
+											<AnimatedTabPill
+												layoutId="manga-detail-nav-pill"
+												className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+											/>
+										)}
+										<div className="relative z-10 flex items-center gap-2.5">
 											<Sparkles size={16} />
 											<span>Truyện tương tự</span>
 										</div>
 										{recsCount > 0 && (
-											<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+											<span className="relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
 												{recsCount}
 											</span>
 										)}
@@ -4358,18 +4422,24 @@ export const MangaDetailPage: React.FC = () => {
 							<button
 								type="button"
 								onClick={() => setActiveTab("logs")}
-								className={`w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition cursor-pointer text-left ${
+								className={`relative w-full p-3 rounded-2xl font-bold text-xs flex items-center justify-between transition-colors cursor-pointer text-left ${
 									activeTab === "logs"
-										? "bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 shadow-xs"
+										? "text-[var(--brand-orange)]"
 										: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
 								}`}
 							>
-								<div className="flex items-center gap-2.5">
+								{activeTab === "logs" && (
+									<AnimatedTabPill
+										layoutId="manga-detail-nav-pill"
+										className="rounded-2xl bg-[var(--brand-orange)]/15 border border-[var(--brand-orange)]/30 shadow-xs"
+									/>
+								)}
+								<div className="relative z-10 flex items-center gap-2.5">
 									<History size={16} />
 									<span>Nhật ký & Hoạt động</span>
 								</div>
 								{history.length > 0 && (
-									<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+									<span className="relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
 										{history.length}
 									</span>
 								)}

@@ -16,9 +16,16 @@ import {
 	Wrench,
 	X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import type React from "react";
 import { Suspense, useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import {
+	CollapsiblePanel,
+	MOTION_EASE,
+	ModalMotion,
+	PageTransition,
+} from "@/components/motion/MotionPrimitives";
 import client from "../../api/client";
 import { useAlert } from "../../hooks/useAlert";
 import { type BlurSettings, useMangaBlur } from "../../hooks/useMangaBlur";
@@ -31,6 +38,7 @@ import { SteamNotification } from "../ui/SteamNotification";
 import ThemeToggle from "../ui/ThemeToggle";
 
 export const Layout: React.FC = () => {
+	const location = useLocation();
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [basePath, setBasePath] = useState("");
@@ -121,14 +129,20 @@ export const Layout: React.FC = () => {
 
 	return (
 		<div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
-			{mobileNavOpen && (
-				<button
-					type="button"
-					aria-label="Đóng menu"
-					onClick={() => setMobileNavOpen(false)}
-					className="fixed inset-0 z-30 bg-black/60 md:hidden"
-				/>
-			)}
+			<AnimatePresence>
+				{mobileNavOpen && (
+					<motion.button
+						type="button"
+						aria-label="Đóng menu"
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: 0.16, ease: MOTION_EASE }}
+						onClick={() => setMobileNavOpen(false)}
+						className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] md:hidden"
+					/>
+				)}
+			</AnimatePresence>
 			{/* Sidebar */}
 			<aside
 				id="main-navigation"
@@ -336,91 +350,95 @@ export const Layout: React.FC = () => {
 				{/* Page View */}
 				<main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-8">
 					<Suspense fallback={<DefaultPageSkeleton />}>
-						<Outlet />
+						<PageTransition pageKey={location.pathname}>
+							<Outlet />
+						</PageTransition>
 					</Suspense>
 				</main>
 			</div>
 
 			{/* Settings Modal */}
-			{isSettingsOpen && (
-				<div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-md overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
-						{/* Header */}
-						<div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
-							<h2 className="text-lg font-bold flex items-center space-x-2">
-								<Settings
-									size={20}
-									className="text-[var(--brand-orange)] animate-[spin_8s_linear_infinite]"
-								/>
-								<span>Global Settings</span>
-							</h2>
-							<button
-								type="button"
-								onClick={() => setIsSettingsOpen(false)}
-								className="p-1 rounded text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
-							>
-								<X size={18} />
-							</button>
-						</div>
+			<ModalMotion
+				isOpen={isSettingsOpen}
+				onClose={() => setIsSettingsOpen(false)}
+				ariaLabel="Global Settings"
+				maxWidthClass="max-w-md"
+				overlayClassName="z-[100]"
+			>
+				<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full overflow-hidden flex flex-col shadow-2xl relative">
+					{/* Header */}
+					<div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
+						<h2 className="text-lg font-bold flex items-center space-x-2">
+							<Settings size={20} className="text-[var(--brand-orange)]" />
+							<span>Global Settings</span>
+						</h2>
+						<button
+							type="button"
+							aria-label="Đóng cài đặt"
+							onClick={() => setIsSettingsOpen(false)}
+							className="p-1.5 rounded-lg text-zinc-400 hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+						>
+							<X size={18} />
+						</button>
+					</div>
 
-						{/* Form */}
-						<form onSubmit={handleSaveSettings}>
-							<div className="p-6 space-y-4 overflow-y-auto max-h-[60vh] border-b border-[var(--border-primary)]">
-								<div className="space-y-2">
-									<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-										Default Download Base Path
-									</label>
-									<input
-										type="text"
-										value={basePath}
-										onChange={(e) => handleSettingsPathChange(e.target.value)}
-										placeholder="e.g. C:\Downloads\Manga"
-										className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm font-mono focus:outline-none focus:border-[var(--brand-orange)] transition"
+					{/* Form */}
+					<form onSubmit={handleSaveSettings}>
+						<div className="p-6 space-y-4 overflow-y-auto max-h-[60vh] border-b border-[var(--border-primary)]">
+							<div className="space-y-2">
+								<label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+									Default Download Base Path
+								</label>
+								<input
+									type="text"
+									value={basePath}
+									onChange={(e) => handleSettingsPathChange(e.target.value)}
+									placeholder="e.g. C:\Downloads\Manga"
+									className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm font-mono focus:outline-none focus:border-[var(--brand-orange)] transition"
+								/>
+								<div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)] mt-2">
+									<Info
+										size={14}
+										className="text-[var(--brand-orange)] shrink-0 mt-0.5"
 									/>
-									<div className="flex items-start space-x-1.5 text-xs text-[var(--text-secondary)] mt-2">
-										<Info
-											size={14}
-											className="text-[var(--brand-orange)] shrink-0 mt-0.5"
-										/>
-										<span>
-											This path serves as the default target directory for all
-											manga downloads across the system. It will be verified for
-											write-access before saving.
+									<span>
+										This path serves as the default target directory for all
+										manga downloads across the system. It will be verified for
+										write-access before saving.
+									</span>
+								</div>
+							</div>
+
+							<hr className="border-[var(--border-primary)] my-4" />
+
+							<div className="space-y-4">
+								<div className="flex items-center justify-between">
+									<div>
+										<label className="block text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+											Livestream Mode (Cover Blur)
+										</label>
+										<span className="text-[10px] text-[var(--text-secondary)]">
+											Blur NSFW or selected tag covers while browsing.
 										</span>
 									</div>
+									<label className="relative inline-flex items-center cursor-pointer select-none">
+										<input
+											type="checkbox"
+											checked={tempBlurSettings?.enabled || false}
+											onChange={(e) =>
+												setTempBlurSettings((prev) =>
+													prev ? { ...prev, enabled: e.target.checked } : null,
+												)
+											}
+											className="sr-only peer"
+										/>
+										<div className="w-9 h-5 bg-zinc-200 dark:bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--brand-orange)]"></div>
+									</label>
 								</div>
 
-								<hr className="border-[var(--border-primary)] my-4" />
-
-								<div className="space-y-4">
-									<div className="flex items-center justify-between">
-										<div>
-											<label className="block text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
-												Livestream Mode (Cover Blur)
-											</label>
-											<span className="text-[10px] text-[var(--text-secondary)]">
-												Blur NSFW or selected tag covers while browsing.
-											</span>
-										</div>
-										<label className="relative inline-flex items-center cursor-pointer select-none">
-											<input
-												type="checkbox"
-												checked={tempBlurSettings?.enabled || false}
-												onChange={(e) =>
-													setTempBlurSettings((prev) =>
-														prev
-															? { ...prev, enabled: e.target.checked }
-															: null,
-													)
-												}
-												className="sr-only peer"
-											/>
-											<div className="w-9 h-5 bg-zinc-200 dark:bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--brand-orange)]"></div>
-										</label>
-									</div>
-
-									{tempBlurSettings?.enabled && (
-										<div className="space-y-4 pl-2 border-l-2 border-[var(--border-primary)] animate-in slide-in-from-left-2 duration-200">
+								<CollapsiblePanel isOpen={Boolean(tempBlurSettings?.enabled)}>
+									{tempBlurSettings && (
+										<div className="space-y-4 pl-2 border-l-2 border-[var(--border-primary)] pt-1">
 											{/* Hide Ratings */}
 											<div className="flex items-center justify-between pb-2 border-b border-[var(--border-primary)]/50">
 												<div>
@@ -543,7 +561,7 @@ export const Layout: React.FC = () => {
 																			return { ...prev, blurGroups: groups };
 																		})
 																	}
-																	className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition ${
+																	className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
 																		isSelected
 																			? "bg-[var(--brand-orange)] border-[var(--brand-orange)] text-white"
 																			: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-orange)]"
@@ -576,31 +594,31 @@ export const Layout: React.FC = () => {
 											)}
 										</div>
 									)}
-								</div>
+								</CollapsiblePanel>
 							</div>
+						</div>
 
-							{/* Footer */}
-							<div className="p-6 flex justify-end space-x-3 bg-gray-50/50 dark:bg-zinc-900/30">
-								<button
-									type="button"
-									onClick={() => setIsSettingsOpen(false)}
-									className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
-								>
-									Cancel
-								</button>
-								<button
-									type="submit"
-									disabled={savingSettings}
-									className="px-5 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition flex items-center space-x-1.5 disabled:opacity-50"
-								>
-									<Save size={16} />
-									<span>{savingSettings ? "Saving..." : "Save Settings"}</span>
-								</button>
-							</div>
-						</form>
-					</div>
+						{/* Footer */}
+						<div className="p-6 flex justify-end space-x-3 bg-gray-50/50 dark:bg-zinc-900/30">
+							<button
+								type="button"
+								onClick={() => setIsSettingsOpen(false)}
+								className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition cursor-pointer"
+							>
+								Cancel
+							</button>
+							<button
+								type="submit"
+								disabled={savingSettings}
+								className="px-5 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+							>
+								<Save size={16} />
+								<span>{savingSettings ? "Saving..." : "Save Settings"}</span>
+							</button>
+						</div>
+					</form>
 				</div>
-			)}
+			</ModalMotion>
 
 			{/* Global floating download widget */}
 			<DownloadWidget />

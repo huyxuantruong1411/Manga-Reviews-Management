@@ -28,6 +28,10 @@ import {
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+	AnimatedTabPanel,
+	AnimatedTabPill,
+} from "@/components/motion/MotionPrimitives";
 import client from "../api/client";
 import { ApplicationLogsTab } from "../components/logs/ApplicationLogsTab";
 import { KibanaEmbedTab } from "../components/logs/KibanaEmbedTab";
@@ -505,17 +509,23 @@ export const AuditLogsPage: React.FC = () => {
 				<button
 					type="button"
 					onClick={() => handleTabChange("audit")}
-					className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+					className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer shrink-0 ${
 						activeTab === "audit"
-							? "bg-[var(--brand-orange)] text-white shadow-sm"
+							? "text-white"
 							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
 					}`}
 				>
-					<ShieldCheck className="w-4 h-4" />
-					<span>Audit Logs (Nghiệp Vụ)</span>
+					{activeTab === "audit" && (
+						<AnimatedTabPill
+							layoutId="audit-logs-subtab-pill"
+							className="bg-[var(--brand-orange)] shadow-sm"
+						/>
+					)}
+					<ShieldCheck className="w-4 h-4 relative z-10" />
+					<span className="relative z-10">Audit Logs (Nghiệp Vụ)</span>
 					{total > 0 && (
 						<span
-							className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+							className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold ${
 								activeTab === "audit"
 									? "bg-white/20 text-white"
 									: "bg-gray-200 dark:bg-zinc-700 text-[var(--text-secondary)]"
@@ -529,15 +539,27 @@ export const AuditLogsPage: React.FC = () => {
 				<button
 					type="button"
 					onClick={() => handleTabChange("system")}
-					className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+					className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer shrink-0 ${
 						activeTab === "system"
-							? "bg-[var(--brand-orange)] text-white shadow-sm"
+							? "text-white"
 							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
 					}`}
 				>
-					<Terminal className="w-4 h-4" />
-					<span>Application Logs (ECS Bản Địa)</span>
-					<span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-500">
+					{activeTab === "system" && (
+						<AnimatedTabPill
+							layoutId="audit-logs-subtab-pill"
+							className="bg-[var(--brand-orange)] shadow-sm"
+						/>
+					)}
+					<Terminal className="w-4 h-4 relative z-10" />
+					<span className="relative z-10">Application Logs (ECS Bản Địa)</span>
+					<span
+						className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+							activeTab === "system"
+								? "bg-white/20 text-white"
+								: "bg-amber-500/20 text-amber-500"
+						}`}
+					>
 						NDJSON/ES
 					</span>
 				</button>
@@ -545,684 +567,704 @@ export const AuditLogsPage: React.FC = () => {
 				<button
 					type="button"
 					onClick={() => handleTabChange("kibana")}
-					className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+					className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer shrink-0 ${
 						activeTab === "kibana"
-							? "bg-[var(--brand-orange)] text-white shadow-sm"
+							? "text-white"
 							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-zinc-800"
 					}`}
 				>
-					<Layers className="w-4 h-4" />
-					<span>Kibana Observability</span>
-					<span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-400">
+					{activeTab === "kibana" && (
+						<AnimatedTabPill
+							layoutId="audit-logs-subtab-pill"
+							className="bg-[var(--brand-orange)] shadow-sm"
+						/>
+					)}
+					<Layers className="w-4 h-4 relative z-10" />
+					<span className="relative z-10">Kibana Observability</span>
+					<span
+						className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+							activeTab === "kibana"
+								? "bg-white/20 text-white"
+								: "bg-indigo-500/20 text-indigo-400"
+						}`}
+					>
 						ELK
 					</span>
 				</button>
 			</div>
 
-			{activeTab === "audit" && (
-				<>
-					{/* KPI Stats Cards */}
-					<div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-						{/* Total Logs */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-[var(--brand-orange)]/40 transition">
-							<div className="flex items-center justify-between text-[var(--text-secondary)]">
-								<span className="text-xs font-medium">
-									Total Recorded Events
-								</span>
-								<div className="p-2 rounded-xl bg-orange-500/10 text-[var(--brand-orange)]">
-									<Layers size={16} />
+			<AnimatedTabPanel tabKey={activeTab}>
+				{activeTab === "audit" && (
+					<>
+						{/* KPI Stats Cards */}
+						<div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+							{/* Total Logs */}
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-[var(--brand-orange)]/40 transition">
+								<div className="flex items-center justify-between text-[var(--text-secondary)]">
+									<span className="text-xs font-medium">
+										Total Recorded Events
+									</span>
+									<div className="p-2 rounded-xl bg-orange-500/10 text-[var(--brand-orange)]">
+										<Layers size={16} />
+									</div>
+								</div>
+								<div className="flex items-baseline space-x-2">
+									<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
+										{statsLoading ? (
+											<Skeleton className="h-7 w-20 inline-block rounded" />
+										) : (
+											(stats?.total_logs ?? total).toLocaleString()
+										)}
+									</span>
+									<span className="text-[11px] text-[var(--text-secondary)]">
+										audit records
+									</span>
+								</div>
+								<div className="text-[11px] text-[var(--text-secondary)] flex items-center space-x-1">
+									<span className="text-emerald-500 font-semibold">
+										Active indexing
+									</span>
+									<span>across all collections</span>
 								</div>
 							</div>
-							<div className="flex items-baseline space-x-2">
-								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading ? (
-										<Skeleton className="h-7 w-20 inline-block rounded" />
-									) : (
-										(stats?.total_logs ?? total).toLocaleString()
-									)}
-								</span>
-								<span className="text-[11px] text-[var(--text-secondary)]">
-									audit records
-								</span>
+
+							{/* Manga Operations */}
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-blue-500/40 transition">
+								<div className="flex items-center justify-between text-[var(--text-secondary)]">
+									<span className="text-xs font-medium">Manga Operations</span>
+									<div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+										<BookOpen size={16} />
+									</div>
+								</div>
+								<div className="flex items-baseline space-x-2">
+									<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
+										{statsLoading ? (
+											<Skeleton className="h-7 w-16 inline-block rounded" />
+										) : (
+											(stats?.manga_logs ?? 0).toLocaleString()
+										)}
+									</span>
+									<span className="text-[11px] text-[var(--text-secondary)]">
+										actions
+									</span>
+								</div>
+								<div className="text-[11px] text-[var(--text-secondary)] truncate">
+									Creates, statuses, ratings, alt-titles
+								</div>
 							</div>
-							<div className="text-[11px] text-[var(--text-secondary)] flex items-center space-x-1">
-								<span className="text-emerald-500 font-semibold">
-									Active indexing
-								</span>
-								<span>across all collections</span>
+
+							{/* Review Activities */}
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-emerald-500/40 transition">
+								<div className="flex items-center justify-between text-[var(--text-secondary)]">
+									<span className="text-xs font-medium">Review Activities</span>
+									<div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+										<FileText size={16} />
+									</div>
+								</div>
+								<div className="flex items-baseline space-x-2">
+									<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
+										{statsLoading ? (
+											<Skeleton className="h-7 w-16 inline-block rounded" />
+										) : (
+											(stats?.review_logs ?? 0).toLocaleString()
+										)}
+									</span>
+									<span className="text-[11px] text-[var(--text-secondary)]">
+										entries
+									</span>
+								</div>
+								<div className="text-[11px] text-[var(--text-secondary)] truncate">
+									Review creation, edits, deletions
+								</div>
+							</div>
+
+							{/* 24h Activity Volume */}
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-purple-500/40 transition">
+								<div className="flex items-center justify-between text-[var(--text-secondary)]">
+									<span className="text-xs font-medium">
+										24h System Activity
+									</span>
+									<div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+										<Activity size={16} />
+									</div>
+								</div>
+								<div className="flex items-baseline space-x-2">
+									<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
+										{statsLoading ? (
+											<Skeleton className="h-7 w-16 inline-block rounded" />
+										) : (
+											(stats?.last_24h_count ?? 0).toLocaleString()
+										)}
+									</span>
+									<span className="text-[11px] text-purple-400 font-medium">
+										recent actions
+									</span>
+								</div>
+								<div className="text-[11px] text-[var(--text-secondary)] truncate">
+									Past 24 hours rolling count
+								</div>
 							</div>
 						</div>
 
-						{/* Manga Operations */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-blue-500/40 transition">
-							<div className="flex items-center justify-between text-[var(--text-secondary)]">
-								<span className="text-xs font-medium">Manga Operations</span>
-								<div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-									<BookOpen size={16} />
-								</div>
-							</div>
-							<div className="flex items-baseline space-x-2">
-								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading ? (
-										<Skeleton className="h-7 w-16 inline-block rounded" />
-									) : (
-										(stats?.manga_logs ?? 0).toLocaleString()
+						{/* Filter and Search Bar */}
+						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 space-y-3">
+							<div className="flex flex-col md:flex-row items-center gap-3">
+								{/* Search Input */}
+								<div className="relative flex-1 w-full">
+									<Search
+										className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+										size={16}
+									/>
+									<input
+										type="text"
+										placeholder="Search by title, note, field, action or entity ID..."
+										value={searchTerm}
+										onChange={(e) => setSearchTerm(e.target.value)}
+										className="w-full pl-10 pr-9 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] transition text-[var(--text-primary)]"
+									/>
+									{searchTerm && (
+										<button
+											onClick={() => setSearchTerm("")}
+											className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-[var(--text-primary)]"
+										>
+											<X size={14} />
+										</button>
 									)}
-								</span>
-								<span className="text-[11px] text-[var(--text-secondary)]">
-									actions
-								</span>
-							</div>
-							<div className="text-[11px] text-[var(--text-secondary)] truncate">
-								Creates, statuses, ratings, alt-titles
-							</div>
-						</div>
-
-						{/* Review Activities */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-emerald-500/40 transition">
-							<div className="flex items-center justify-between text-[var(--text-secondary)]">
-								<span className="text-xs font-medium">Review Activities</span>
-								<div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
-									<FileText size={16} />
 								</div>
-							</div>
-							<div className="flex items-baseline space-x-2">
-								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading ? (
-										<Skeleton className="h-7 w-16 inline-block rounded" />
-									) : (
-										(stats?.review_logs ?? 0).toLocaleString()
-									)}
-								</span>
-								<span className="text-[11px] text-[var(--text-secondary)]">
-									entries
-								</span>
-							</div>
-							<div className="text-[11px] text-[var(--text-secondary)] truncate">
-								Review creation, edits, deletions
-							</div>
-						</div>
 
-						{/* 24h Activity Volume */}
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4.5 space-y-2 relative overflow-hidden group hover:border-purple-500/40 transition">
-							<div className="flex items-center justify-between text-[var(--text-secondary)]">
-								<span className="text-xs font-medium">24h System Activity</span>
-								<div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
-									<Activity size={16} />
-								</div>
-							</div>
-							<div className="flex items-baseline space-x-2">
-								<span className="text-2xl font-bold font-spartan text-[var(--text-primary)]">
-									{statsLoading ? (
-										<Skeleton className="h-7 w-16 inline-block rounded" />
-									) : (
-										(stats?.last_24h_count ?? 0).toLocaleString()
-									)}
-								</span>
-								<span className="text-[11px] text-purple-400 font-medium">
-									recent actions
-								</span>
-							</div>
-							<div className="text-[11px] text-[var(--text-secondary)] truncate">
-								Past 24 hours rolling count
-							</div>
-						</div>
-					</div>
-
-					{/* Filter and Search Bar */}
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 space-y-3">
-						<div className="flex flex-col md:flex-row items-center gap-3">
-							{/* Search Input */}
-							<div className="relative flex-1 w-full">
-								<Search
-									className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
-									size={16}
-								/>
-								<input
-									type="text"
-									placeholder="Search by title, note, field, action or entity ID..."
-									value={searchTerm}
-									onChange={(e) => setSearchTerm(e.target.value)}
-									className="w-full pl-10 pr-9 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] transition text-[var(--text-primary)]"
-								/>
-								{searchTerm && (
-									<button
-										onClick={() => setSearchTerm("")}
-										className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-[var(--text-primary)]"
+								{/* Entity Type Filter */}
+								<div className="flex items-center space-x-2 w-full md:w-auto shrink-0">
+									<select
+										value={selectedEntityType}
+										onChange={(e) => {
+											setSelectedEntityType(e.target.value);
+											setPage(1);
+										}}
+										className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer"
 									>
-										<X size={14} />
-									</button>
-								)}
-							</div>
+										<option value="all">All Entity Types</option>
+										<option value="manga">Manga Only</option>
+										<option value="review">Review Only</option>
+										<option value="download">Downloads</option>
+										<option value="system">System / Background</option>
+									</select>
 
-							{/* Entity Type Filter */}
-							<div className="flex items-center space-x-2 w-full md:w-auto shrink-0">
-								<select
-									value={selectedEntityType}
-									onChange={(e) => {
-										setSelectedEntityType(e.target.value);
-										setPage(1);
-									}}
-									className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer"
-								>
-									<option value="all">All Entity Types</option>
-									<option value="manga">Manga Only</option>
-									<option value="review">Review Only</option>
-									<option value="download">Downloads</option>
-									<option value="system">System / Background</option>
-								</select>
-
-								{/* Action Filter */}
-								<select
-									value={selectedAction}
-									onChange={(e) => {
-										setSelectedAction(e.target.value);
-										setPage(1);
-									}}
-									className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer max-w-[180px]"
-								>
-									<option value="all">All Actions</option>
-									{availableActions.map((act) => (
-										<option key={act} value={act}>
-											{act.replace(/_/g, " ")}
-										</option>
-									))}
-								</select>
-
-								{/* Actor Filter */}
-								<select
-									value={selectedActor}
-									onChange={(e) => {
-										setSelectedActor(e.target.value);
-										setPage(1);
-									}}
-									className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer"
-								>
-									<option value="all">All Actors</option>
-									<option value="user">User</option>
-									<option value="system">System</option>
-									<option value="ai_agent">AI Agent</option>
-								</select>
-
-								{/* Reset Filters */}
-								{hasActiveFilters && (
-									<button
-										onClick={resetFilters}
-										className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 transition cursor-pointer shrink-0"
-										title="Reset all filters"
+									{/* Action Filter */}
+									<select
+										value={selectedAction}
+										onChange={(e) => {
+											setSelectedAction(e.target.value);
+											setPage(1);
+										}}
+										className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer max-w-[180px]"
 									>
-										Reset
-									</button>
-								)}
+										<option value="all">All Actions</option>
+										{availableActions.map((act) => (
+											<option key={act} value={act}>
+												{act.replace(/_/g, " ")}
+											</option>
+										))}
+									</select>
+
+									{/* Actor Filter */}
+									<select
+										value={selectedActor}
+										onChange={(e) => {
+											setSelectedActor(e.target.value);
+											setPage(1);
+										}}
+										className="px-3 py-2 rounded-xl text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] focus:outline-none focus:border-[var(--brand-orange)] text-[var(--text-primary)] cursor-pointer"
+									>
+										<option value="all">All Actors</option>
+										<option value="user">User</option>
+										<option value="system">System</option>
+										<option value="ai_agent">AI Agent</option>
+									</select>
+
+									{/* Reset Filters */}
+									{hasActiveFilters && (
+										<button
+											onClick={resetFilters}
+											className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 transition cursor-pointer shrink-0"
+											title="Reset all filters"
+										>
+											Reset
+										</button>
+									)}
+								</div>
 							</div>
+
+							{/* Active Filters Display */}
+							{hasActiveFilters && (
+								<div className="flex items-center gap-2 pt-1 flex-wrap text-[11px] text-[var(--text-secondary)]">
+									<span>Filtered by:</span>
+									{searchTerm && (
+										<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
+											keyword: "{searchTerm}"
+										</span>
+									)}
+									{selectedEntityType !== "all" && (
+										<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
+											entity: {selectedEntityType}
+										</span>
+									)}
+									{selectedAction !== "all" && (
+										<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
+											action: {selectedAction}
+										</span>
+									)}
+									{selectedActor !== "all" && (
+										<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
+											actor: {selectedActor}
+										</span>
+									)}
+								</div>
+							)}
 						</div>
 
-						{/* Active Filters Display */}
-						{hasActiveFilters && (
-							<div className="flex items-center gap-2 pt-1 flex-wrap text-[11px] text-[var(--text-secondary)]">
-								<span>Filtered by:</span>
-								{searchTerm && (
-									<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
-										keyword: "{searchTerm}"
-									</span>
-								)}
-								{selectedEntityType !== "all" && (
-									<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
-										entity: {selectedEntityType}
-									</span>
-								)}
-								{selectedAction !== "all" && (
-									<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
-										action: {selectedAction}
-									</span>
-								)}
-								{selectedActor !== "all" && (
-									<span className="px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)]">
-										actor: {selectedActor}
-									</span>
-								)}
-							</div>
-						)}
-					</div>
-
-					{/* Main Audit Table */}
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm">
-						<div className="overflow-x-auto">
-							<table className="w-full text-left text-xs">
-								<thead className="bg-gray-50/70 dark:bg-zinc-800/40 text-[var(--text-secondary)] uppercase font-semibold text-[10px] tracking-wider border-b border-[var(--border-primary)]">
-									<tr>
-										<th className="py-3.5 px-4 w-[190px]">Timestamp</th>
-										<th className="py-3.5 px-4 w-[110px]">Actor</th>
-										<th className="py-3.5 px-4 w-[160px]">Action</th>
-										<th className="py-3.5 px-4 w-[260px]">Entity Target</th>
-										<th className="py-3.5 px-4">Changes & Description</th>
-										<th className="py-3.5 px-4 text-right w-[90px]">Inspect</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-[var(--border-primary)]">
-									{loading ? (
-										Array.from(
-											{ length: 6 },
-											(_, i) => `skel-audit-row-${i}`,
-										).map((k) => (
-											<tr key={k} className="hover:bg-muted/10">
-												<td className="py-3 px-4">
-													<Skeleton className="h-4 w-28 rounded" />
-												</td>
-												<td className="py-3 px-4">
-													<Skeleton className="h-6 w-16 rounded-full" />
-												</td>
-												<td className="py-3 px-4">
-													<Skeleton className="h-5 w-24 rounded-md" />
-												</td>
-												<td className="py-3 px-4">
-													<div className="space-y-1">
-														<Skeleton className="h-4 w-40 rounded" />
-														<Skeleton className="h-3 w-24 rounded" />
-													</div>
-												</td>
-												<td className="py-3 px-4">
-													<Skeleton className="h-4 w-full max-w-sm rounded" />
-												</td>
-												<td className="py-3 px-4 text-right">
-													<Skeleton className="h-7 w-12 rounded-lg ml-auto" />
-												</td>
-											</tr>
-										))
-									) : logs.length === 0 ? (
+						{/* Main Audit Table */}
+						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm">
+							<div className="overflow-x-auto">
+								<table className="w-full text-left text-xs">
+									<thead className="bg-gray-50/70 dark:bg-zinc-800/40 text-[var(--text-secondary)] uppercase font-semibold text-[10px] tracking-wider border-b border-[var(--border-primary)]">
 										<tr>
-											<td
-												colSpan={6}
-												className="py-16 text-center text-zinc-400"
-											>
-												<div className="flex flex-col items-center justify-center space-y-2">
-													<History size={32} className="opacity-40" />
-													<span className="text-sm font-semibold text-[var(--text-primary)]">
-														No audit logs found
-													</span>
-													<p className="text-xs text-[var(--text-secondary)]">
-														Try relaxing your search terms or filters.
-													</p>
-												</div>
-											</td>
+											<th className="py-3.5 px-4 w-[190px]">Timestamp</th>
+											<th className="py-3.5 px-4 w-[110px]">Actor</th>
+											<th className="py-3.5 px-4 w-[160px]">Action</th>
+											<th className="py-3.5 px-4 w-[260px]">Entity Target</th>
+											<th className="py-3.5 px-4">Changes & Description</th>
+											<th className="py-3.5 px-4 text-right w-[90px]">
+												Inspect
+											</th>
 										</tr>
-									) : (
-										logs.map((log) => {
-											const badge = getActionBadge(log.action);
-											const actorBadge = getActorBadge(log.actor);
-											const formattedOld = formatFieldValue(
-												log.field,
-												log.old_value,
-											);
-											const formattedNew = formatFieldValue(
-												log.field,
-												log.new_value,
-											);
-											const hasDiff =
-												(log.old_value !== null &&
-													log.old_value !== undefined &&
-													log.old_value !== "") ||
-												(log.new_value !== null &&
-													log.new_value !== undefined &&
-													log.new_value !== "");
-											const isDiffMeaningful =
-												hasDiff && formattedOld !== formattedNew;
-
-											const mangaId =
-												log.entity_type === "manga"
-													? log.entity_id
-													: log.details?.manga_id ||
-														(log.entity_type === "review"
-															? log.details?.manga_id
-															: null);
-
-											return (
-												<tr
-													key={log._id}
-													className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition group"
-												>
-													{/* Timestamp */}
-													<td className="py-3 px-4 align-top">
-														<div className="space-y-0.5">
-															<span className="font-medium text-[var(--text-primary)] block">
-																{formatTimestamp(log.timestamp)}
-															</span>
-															<span className="text-[10px] text-zinc-400 block font-mono">
-																{getRelativeTime(log.timestamp)}
-															</span>
+									</thead>
+									<tbody className="divide-y divide-[var(--border-primary)]">
+										{loading ? (
+											Array.from(
+												{ length: 6 },
+												(_, i) => `skel-audit-row-${i}`,
+											).map((k) => (
+												<tr key={k} className="hover:bg-muted/10">
+													<td className="py-3 px-4">
+														<Skeleton className="h-4 w-28 rounded" />
+													</td>
+													<td className="py-3 px-4">
+														<Skeleton className="h-6 w-16 rounded-full" />
+													</td>
+													<td className="py-3 px-4">
+														<Skeleton className="h-5 w-24 rounded-md" />
+													</td>
+													<td className="py-3 px-4">
+														<div className="space-y-1">
+															<Skeleton className="h-4 w-40 rounded" />
+															<Skeleton className="h-3 w-24 rounded" />
 														</div>
 													</td>
-
-													{/* Actor */}
-													<td className="py-3 px-4 align-top">
-														<span
-															className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-medium ${actorBadge.bg}`}
-														>
-															{actorBadge.icon}
-															<span>{actorBadge.label}</span>
-														</span>
+													<td className="py-3 px-4">
+														<Skeleton className="h-4 w-full max-w-sm rounded" />
 													</td>
+													<td className="py-3 px-4 text-right">
+														<Skeleton className="h-7 w-12 rounded-lg ml-auto" />
+													</td>
+												</tr>
+											))
+										) : logs.length === 0 ? (
+											<tr>
+												<td
+													colSpan={6}
+													className="py-16 text-center text-zinc-400"
+												>
+													<div className="flex flex-col items-center justify-center space-y-2">
+														<History size={32} className="opacity-40" />
+														<span className="text-sm font-semibold text-[var(--text-primary)]">
+															No audit logs found
+														</span>
+														<p className="text-xs text-[var(--text-secondary)]">
+															Try relaxing your search terms or filters.
+														</p>
+													</div>
+												</td>
+											</tr>
+										) : (
+											logs.map((log) => {
+												const badge = getActionBadge(log.action);
+												const actorBadge = getActorBadge(log.actor);
+												const formattedOld = formatFieldValue(
+													log.field,
+													log.old_value,
+												);
+												const formattedNew = formatFieldValue(
+													log.field,
+													log.new_value,
+												);
+												const hasDiff =
+													(log.old_value !== null &&
+														log.old_value !== undefined &&
+														log.old_value !== "") ||
+													(log.new_value !== null &&
+														log.new_value !== undefined &&
+														log.new_value !== "");
+												const isDiffMeaningful =
+													hasDiff && formattedOld !== formattedNew;
 
-													{/* Action */}
-													<td className="py-3 px-4 align-top">
-														<div className="space-y-1">
+												const mangaId =
+													log.entity_type === "manga"
+														? log.entity_id
+														: log.details?.manga_id ||
+															(log.entity_type === "review"
+																? log.details?.manga_id
+																: null);
+
+												return (
+													<tr
+														key={log._id}
+														className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition group"
+													>
+														{/* Timestamp */}
+														<td className="py-3 px-4 align-top">
+															<div className="space-y-0.5">
+																<span className="font-medium text-[var(--text-primary)] block">
+																	{formatTimestamp(log.timestamp)}
+																</span>
+																<span className="text-[10px] text-zinc-400 block font-mono">
+																	{getRelativeTime(log.timestamp)}
+																</span>
+															</div>
+														</td>
+
+														{/* Actor */}
+														<td className="py-3 px-4 align-top">
 															<span
-																className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${badge.bg}`}
+																className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-medium ${actorBadge.bg}`}
 															>
-																<span
-																	className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}
-																/>
-																<span>{badge.label}</span>
+																{actorBadge.icon}
+																<span>{actorBadge.label}</span>
 															</span>
-															{log.field && (
-																<div className="text-[10px] text-zinc-400 font-mono">
-																	field:{" "}
-																	<span className="text-[var(--text-primary)]">
-																		{log.field}
+														</td>
+
+														{/* Action */}
+														<td className="py-3 px-4 align-top">
+															<div className="space-y-1">
+																<span
+																	className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${badge.bg}`}
+																>
+																	<span
+																		className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}
+																	/>
+																	<span>{badge.label}</span>
+																</span>
+																{log.field && (
+																	<div className="text-[10px] text-zinc-400 font-mono">
+																		field:{" "}
+																		<span className="text-[var(--text-primary)]">
+																			{log.field}
+																		</span>
+																	</div>
+																)}
+															</div>
+														</td>
+
+														{/* Entity Target */}
+														<td className="py-3 px-4 align-top">
+															<div className="space-y-1 max-w-[250px]">
+																<div className="flex items-center space-x-1.5">
+																	<span className="px-1.5 py-0.2 rounded text-[10px] uppercase font-mono bg-zinc-200/60 dark:bg-zinc-800 text-zinc-400">
+																		{log.entity_type}
+																	</span>
+																	{mangaId ? (
+																		<Link
+																			to={`/manga/${mangaId}`}
+																			className="font-semibold text-[var(--text-primary)] hover:text-[var(--brand-orange)] transition truncate flex items-center space-x-1"
+																			title={log.entity_title || log.entity_id}
+																		>
+																			<span className="truncate">
+																				{log.entity_title || "View Manga"}
+																			</span>
+																			<ExternalLink
+																				size={11}
+																				className="shrink-0 opacity-60"
+																			/>
+																		</Link>
+																	) : (
+																		<span
+																			className="font-semibold text-[var(--text-primary)] truncate"
+																			title={log.entity_title || log.entity_id}
+																		>
+																			{log.entity_title || log.entity_id}
+																		</span>
+																	)}
+																</div>
+																<div className="flex items-center space-x-1 text-[10px] text-zinc-400 font-mono">
+																	<span>ID: {log.entity_id.slice(-8)}</span>
+																	<button
+																		onClick={() =>
+																			handleCopyText(log.entity_id, log._id)
+																		}
+																		className="text-zinc-400 hover:text-[var(--text-primary)] transition"
+																		title="Copy ID"
+																	>
+																		{copiedId === log._id ? (
+																			<Check
+																				size={10}
+																				className="text-emerald-500"
+																			/>
+																		) : (
+																			<Copy size={10} />
+																		)}
+																	</button>
+																</div>
+															</div>
+														</td>
+
+														{/* Changes & Note */}
+														<td className="py-3 px-4 align-top space-y-1.5">
+															{isDiffMeaningful && (
+																<div className="p-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[11px] font-mono flex items-center gap-1.5 flex-wrap">
+																	<span
+																		className="text-rose-400 line-through max-w-[200px] truncate"
+																		title={formattedOld}
+																	>
+																		{formattedOld || "(empty)"}
+																	</span>
+																	<ArrowRight
+																		size={11}
+																		className="text-zinc-400 shrink-0"
+																	/>
+																	<span
+																		className="text-emerald-400 font-semibold max-w-[240px] truncate"
+																		title={formattedNew}
+																	>
+																		{formattedNew || "(empty)"}
 																	</span>
 																</div>
 															)}
-														</div>
-													</td>
 
-													{/* Entity Target */}
-													<td className="py-3 px-4 align-top">
-														<div className="space-y-1 max-w-[250px]">
-															<div className="flex items-center space-x-1.5">
-																<span className="px-1.5 py-0.2 rounded text-[10px] uppercase font-mono bg-zinc-200/60 dark:bg-zinc-800 text-zinc-400">
-																	{log.entity_type}
-																</span>
-																{mangaId ? (
-																	<Link
-																		to={`/manga/${mangaId}`}
-																		className="font-semibold text-[var(--text-primary)] hover:text-[var(--brand-orange)] transition truncate flex items-center space-x-1"
-																		title={log.entity_title || log.entity_id}
-																	>
-																		<span className="truncate">
-																			{log.entity_title || "View Manga"}
-																		</span>
-																		<ExternalLink
-																			size={11}
-																			className="shrink-0 opacity-60"
-																		/>
-																	</Link>
-																) : (
-																	<span
-																		className="font-semibold text-[var(--text-primary)] truncate"
-																		title={log.entity_title || log.entity_id}
-																	>
-																		{log.entity_title || log.entity_id}
-																	</span>
-																)}
-															</div>
-															<div className="flex items-center space-x-1 text-[10px] text-zinc-400 font-mono">
-																<span>ID: {log.entity_id.slice(-8)}</span>
-																<button
-																	onClick={() =>
-																		handleCopyText(log.entity_id, log._id)
-																	}
-																	className="text-zinc-400 hover:text-[var(--text-primary)] transition"
-																	title="Copy ID"
-																>
-																	{copiedId === log._id ? (
-																		<Check
-																			size={10}
-																			className="text-emerald-500"
-																		/>
-																	) : (
-																		<Copy size={10} />
-																	)}
-																</button>
-															</div>
-														</div>
-													</td>
+															{log.note && (
+																<p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+																	{log.note}
+																</p>
+															)}
+														</td>
 
-													{/* Changes & Note */}
-													<td className="py-3 px-4 align-top space-y-1.5">
-														{isDiffMeaningful && (
-															<div className="p-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[11px] font-mono flex items-center gap-1.5 flex-wrap">
-																<span
-																	className="text-rose-400 line-through max-w-[200px] truncate"
-																	title={formattedOld}
-																>
-																	{formattedOld || "(empty)"}
-																</span>
-																<ArrowRight
-																	size={11}
-																	className="text-zinc-400 shrink-0"
-																/>
-																<span
-																	className="text-emerald-400 font-semibold max-w-[240px] truncate"
-																	title={formattedNew}
-																>
-																	{formattedNew || "(empty)"}
-																</span>
-															</div>
-														)}
-
-														{log.note && (
-															<p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-																{log.note}
-															</p>
-														)}
-													</td>
-
-													{/* Inspect Action */}
-													<td className="py-3 px-4 align-top text-right">
-														<button
-															onClick={() => setSelectedLog(log)}
-															className="px-2.5 py-1 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition flex items-center space-x-1 ml-auto cursor-pointer"
-															title="Inspect full audit record"
-														>
-															<Eye size={12} />
-															<span>View</span>
-														</button>
-													</td>
-												</tr>
-											);
-										})
-									)}
-								</tbody>
-							</table>
-						</div>
-
-						{/* Pagination Toolbar */}
-						<div className="p-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-secondary)]">
-							<div className="flex items-center space-x-2">
-								<span>Rows per page:</span>
-								<select
-									value={pageSize}
-									onChange={(e) => {
-										setPageSize(Number(e.target.value));
-										setPage(1);
-									}}
-									className="px-2 py-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none"
-								>
-									<option value={15}>15</option>
-									<option value={25}>25</option>
-									<option value={50}>50</option>
-									<option value={100}>100</option>
-								</select>
-								<span>
-									Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} -{" "}
-									{Math.min(page * pageSize, total)} of {total.toLocaleString()}{" "}
-									records
-								</span>
+														{/* Inspect Action */}
+														<td className="py-3 px-4 align-top text-right">
+															<button
+																onClick={() => setSelectedLog(log)}
+																className="px-2.5 py-1 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition flex items-center space-x-1 ml-auto cursor-pointer"
+																title="Inspect full audit record"
+															>
+																<Eye size={12} />
+																<span>View</span>
+															</button>
+														</td>
+													</tr>
+												);
+											})
+										)}
+									</tbody>
+								</table>
 							</div>
 
-							<div className="flex items-center space-x-1.5">
-								<button
-									onClick={() => setPage(1)}
-									disabled={page <= 1}
-									className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-									title="First Page"
-								>
-									<ChevronsLeft size={16} />
-								</button>
-								<button
-									onClick={() => setPage((p) => Math.max(1, p - 1))}
-									disabled={page <= 1}
-									className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-									title="Previous Page"
-								>
-									<ChevronLeft size={16} />
-								</button>
-								<span className="px-3 py-1 font-semibold text-[var(--text-primary)]">
-									Page {page} of {totalPages}
-								</span>
-								<button
-									onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-									disabled={page >= totalPages}
-									className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-									title="Next Page"
-								>
-									<ChevronRight size={16} />
-								</button>
-								<button
-									onClick={() => setPage(totalPages)}
-									disabled={page >= totalPages}
-									className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-									title="Last Page"
-								>
-									<ChevronsRight size={16} />
-								</button>
-							</div>
-						</div>
-					</div>
-
-					{/* Audit Detail Inspector Drawer/Modal */}
-					{selectedLog && (
-						<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-								{/* Modal Header */}
-								<div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
-									<div className="flex items-center space-x-2.5">
-										<div className="p-2 rounded-xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
-											<ShieldCheck size={20} />
-										</div>
-										<div>
-											<h3 className="text-base font-bold text-[var(--text-primary)]">
-												Audit Record Inspector
-											</h3>
-											<p className="text-[11px] text-[var(--text-secondary)] font-mono">
-												ID: {selectedLog._id}
-											</p>
-										</div>
-									</div>
-									<button
-										onClick={() => setSelectedLog(null)}
-										className="p-2 text-zinc-400 hover:text-[var(--text-primary)] rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+							{/* Pagination Toolbar */}
+							<div className="p-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-secondary)]">
+								<div className="flex items-center space-x-2">
+									<span>Rows per page:</span>
+									<select
+										value={pageSize}
+										onChange={(e) => {
+											setPageSize(Number(e.target.value));
+											setPage(1);
+										}}
+										className="px-2 py-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none"
 									>
-										<X size={18} />
+										<option value={15}>15</option>
+										<option value={25}>25</option>
+										<option value={50}>50</option>
+										<option value={100}>100</option>
+									</select>
+									<span>
+										Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} -{" "}
+										{Math.min(page * pageSize, total)} of{" "}
+										{total.toLocaleString()} records
+									</span>
+								</div>
+
+								<div className="flex items-center space-x-1.5">
+									<button
+										onClick={() => setPage(1)}
+										disabled={page <= 1}
+										className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+										title="First Page"
+									>
+										<ChevronsLeft size={16} />
+									</button>
+									<button
+										onClick={() => setPage((p) => Math.max(1, p - 1))}
+										disabled={page <= 1}
+										className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+										title="Previous Page"
+									>
+										<ChevronLeft size={16} />
+									</button>
+									<span className="px-3 py-1 font-semibold text-[var(--text-primary)]">
+										Page {page} of {totalPages}
+									</span>
+									<button
+										onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+										disabled={page >= totalPages}
+										className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+										title="Next Page"
+									>
+										<ChevronRight size={16} />
+									</button>
+									<button
+										onClick={() => setPage(totalPages)}
+										disabled={page >= totalPages}
+										className="p-1.5 rounded-lg border border-[var(--border-primary)] hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+										title="Last Page"
+									>
+										<ChevronsRight size={16} />
 									</button>
 								</div>
+							</div>
+						</div>
 
-								{/* Modal Content Grid */}
-								<div className="grid grid-cols-2 gap-3 text-xs">
-									<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-										<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-											Action
-										</span>
-										<span className="font-semibold text-[var(--text-primary)] capitalize">
-											{selectedLog.action.replace(/_/g, " ")}
-										</span>
-									</div>
-
-									<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-										<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-											Actor
-										</span>
-										<span className="font-semibold text-[var(--text-primary)] capitalize">
-											{selectedLog.actor}
-										</span>
-									</div>
-
-									<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-										<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-											Timestamp (Local)
-										</span>
-										<span className="font-semibold text-[var(--text-primary)]">
-											{formatTimestamp(selectedLog.timestamp)}
-										</span>
-									</div>
-
-									<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-										<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-											Timestamp (UTC ISO)
-										</span>
-										<span className="font-mono text-[11px] text-[var(--text-secondary)]">
-											{selectedLog.timestamp}
-										</span>
-									</div>
-
-									<div className="col-span-2 p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-										<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-											Target Entity
-										</span>
-										<div className="flex items-center justify-between mt-1">
-											<span className="font-semibold text-[var(--text-primary)]">
-												{selectedLog.entity_title || selectedLog.entity_id}
-											</span>
-											<span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-zinc-200 dark:bg-zinc-800 text-zinc-400">
-												Type: {selectedLog.entity_type}
-											</span>
+						{/* Audit Detail Inspector Drawer/Modal */}
+						{selectedLog && (
+							<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+									{/* Modal Header */}
+									<div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
+										<div className="flex items-center space-x-2.5">
+											<div className="p-2 rounded-xl bg-[var(--brand-orange)]/10 text-[var(--brand-orange)]">
+												<ShieldCheck size={20} />
+											</div>
+											<div>
+												<h3 className="text-base font-bold text-[var(--text-primary)]">
+													Audit Record Inspector
+												</h3>
+												<p className="text-[11px] text-[var(--text-secondary)] font-mono">
+													ID: {selectedLog._id}
+												</p>
+											</div>
 										</div>
-										<div className="text-[10px] text-zinc-400 font-mono mt-1">
-											Entity ID: {selectedLog.entity_id}
-										</div>
-									</div>
-
-									{selectedLog.note && (
-										<div className="col-span-2 p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
-											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
-												Note / Description
-											</span>
-											<p className="mt-1 text-[var(--text-primary)] leading-relaxed">
-												{selectedLog.note}
-											</p>
-										</div>
-									)}
-								</div>
-
-								{/* Raw JSON Payload */}
-								<div className="space-y-1.5">
-									<div className="flex items-center justify-between text-xs">
-										<span className="font-semibold text-[var(--text-secondary)]">
-											Raw JSON (For AI / Diagnostics)
-										</span>
 										<button
-											onClick={handleCopyJson}
-											className="flex items-center space-x-1 text-[11px] text-[var(--brand-orange)] hover:underline cursor-pointer"
+											onClick={() => setSelectedLog(null)}
+											className="p-2 text-zinc-400 hover:text-[var(--text-primary)] rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
 										>
-											{copiedJson ? <Check size={12} /> : <Copy size={12} />}
-											<span>{copiedJson ? "Copied JSON" : "Copy Payload"}</span>
+											<X size={18} />
 										</button>
 									</div>
-									<pre className="p-3.5 rounded-xl bg-zinc-900 text-zinc-200 text-[11px] font-mono max-h-52 overflow-y-auto border border-zinc-800">
-										{JSON.stringify(selectedLog, null, 2)}
-									</pre>
-								</div>
 
-								{/* Modal Footer */}
-								<div className="flex justify-end pt-2">
-									<button
-										onClick={() => setSelectedLog(null)}
-										className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-zinc-800 text-[var(--text-primary)] hover:bg-gray-200 dark:hover:bg-zinc-700 transition"
-									>
-										Close
-									</button>
+									{/* Modal Content Grid */}
+									<div className="grid grid-cols-2 gap-3 text-xs">
+										<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+												Action
+											</span>
+											<span className="font-semibold text-[var(--text-primary)] capitalize">
+												{selectedLog.action.replace(/_/g, " ")}
+											</span>
+										</div>
+
+										<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+												Actor
+											</span>
+											<span className="font-semibold text-[var(--text-primary)] capitalize">
+												{selectedLog.actor}
+											</span>
+										</div>
+
+										<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+												Timestamp (Local)
+											</span>
+											<span className="font-semibold text-[var(--text-primary)]">
+												{formatTimestamp(selectedLog.timestamp)}
+											</span>
+										</div>
+
+										<div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+												Timestamp (UTC ISO)
+											</span>
+											<span className="font-mono text-[11px] text-[var(--text-secondary)]">
+												{selectedLog.timestamp}
+											</span>
+										</div>
+
+										<div className="col-span-2 p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+											<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+												Target Entity
+											</span>
+											<div className="flex items-center justify-between mt-1">
+												<span className="font-semibold text-[var(--text-primary)]">
+													{selectedLog.entity_title || selectedLog.entity_id}
+												</span>
+												<span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-zinc-200 dark:bg-zinc-800 text-zinc-400">
+													Type: {selectedLog.entity_type}
+												</span>
+											</div>
+											<div className="text-[10px] text-zinc-400 font-mono mt-1">
+												Entity ID: {selectedLog.entity_id}
+											</div>
+										</div>
+
+										{selectedLog.note && (
+											<div className="col-span-2 p-3 rounded-xl bg-gray-50 dark:bg-zinc-900/60 border border-[var(--border-primary)]">
+												<span className="text-[10px] text-zinc-400 uppercase font-semibold block">
+													Note / Description
+												</span>
+												<p className="mt-1 text-[var(--text-primary)] leading-relaxed">
+													{selectedLog.note}
+												</p>
+											</div>
+										)}
+									</div>
+
+									{/* Raw JSON Payload */}
+									<div className="space-y-1.5">
+										<div className="flex items-center justify-between text-xs">
+											<span className="font-semibold text-[var(--text-secondary)]">
+												Raw JSON (For AI / Diagnostics)
+											</span>
+											<button
+												onClick={handleCopyJson}
+												className="flex items-center space-x-1 text-[11px] text-[var(--brand-orange)] hover:underline cursor-pointer"
+											>
+												{copiedJson ? <Check size={12} /> : <Copy size={12} />}
+												<span>
+													{copiedJson ? "Copied JSON" : "Copy Payload"}
+												</span>
+											</button>
+										</div>
+										<pre className="p-3.5 rounded-xl bg-zinc-900 text-zinc-200 text-[11px] font-mono max-h-52 overflow-y-auto border border-zinc-800">
+											{JSON.stringify(selectedLog, null, 2)}
+										</pre>
+									</div>
+
+									{/* Modal Footer */}
+									<div className="flex justify-end pt-2">
+										<button
+											onClick={() => setSelectedLog(null)}
+											className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-zinc-800 text-[var(--text-primary)] hover:bg-gray-200 dark:hover:bg-zinc-700 transition"
+										>
+											Close
+										</button>
+									</div>
 								</div>
 							</div>
-						</div>
-					)}
-				</>
-			)}
+						)}
+					</>
+				)}
 
-			{activeTab === "system" && <ApplicationLogsTab />}
+				{activeTab === "system" && <ApplicationLogsTab />}
 
-			{activeTab === "kibana" && (
-				<KibanaEmbedTab onSwitchToAppLogs={() => handleTabChange("system")} />
-			)}
+				{activeTab === "kibana" && (
+					<KibanaEmbedTab onSwitchToAppLogs={() => handleTabChange("system")} />
+				)}
+			</AnimatedTabPanel>
 		</div>
 	);
 };

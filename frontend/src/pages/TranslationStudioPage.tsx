@@ -23,6 +23,10 @@ import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+	AnimatedTabPanel,
+	AnimatedTabPill,
+} from "@/components/motion/MotionPrimitives";
+import {
 	type StorageUsage,
 	type TranslationFontPack,
 	type TranslationJob,
@@ -1533,21 +1537,27 @@ export const TranslationStudioPage: React.FC = () => {
 								e.preventDefault();
 								handleTabChange(t.id as StudioTab);
 							}}
-							className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center space-x-2 shrink-0 cursor-pointer ${
+							className={`relative px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center space-x-2 shrink-0 cursor-pointer ${
 								isActive
-									? "bg-[var(--brand-orange)] text-white shadow-sm"
+									? "text-white"
 									: "text-zinc-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
 							}`}
 						>
-							<Icon size={14} />
-							<span>{t.label}</span>
+							{isActive && (
+								<AnimatedTabPill
+									layoutId="translation-studio-main-tab"
+									className="bg-[var(--brand-orange)] shadow-sm"
+								/>
+							)}
+							<Icon size={14} className="relative z-10" />
+							<span className="relative z-10">{t.label}</span>
 						</button>
 					);
 				})}
 			</div>
 
 			{/* Tab Content */}
-			<div className="pt-2">
+			<AnimatedTabPanel tabKey={activeTab} className="pt-2">
 				{activeTab === "overview" && renderOverview()}
 				{activeTab === "demo" && renderDemoWorkspace()}
 				{activeTab === "profiles" && renderProfiles()}
@@ -1555,7 +1565,7 @@ export const TranslationStudioPage: React.FC = () => {
 				{activeTab === "fonts" && renderFonts()}
 				{activeTab === "jobs" && renderJobs()}
 				{activeTab === "storage" && renderStorage()}
-			</div>
+			</AnimatedTabPanel>
 		</div>
 	);
 };

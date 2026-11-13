@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import client from "../api/client";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Tag {
 	_id: string;
@@ -35,6 +36,7 @@ export const TagsPage: React.FC = () => {
 	const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
 	const { showAlert } = useAlert();
+	const { confirm } = useConfirm();
 
 	const fetchTags = async () => {
 		try {
@@ -181,12 +183,15 @@ export const TagsPage: React.FC = () => {
 	};
 
 	const handleDeleteTag = async (id: string) => {
-		if (
-			!window.confirm(
+		const ok = await confirm({
+			title: "Xóa Custom Tag?",
+			message:
 				"Are you sure you want to delete this custom tag? It will be removed from all mangas.",
-			)
-		)
-			return;
+			confirmLabel: "Xóa tag",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) return;
 		try {
 			await client.delete(`/api/tags/${id}`);
 			setTags((prev) => prev.filter((t) => t._id !== id));

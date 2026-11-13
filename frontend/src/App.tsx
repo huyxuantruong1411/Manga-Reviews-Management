@@ -1,3 +1,4 @@
+import { MotionConfig } from "motion/react";
 import type React from "react";
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
@@ -28,76 +29,93 @@ import {
 	ReaderPageSkeleton,
 } from "./components/loading/PageSkeletons";
 import { AlertProvider } from "./hooks/useAlert";
+import { ConfirmProvider } from "./hooks/useConfirm";
 import { DownloadProvider } from "./hooks/useDownload";
 
 export const App: React.FC = () => {
 	return (
-		<BrowserRouter>
-			<AlertProvider>
-				<DownloadProvider>
-					<TooltipProvider>
-						<ErrorBoundary>
-							<Suspense fallback={<DefaultPageSkeleton />}>
-								<Routes>
-									{/* Dedicated full-screen MangaDex-style reader route */}
-									<Route
-										path="manga/:id/read/:chapterId"
-										element={
-											<Suspense fallback={<ReaderPageSkeleton />}>
-												<MangaReaderPage />
-											</Suspense>
-										}
-									/>
+		<MotionConfig reducedMotion="user">
+			<BrowserRouter>
+				<AlertProvider>
+					<ConfirmProvider>
+						<DownloadProvider>
+							<TooltipProvider>
+								<ErrorBoundary>
+									<Suspense fallback={<DefaultPageSkeleton />}>
+										<Routes>
+											{/* Dedicated full-screen MangaDex-style reader route */}
+											<Route
+												path="manga/:id/read/:chapterId"
+												element={
+													<Suspense fallback={<ReaderPageSkeleton />}>
+														<MangaReaderPage />
+													</Suspense>
+												}
+											/>
 
-									<Route path="/" element={<Layout />}>
-										<Route index element={<MangaListPage />} />
-										<Route path="manga/:id" element={<MangaDetailPage />} />
-										<Route
-											path="panel-words-detector"
-											element={<PanelWordsDetectorPage />}
-										/>
-										<Route path="panels" element={<PanelWordsDetectorPage />} />
-										<Route path="analytics" element={<AnalyticsPage />} />
-										<Route path="tags" element={<TagsPage />} />
-										<Route
-											path="author/:id/:slug"
-											element={<AuthorDetailPage />}
-										/>
-										<Route path="author/:name" element={<AuthorDetailPage />} />
-										<Route path="tools" element={<ImageToolsPage />} />
-										<Route path="downloads" element={<DownloadsPage />} />
-										<Route path="sync" element={<SyncManagerPage />} />
-										<Route path="audit-logs" element={<AuditLogsPage />} />
-										<Route path="audit" element={<AuditLogsPage />} />
-										<Route
-											path="translation"
-											element={<TranslationStudioPage />}
-										/>
-										<Route path="studio" element={<TranslationStudioPage />} />
-										<Route
-											path="datalake-pool"
-											element={<DataLakePoolPage />}
-										/>
-										<Route path="reader-pool" element={<DataLakePoolPage />} />
-										<Route
-											path="*"
-											element={
-												<div className="p-8 text-center space-y-4">
-													<h1>Không tìm thấy trang</h1>
-													<Link to="/" className="underline">
-														Về thư viện manga
-													</Link>
-												</div>
-											}
-										/>
-									</Route>
-								</Routes>
-							</Suspense>
-						</ErrorBoundary>
-					</TooltipProvider>
-				</DownloadProvider>
-			</AlertProvider>
-		</BrowserRouter>
+											<Route path="/" element={<Layout />}>
+												<Route index element={<MangaListPage />} />
+												<Route path="manga/:id" element={<MangaDetailPage />} />
+												<Route
+													path="panel-words-detector"
+													element={<PanelWordsDetectorPage />}
+												/>
+												<Route
+													path="panels"
+													element={<PanelWordsDetectorPage />}
+												/>
+												<Route path="analytics" element={<AnalyticsPage />} />
+												<Route path="tags" element={<TagsPage />} />
+												<Route
+													path="author/:id/:slug"
+													element={<AuthorDetailPage />}
+												/>
+												<Route
+													path="author/:name"
+													element={<AuthorDetailPage />}
+												/>
+												<Route path="tools" element={<ImageToolsPage />} />
+												<Route path="downloads" element={<DownloadsPage />} />
+												<Route path="sync" element={<SyncManagerPage />} />
+												<Route path="audit-logs" element={<AuditLogsPage />} />
+												<Route path="audit" element={<AuditLogsPage />} />
+												<Route
+													path="translation"
+													element={<TranslationStudioPage />}
+												/>
+												<Route
+													path="studio"
+													element={<TranslationStudioPage />}
+												/>
+												<Route
+													path="datalake-pool"
+													element={<DataLakePoolPage />}
+												/>
+												<Route
+													path="reader-pool"
+													element={<DataLakePoolPage />}
+												/>
+												<Route
+													path="*"
+													element={
+														<div className="p-8 text-center space-y-4">
+															<h1>Không tìm thấy trang</h1>
+															<Link to="/" className="underline">
+																Về thư viện manga
+															</Link>
+														</div>
+													}
+												/>
+											</Route>
+										</Routes>
+									</Suspense>
+								</ErrorBoundary>
+							</TooltipProvider>
+						</DownloadProvider>
+					</ConfirmProvider>
+				</AlertProvider>
+			</BrowserRouter>
+		</MotionConfig>
 	);
 };
 

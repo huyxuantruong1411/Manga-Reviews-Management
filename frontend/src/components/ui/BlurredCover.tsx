@@ -65,13 +65,26 @@ const CoverImage: React.FC<BlurredCoverProps> = ({
 		);
 
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: optional click/key trigger wrapping nested buttons
 		<div
+			role={onClick ? "button" : undefined}
+			tabIndex={onClick ? 0 : undefined}
 			className="relative w-full h-full overflow-hidden group/blur"
 			onClick={onClick}
+			onKeyDown={
+				onClick
+					? (e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								onClick(e as unknown as React.MouseEvent);
+							}
+						}
+					: undefined
+			}
 		>
 			{!loaded && (
 				<Skeleton
-					className="absolute inset-0 h-full w-full"
+					className="absolute inset-0 h-full w-full animate-shimmer motion-reduce:after:hidden"
 					aria-hidden="true"
 				/>
 			)}

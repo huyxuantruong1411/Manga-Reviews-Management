@@ -29,6 +29,7 @@ import { TableRowsSkeleton } from "../components/loading/PageSkeletons";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface SyncPool {
 	_id: string;
@@ -126,6 +127,7 @@ interface Tag {
 
 export const SyncManagerPage: React.FC = () => {
 	const { showAlert } = useAlert();
+	const { confirm } = useConfirm();
 
 	// Core States
 	const [pools, setPools] = useState<SyncPool[]>([]);
@@ -896,8 +898,14 @@ export const SyncManagerPage: React.FC = () => {
 
 	// Delete Pool
 	const handleDeletePool = async (poolId: string, name: string) => {
-		if (!window.confirm(`Are you sure you want to delete sync pool '${name}'?`))
-			return;
+		const ok = await confirm({
+			title: `Xóa Sync Pool '${name}'?`,
+			message: `Are you sure you want to delete sync pool '${name}'?`,
+			confirmLabel: "Xóa Pool",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) return;
 		try {
 			await client.delete(`/api/sync/pools/${poolId}`);
 			setPools((prev) => prev.filter((p) => p._id !== poolId));
@@ -913,12 +921,15 @@ export const SyncManagerPage: React.FC = () => {
 
 	// Abort all backend background active tasks
 	const handleAbortAllBackground = async () => {
-		if (
-			!window.confirm(
+		const ok = await confirm({
+			title: "Dừng toàn bộ tiến trình Sync?",
+			message:
 				"Are you sure you want to immediately abort ALL background synchronization processes? This will stop any active server-side sync tasks.",
-			)
-		)
-			return;
+			confirmLabel: "Dừng toàn bộ",
+			cancelLabel: "Tiếp tục chạy",
+			variant: "warning",
+		});
+		if (!ok) return;
 		try {
 			const res = await client.post("/api/sync/abort-active");
 			showAlert({

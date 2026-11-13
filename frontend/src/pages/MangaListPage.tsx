@@ -19,8 +19,17 @@ import {
 	X,
 	XCircle,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+	AnimatedTabPill,
+	AnimatedViewSwitcher,
+	CollapsiblePanel,
+	MOTION_EASE,
+	MOTION_SPRING,
+	ModalMotion,
+} from "@/components/motion/MotionPrimitives";
 import client, { apiErrorMessage } from "../api/client";
 import {
 	MangaDetailedCardsSkeleton,
@@ -33,6 +42,7 @@ import { CreatorLiveSearchInput } from "../components/ui/CreatorLiveSearchInput"
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
 import { GroupedTagSelector } from "../components/ui/GroupedTagSelector";
 import { useAlert } from "../hooks/useAlert";
+import { useConfirm } from "../hooks/useConfirm";
 import { useMangaBlur } from "../hooks/useMangaBlur";
 import {
 	fetchMangadexDetailsForImportClientSide,
@@ -69,6 +79,7 @@ export const MangaListPage: React.FC = () => {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { showAlert, showToast } = useAlert();
+	const { confirm } = useConfirm();
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const { settings, shouldBlur } = useMangaBlur();
 	const isRatingHidden = settings.enabled && settings.hideRating;
@@ -733,9 +744,13 @@ export const MangaListPage: React.FC = () => {
 								) {
 									const title = data.title;
 									const mangaId = data.manga_id;
-									const confirmSync = window.confirm(
-										`Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`,
-									);
+									const confirmSync = await confirm({
+										title: "Manga đã có trong thư viện",
+										message: `Manga "${title}" đã tồn tại trong thư viện của bạn.\nBạn có muốn đồng bộ (sync) thông tin mới từ MangaDex về không? (Điều này sẽ không làm mất đánh giá, trạng thái đọc hay review cũ)`,
+										confirmLabel: "Đồng bộ ngay",
+										cancelLabel: "Để sau",
+										variant: "default",
+									});
 									if (confirmSync) {
 										try {
 											showToast("Đang đồng bộ thông tin...", "info");
@@ -1176,8 +1191,8 @@ export const MangaListPage: React.FC = () => {
 				</div>
 
 				{/* Collapsible Advanced Search Panel */}
-				{isAdvancedSearchOpen && (
-					<div className="pt-4 border-t border-[var(--border-primary)] space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+				<CollapsiblePanel isOpen={isAdvancedSearchOpen}>
+					<div className="pt-4 border-t border-[var(--border-primary)] space-y-6">
 						{/* Sorting & Basic Details Grid */}
 						<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 							<div>
@@ -1669,7 +1684,7 @@ export const MangaListPage: React.FC = () => {
 							</div>
 						)}
 					</div>
-				)}
+				</CollapsiblePanel>
 
 				{/* Selected Summary and Reset Bar */}
 				<div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
@@ -1867,48 +1882,79 @@ export const MangaListPage: React.FC = () => {
 							<span className="hidden sm:inline">Quét Panels & OCR</span>
 						</button>
 
-						<div className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm">
+						<div
+							role="group"
+							aria-label="Chế độ hiển thị thư viện"
+							className="flex items-center space-x-1 bg-[var(--bg-card)] border border-[var(--border-primary)] p-1 rounded-xl shadow-sm"
+						>
 							<button
+								type="button"
+								aria-label="Hiển thị dạng lưới"
+								aria-pressed={viewMode === "grid"}
 								onClick={() => {
 									setViewMode("grid");
 									localStorage.setItem("library_view_mode", "grid");
 								}}
-								className={`p-2 rounded-lg transition-colors duration-200 ${
+								className={`relative p-2 rounded-lg transition-colors duration-200 cursor-pointer ${
 									viewMode === "grid"
-										? "bg-[var(--brand-orange)] text-white"
+										? "text-white"
 										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
 								}`}
 								title="Grid View"
 							>
-								<Grid size={18} />
+								{viewMode === "grid" && (
+									<AnimatedTabPill
+										layoutId="library-view-mode-pill"
+										className="rounded-lg bg-[var(--brand-orange)]"
+									/>
+								)}
+								<Grid size={18} className="relative z-10" />
 							</button>
 							<button
+								type="button"
+								aria-label="Hiển thị dạng bảng"
+								aria-pressed={viewMode === "list"}
 								onClick={() => {
 									setViewMode("list");
 									localStorage.setItem("library_view_mode", "list");
 								}}
-								className={`p-2 rounded-lg transition-colors duration-200 ${
+								className={`relative p-2 rounded-lg transition-colors duration-200 cursor-pointer ${
 									viewMode === "list"
-										? "bg-[var(--brand-orange)] text-white"
+										? "text-white"
 										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
 								}`}
 								title="List View"
 							>
-								<ListIcon size={18} />
+								{viewMode === "list" && (
+									<AnimatedTabPill
+										layoutId="library-view-mode-pill"
+										className="rounded-lg bg-[var(--brand-orange)]"
+									/>
+								)}
+								<ListIcon size={18} className="relative z-10" />
 							</button>
 							<button
+								type="button"
+								aria-label="Hiển thị thẻ chi tiết"
+								aria-pressed={viewMode === "card"}
 								onClick={() => {
 									setViewMode("card");
 									localStorage.setItem("library_view_mode", "card");
 								}}
-								className={`p-2 rounded-lg transition-colors duration-200 ${
+								className={`relative p-2 rounded-lg transition-colors duration-200 cursor-pointer ${
 									viewMode === "card"
-										? "bg-[var(--brand-orange)] text-white"
+										? "text-white"
 										: "text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
 								}`}
 								title="Detailed Card View"
 							>
-								<LayoutGrid size={18} />
+								{viewMode === "card" && (
+									<AnimatedTabPill
+										layoutId="library-view-mode-pill"
+										className="rounded-lg bg-[var(--brand-orange)]"
+									/>
+								)}
+								<LayoutGrid size={18} className="relative z-10" />
 							</button>
 						</div>
 					</div>
@@ -1936,647 +1982,145 @@ export const MangaListPage: React.FC = () => {
 				</div>
 			) : mangas.length > 0 ? (
 				<div className="space-y-8">
-					{viewMode === "grid" && (
-						<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-							{mangas.map((manga) => (
-								<article
-									key={manga._id}
-									role="link"
-									tabIndex={0}
-									onKeyDown={(event) => {
-										if (
-											event.key === "Enter" &&
-											event.target === event.currentTarget
-										)
-											navigate(`/manga/${manga._id}`);
-									}}
-									onMouseDown={(e) => {
-										if (e.button === 1) e.preventDefault();
-									}}
-									onAuxClick={(e) => {
-										if (e.button === 1) {
-											const target = e.target as HTMLElement;
-											if (!target.closest("select, button, a, .prevent-nav")) {
-												window.open(`/manga/${manga._id}`, "_blank");
-											}
-										}
-									}}
-									onClick={(e) => {
-										if (e.button === 1) return;
-										if (e.ctrlKey || e.metaKey) {
-											window.open(`/manga/${manga._id}`, "_blank");
-											return;
-										}
-										const target = e.target as HTMLElement;
-										const closestAnchor = target.closest("a");
-										if (
-											target.closest("select") ||
-											target.closest("button") ||
-											target.closest(".prevent-nav") ||
-											closestAnchor
-										)
-											return;
-										e.preventDefault();
-										navigate(`/manga/${manga._id}`);
-									}}
-									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col group"
-								>
-									{/* Cover Frame */}
-									<div
-										className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 cursor-zoom-in"
-										onClick={(e) => {
-											if (manga.cover_url) {
-												e.stopPropagation();
-												e.preventDefault();
-												setZoomedCoverUrl(manga.cover_url);
-											}
+					<AnimatedViewSwitcher viewKey={viewMode}>
+						{viewMode === "grid" && (
+							<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+								{mangas.map((manga) => (
+									<article
+										key={manga._id}
+										role="link"
+										tabIndex={0}
+										onKeyDown={(event) => {
+											if (
+												event.key === "Enter" &&
+												event.target === event.currentTarget
+											)
+												navigate(`/manga/${manga._id}`);
 										}}
-									>
-										{manga.cover_url ? (
-											<BlurredCover
-												src={manga.cover_url}
-												alt={manga.title}
-												className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-												shouldBlur={shouldBlur(manga)}
-											/>
-										) : (
-											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-												<span>No Cover Image</span>
-											</div>
-										)}
-
-										{/* Status Badge (Select) */}
-										<select
-											value={manga.read_status}
-											onClick={(e) => e.stopPropagation()}
-											onMouseDown={(e) => e.stopPropagation()}
-											onMouseUp={(e) => e.stopPropagation()}
-											onChange={(e) =>
-												handleQuickUpdateStatus(manga._id, e.target.value)
-											}
-											className={`absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
-										>
-											<option
-												value="unread"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Unread
-											</option>
-											<option
-												value="reading"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Reading
-											</option>
-											<option
-												value="completed"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Completed
-											</option>
-											<option
-												value="dropped"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Dropped
-											</option>
-											<option
-												value="on_hold"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												On Hold
-											</option>
-											<option
-												value="plan_to_read"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Plan to Read
-											</option>
-											<option
-												value="re_reading"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Re-Reading
-											</option>
-										</select>
-
-										{/* Rating Badge (Select) */}
-										<div
-											className="absolute bottom-3 right-3"
-											onClick={(e) => e.stopPropagation()}
-											onMouseDown={(e) => e.stopPropagation()}
-											onMouseUp={(e) => e.stopPropagation()}
-										>
-											<div
-												className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-											>
-												<Star
-													size={10}
-													className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
-												/>
-												<select
-													value={manga.personal_rating ?? ""}
-													onChange={(e) => {
-														const val =
-															e.target.value === ""
-																? null
-																: Number(e.target.value);
-														handleQuickUpdateRating(manga._id, val);
-													}}
-													className={`pl-5.5 pr-2 py-0.5 rounded text-[10px] font-bold border-none outline-none cursor-pointer appearance-none shadow-sm transition hover:brightness-110 ${
-														manga.personal_rating !== null
-															? "bg-zinc-900/95 text-white"
-															: "bg-zinc-950/60 text-zinc-400"
-													}`}
-												>
-													<option
-														value=""
-														className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														★ -
-													</option>
-													{Array.from({ length: 21 }, (_, i) => {
-														const num = 10 - i * 0.5;
-														return (
-															<option
-																key={num}
-																value={num}
-																className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-															>
-																{num.toFixed(1)}
-															</option>
-														);
-													})}
-												</select>
-											</div>
-										</div>
-									</div>
-
-									{/* Details */}
-									<div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-										<div className="space-y-1">
-											<div className="flex items-start justify-between gap-1.5">
-												<h3
-													className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2 flex-1"
-													title={manga.title}
-												>
-													{manga.title}
-												</h3>
-												{!manga.mangadex_id && (
-													<span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-														Manual
-													</span>
-												)}
-											</div>
-											<div className="flex items-center gap-1.5 flex-wrap justify-between">
-												<p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
-													By {renderCreatorLinks(manga.author)}
-												</p>
-												{manga.status &&
-													renderPublicationStatusBadge(manga.status)}
-											</div>
-										</div>
-
-										{/* Render 2 tags maximum */}
-										<div className="flex flex-wrap gap-1">
-											{manga.tag_ids.slice(0, 2).map((tid) => {
-												const tag = allTags.find((t) => t._id === tid);
-												if (!tag) return null;
-												return (
-													<span
-														key={tid}
-														onClick={(e) => e.stopPropagation()}
-														className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-white truncate max-w-[80px]"
-														style={{
-															backgroundColor:
-																tag.color || "var(--text-secondary)",
-														}}
-													>
-														{tag.name.en}
-													</span>
-												);
-											})}
-											{manga.tag_ids.length > 2 && (
-												<span className="text-[9px] text-[var(--text-secondary)] font-bold">
-													+{manga.tag_ids.length - 2}
-												</span>
-											)}
-										</div>
-									</div>
-								</article>
-							))}
-						</div>
-					)}
-
-					{viewMode === "list" && (
-						<div className="overflow-x-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-sm">
-							<table className="w-full text-left border-collapse">
-								<thead>
-									<tr className="border-b border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-										<th className="py-4 px-6 text-center w-20">Cover</th>
-										<th className="py-4 px-4 text-left">Title</th>
-										<th className="py-4 px-4 text-left">Author / Artist</th>
-										<th className="py-4 px-4 text-left">Year / Status</th>
-										<th className="py-4 px-4 text-left">Demographic</th>
-										<th className="py-4 px-4 text-left">Rating</th>
-										<th className="py-4 px-4 text-left">Read Status</th>
-										<th className="py-4 px-6 text-right">Actions</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-[var(--border-primary)] text-sm">
-									{mangas.map((manga) => (
-										<tr
-											key={manga._id}
-											onClick={(e) => {
+										onMouseDown={(e) => {
+											if (e.button === 1) e.preventDefault();
+										}}
+										onAuxClick={(e) => {
+											if (e.button === 1) {
 												const target = e.target as HTMLElement;
 												if (
-													target.closest("select") ||
-													target.closest("button") ||
-													target.closest("a") ||
-													target.closest(".prevent-nav")
+													!target.closest("select, button, a, .prevent-nav")
 												) {
-													return;
-												}
-												navigate(`/manga/${manga._id}`);
-											}}
-											onAuxClick={(e) => {
-												if (e.button === 1) {
-													const target = e.target as HTMLElement;
-													if (
-														target.closest("select") ||
-														target.closest("button") ||
-														target.closest("a") ||
-														target.closest(".prevent-nav")
-													) {
-														return;
-													}
 													window.open(`/manga/${manga._id}`, "_blank");
 												}
-											}}
-											className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 cursor-pointer transition duration-150"
-										>
-											<td className="py-3 px-6 text-center">
-												<div
-													className="w-12 h-16 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 mx-auto flex-shrink-0 cursor-zoom-in border border-[var(--border-primary)] shadow-sm"
-													onClick={(e) => {
-														if (manga.cover_url) {
-															e.stopPropagation();
-															e.preventDefault();
-															setZoomedCoverUrl(manga.cover_url);
-														}
-													}}
-												>
-													{manga.cover_url ? (
-														<BlurredCover
-															src={manga.cover_url}
-															alt={manga.title}
-															className="w-full h-full object-cover"
-															shouldBlur={shouldBlur(manga)}
-														/>
-													) : (
-														<span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">
-															No Cover
-														</span>
-													)}
-												</div>
-											</td>
-											<td className="py-3 px-4 font-bold text-[var(--text-primary)]">
-												<div
-													className="line-clamp-2 max-w-xs md:max-w-sm"
-													title={manga.title}
-												>
-													<a
-														href={`/manga/${manga._id}`}
-														onClick={(e) => {
-															if (
-																e.button === 1 ||
-																e.ctrlKey ||
-																e.metaKey ||
-																e.shiftKey
-															) {
-																return;
-															}
-															e.preventDefault();
-															navigate(`/manga/${manga._id}`);
-														}}
-														className="hover:text-[var(--brand-orange)] hover:underline transition duration-150"
-													>
-														{manga.title}
-													</a>
-													{!manga.mangadex_id && (
-														<span className="inline-flex items-center ml-2.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 align-middle">
-															Manual
-														</span>
-													)}
-												</div>
-											</td>
-											<td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
-												<div className="space-y-0.5">
-													<div className="line-clamp-1">
-														<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
-															Auth:
-														</span>
-														{renderCreatorLinks(manga.author)}
-													</div>
-													<div className="line-clamp-1">
-														<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
-															Art:
-														</span>
-														{renderCreatorLinks(manga.artist)}
-													</div>
-												</div>
-											</td>
-											<td className="py-3 px-4 text-[var(--text-secondary)] font-semibold">
-												<div className="flex flex-col items-start gap-1">
-													<span className="text-xs font-semibold text-[var(--text-primary)]">
-														{manga.year || "N/A"}
-													</span>
-													{manga.status &&
-														renderPublicationStatusBadge(manga.status)}
-												</div>
-											</td>
-											<td className="py-3 px-4">
-												{manga.publication_demographic ? (
-													<span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100/60 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/50 dark:border-orange-900/30">
-														{manga.publication_demographic}
-													</span>
-												) : (
-													<span className="text-zinc-400 text-xs">-</span>
-												)}
-											</td>
-											<td className="py-3 px-4">
-												<div
-													className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-													onClick={(e) => e.stopPropagation()}
-													onMouseDown={(e) => e.stopPropagation()}
-													onMouseUp={(e) => e.stopPropagation()}
-												>
-													<Star
-														size={12}
-														className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
-													/>
-													<select
-														value={manga.personal_rating ?? ""}
-														onChange={(e) => {
-															const val =
-																e.target.value === ""
-																	? null
-																	: Number(e.target.value);
-															handleQuickUpdateRating(manga._id, val);
-														}}
-														className={`pl-6 pr-2 py-1 rounded-xl text-xs font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
-															manga.personal_rating !== null
-																? "text-yellow-600 dark:text-yellow-455 font-extrabold"
-																: "text-zinc-400"
-														}`}
-													>
-														<option
-															value=""
-															className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-														>
-															-
-														</option>
-														{Array.from({ length: 21 }, (_, i) => {
-															const num = 10 - i * 0.5;
-															return (
-																<option
-																	key={num}
-																	value={num}
-																	className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-																>
-																	{num.toFixed(1)}
-																</option>
-															);
-														})}
-													</select>
-												</div>
-											</td>
-											<td className="py-3 px-4">
-												<select
-													value={manga.read_status}
-													onClick={(e) => e.stopPropagation()}
-													onMouseDown={(e) => e.stopPropagation()}
-													onMouseUp={(e) => e.stopPropagation()}
-													onChange={(e) =>
-														handleQuickUpdateStatus(manga._id, e.target.value)
-													}
-													className={`px-2 py-1 rounded-xl text-xs font-bold border border-transparent cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] ${getStatusColorClass(manga.read_status)}`}
-												>
-													<option
-														value="unread"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Unread
-													</option>
-													<option
-														value="reading"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Reading
-													</option>
-													<option
-														value="completed"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Completed
-													</option>
-													<option
-														value="dropped"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Dropped
-													</option>
-													<option
-														value="on_hold"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														On Hold
-													</option>
-													<option
-														value="plan_to_read"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Plan to Read
-													</option>
-													<option
-														value="re_reading"
-														className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-													>
-														Re-Reading
-													</option>
-												</select>
-											</td>
-											<td className="py-3 px-6 text-right">
-												<a
-													href={`/manga/${manga._id}`}
-													onClick={(e) => {
-														if (
-															e.button === 1 ||
-															e.ctrlKey ||
-															e.metaKey ||
-															e.shiftKey
-														) {
-															return;
-														}
-														e.stopPropagation();
-														e.preventDefault();
-														navigate(`/manga/${manga._id}`);
-													}}
-													className="inline-block px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
-												>
-													View Details
-												</a>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)}
-
-					{viewMode === "card" && (
-						<div className="space-y-4">
-							{mangas.map((manga) => (
-								<article
-									key={manga._id}
-									role="link"
-									tabIndex={0}
-									onKeyDown={(event) => {
-										if (
-											event.key === "Enter" &&
-											event.target === event.currentTarget
-										)
-											navigate(`/manga/${manga._id}`);
-									}}
-									onMouseDown={(e) => {
-										if (e.button === 1) e.preventDefault();
-									}}
-									onAuxClick={(e) => {
-										if (e.button === 1) {
-											const target = e.target as HTMLElement;
-											if (!target.closest("select, button, a, .prevent-nav")) {
-												window.open(`/manga/${manga._id}`, "_blank");
-											}
-										}
-									}}
-									onClick={(e) => {
-										if (e.button === 1) return;
-										if (e.ctrlKey || e.metaKey) {
-											window.open(`/manga/${manga._id}`, "_blank");
-											return;
-										}
-										const target = e.target as HTMLElement;
-										const closestAnchor = target.closest("a");
-										if (
-											target.closest("select") ||
-											target.closest("button") ||
-											target.closest(".prevent-nav") ||
-											closestAnchor
-										)
-											return;
-										e.preventDefault();
-										navigate(`/manga/${manga._id}`);
-									}}
-									className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col md:flex-row group"
-								>
-									{/* Cover Frame (larger) */}
-									<div
-										className="w-full md:w-48 aspect-[3/4] md:aspect-auto md:h-64 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 cursor-zoom-in"
-										onClick={(e) => {
-											if (manga.cover_url) {
-												e.stopPropagation();
-												e.preventDefault();
-												setZoomedCoverUrl(manga.cover_url);
 											}
 										}}
-									>
-										{manga.cover_url ? (
-											<BlurredCover
-												src={manga.cover_url}
-												alt={manga.title}
-												className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-												shouldBlur={shouldBlur(manga)}
-											/>
-										) : (
-											<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
-												<span>No Cover Image</span>
-											</div>
-										)}
-										{/* Status Badge (Select) */}
-										<select
-											value={manga.read_status}
-											onClick={(e) => e.stopPropagation()}
-											onMouseDown={(e) => e.stopPropagation()}
-											onMouseUp={(e) => e.stopPropagation()}
-											onChange={(e) =>
-												handleQuickUpdateStatus(manga._id, e.target.value)
+										onClick={(e) => {
+											if (e.button === 1) return;
+											if (e.ctrlKey || e.metaKey) {
+												window.open(`/manga/${manga._id}`, "_blank");
+												return;
 											}
-											className={`absolute top-3 left-3 px-2.5 py-1 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
+											const target = e.target as HTMLElement;
+											const closestAnchor = target.closest("a");
+											if (
+												target.closest("select") ||
+												target.closest("button") ||
+												target.closest(".prevent-nav") ||
+												closestAnchor
+											)
+												return;
+											e.preventDefault();
+											navigate(`/manga/${manga._id}`);
+										}}
+										className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col group"
+									>
+										{/* Cover Frame */}
+										<div
+											className="aspect-[3/4] relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 cursor-zoom-in"
+											onClick={(e) => {
+												if (manga.cover_url) {
+													e.stopPropagation();
+													e.preventDefault();
+													setZoomedCoverUrl(manga.cover_url);
+												}
+											}}
 										>
-											<option
-												value="unread"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Unread
-											</option>
-											<option
-												value="reading"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Reading
-											</option>
-											<option
-												value="completed"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Completed
-											</option>
-											<option
-												value="dropped"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Dropped
-											</option>
-											<option
-												value="on_hold"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												On Hold
-											</option>
-											<option
-												value="plan_to_read"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Plan to Read
-											</option>
-											<option
-												value="re_reading"
-												className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
-											>
-												Re-Reading
-											</option>
-										</select>
-									</div>
+											{manga.cover_url ? (
+												<BlurredCover
+													src={manga.cover_url}
+													alt={manga.title}
+													className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+													shouldBlur={shouldBlur(manga)}
+												/>
+											) : (
+												<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
+													<span>No Cover Image</span>
+												</div>
+											)}
 
-									{/* Details Section */}
-									<div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-										<div className="space-y-2">
-											<div className="flex flex-wrap items-center gap-2">
-												{manga.publication_demographic && (
-													<span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-850 dark:bg-orange-950 dark:text-orange-300">
-														{manga.publication_demographic}
-													</span>
-												)}
-												{manga.status &&
-													renderPublicationStatusBadge(manga.status)}
+											{/* Status Badge (Select) */}
+											<select
+												value={manga.read_status}
+												onClick={(e) => e.stopPropagation()}
+												onMouseDown={(e) => e.stopPropagation()}
+												onMouseUp={(e) => e.stopPropagation()}
+												onChange={(e) =>
+													handleQuickUpdateStatus(manga._id, e.target.value)
+												}
+												className={`absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
+											>
+												<option
+													value="unread"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Unread
+												</option>
+												<option
+													value="reading"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Reading
+												</option>
+												<option
+													value="completed"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Completed
+												</option>
+												<option
+													value="dropped"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Dropped
+												</option>
+												<option
+													value="on_hold"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													On Hold
+												</option>
+												<option
+													value="plan_to_read"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Plan to Read
+												</option>
+												<option
+													value="re_reading"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Re-Reading
+												</option>
+											</select>
+
+											{/* Rating Badge (Select) */}
+											<div
+												className="absolute bottom-3 right-3"
+												onClick={(e) => e.stopPropagation()}
+												onMouseDown={(e) => e.stopPropagation()}
+												onMouseUp={(e) => e.stopPropagation()}
+											>
 												<div
 													className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
-													onClick={(e) => e.stopPropagation()}
-													onMouseDown={(e) => e.stopPropagation()}
-													onMouseUp={(e) => e.stopPropagation()}
 												>
 													<Star
-														size={12}
+														size={10}
 														className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
 													/>
 													<select
@@ -2588,10 +2132,10 @@ export const MangaListPage: React.FC = () => {
 																	: Number(e.target.value);
 															handleQuickUpdateRating(manga._id, val);
 														}}
-														className={`pl-6 pr-2 py-0.5 rounded text-[11px] font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
+														className={`pl-5.5 pr-2 py-0.5 rounded text-[10px] font-bold border-none outline-none cursor-pointer appearance-none shadow-sm transition hover:brightness-110 ${
 															manga.personal_rating !== null
-																? "text-yellow-600 dark:text-yellow-400 font-extrabold"
-																: "text-zinc-400"
+																? "bg-zinc-900/95 text-white"
+																: "bg-zinc-950/60 text-zinc-400"
 														}`}
 													>
 														<option
@@ -2608,63 +2152,50 @@ export const MangaListPage: React.FC = () => {
 																	value={num}
 																	className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
 																>
-																	{num.toFixed(1)} / 10
+																	{num.toFixed(1)}
 																</option>
 															);
 														})}
 													</select>
 												</div>
-												{manga.year && (
-													<span className="text-xs text-[var(--text-secondary)] font-semibold">
-														Released: {manga.year}
-													</span>
-												)}
 											</div>
-
-											<div className="flex items-center gap-2.5">
-												<h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
-													{manga.title}
-												</h3>
-												{!manga.mangadex_id && (
-													<span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-														Manual
-													</span>
-												)}
-											</div>
-
-											<div className="text-xs text-[var(--text-secondary)] font-medium flex flex-wrap gap-x-4 gap-y-1">
-												<span>
-													<span className="font-bold text-[var(--text-primary)]">
-														Author:
-													</span>{" "}
-													{renderCreatorLinks(manga.author)}
-												</span>
-												<span>
-													<span className="font-bold text-[var(--text-primary)]">
-														Artist:
-													</span>{" "}
-													{renderCreatorLinks(manga.artist)}
-												</span>
-											</div>
-
-											{manga.description && (
-												<p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed pt-1">
-													{manga.description}
-												</p>
-											)}
 										</div>
 
-										{/* Tags & Action Row */}
-										<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
-											<div className="flex flex-wrap gap-1.5">
-												{manga.tag_ids.map((tid) => {
+										{/* Details */}
+										<div className="p-4 flex-1 flex flex-col justify-between space-y-2">
+											<div className="space-y-1">
+												<div className="flex items-start justify-between gap-1.5">
+													<h3
+														className="font-spartan font-bold text-sm leading-tight text-[var(--text-primary)] line-clamp-2 flex-1"
+														title={manga.title}
+													>
+														{manga.title}
+													</h3>
+													{!manga.mangadex_id && (
+														<span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+															Manual
+														</span>
+													)}
+												</div>
+												<div className="flex items-center gap-1.5 flex-wrap justify-between">
+													<p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
+														By {renderCreatorLinks(manga.author)}
+													</p>
+													{manga.status &&
+														renderPublicationStatusBadge(manga.status)}
+												</div>
+											</div>
+
+											{/* Render 2 tags maximum */}
+											<div className="flex flex-wrap gap-1">
+												{manga.tag_ids.slice(0, 2).map((tid) => {
 													const tag = allTags.find((t) => t._id === tid);
 													if (!tag) return null;
 													return (
 														<span
 															key={tid}
 															onClick={(e) => e.stopPropagation()}
-															className="px-2 py-0.5 rounded text-[10px] font-bold text-white transition hover:brightness-95"
+															className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-white truncate max-w-[80px]"
 															style={{
 																backgroundColor:
 																	tag.color || "var(--text-secondary)",
@@ -2674,33 +2205,554 @@ export const MangaListPage: React.FC = () => {
 														</span>
 													);
 												})}
+												{manga.tag_ids.length > 2 && (
+													<span className="text-[9px] text-[var(--text-secondary)] font-bold">
+														+{manga.tag_ids.length - 2}
+													</span>
+												)}
 											</div>
+										</div>
+									</article>
+								))}
+							</div>
+						)}
 
-											<a
-												href={`/manga/${manga._id}`}
+						{viewMode === "list" && (
+							<div className="overflow-x-auto bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl shadow-sm">
+								<table className="w-full text-left border-collapse">
+									<thead>
+										<tr className="border-b border-[var(--border-primary)] bg-[var(--bg-primary)] text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+											<th className="py-4 px-6 text-center w-20">Cover</th>
+											<th className="py-4 px-4 text-left">Title</th>
+											<th className="py-4 px-4 text-left">Author / Artist</th>
+											<th className="py-4 px-4 text-left">Year / Status</th>
+											<th className="py-4 px-4 text-left">Demographic</th>
+											<th className="py-4 px-4 text-left">Rating</th>
+											<th className="py-4 px-4 text-left">Read Status</th>
+											<th className="py-4 px-6 text-right">Actions</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-[var(--border-primary)] text-sm">
+										{mangas.map((manga) => (
+											<tr
+												key={manga._id}
 												onClick={(e) => {
+													const target = e.target as HTMLElement;
 													if (
-														e.button === 1 ||
-														e.ctrlKey ||
-														e.metaKey ||
-														e.shiftKey
+														target.closest("select") ||
+														target.closest("button") ||
+														target.closest("a") ||
+														target.closest(".prevent-nav")
 													) {
 														return;
 													}
-													e.stopPropagation();
-													e.preventDefault();
 													navigate(`/manga/${manga._id}`);
 												}}
-												className="flex-shrink-0 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow transition duration-200"
+												onAuxClick={(e) => {
+													if (e.button === 1) {
+														const target = e.target as HTMLElement;
+														if (
+															target.closest("select") ||
+															target.closest("button") ||
+															target.closest("a") ||
+															target.closest(".prevent-nav")
+														) {
+															return;
+														}
+														window.open(`/manga/${manga._id}`, "_blank");
+													}
+												}}
+												className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 cursor-pointer transition duration-150"
 											>
-												View Details
-											</a>
+												<td className="py-3 px-6 text-center">
+													<div
+														className="w-12 h-16 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 mx-auto flex-shrink-0 cursor-zoom-in border border-[var(--border-primary)] shadow-sm"
+														onClick={(e) => {
+															if (manga.cover_url) {
+																e.stopPropagation();
+																e.preventDefault();
+																setZoomedCoverUrl(manga.cover_url);
+															}
+														}}
+													>
+														{manga.cover_url ? (
+															<BlurredCover
+																src={manga.cover_url}
+																alt={manga.title}
+																className="w-full h-full object-cover"
+																shouldBlur={shouldBlur(manga)}
+															/>
+														) : (
+															<span className="text-[9px] text-zinc-400 flex items-center justify-center h-full">
+																No Cover
+															</span>
+														)}
+													</div>
+												</td>
+												<td className="py-3 px-4 font-bold text-[var(--text-primary)]">
+													<div
+														className="line-clamp-2 max-w-xs md:max-w-sm"
+														title={manga.title}
+													>
+														<a
+															href={`/manga/${manga._id}`}
+															onClick={(e) => {
+																if (
+																	e.button === 1 ||
+																	e.ctrlKey ||
+																	e.metaKey ||
+																	e.shiftKey
+																) {
+																	return;
+																}
+																e.preventDefault();
+																navigate(`/manga/${manga._id}`);
+															}}
+															className="hover:text-[var(--brand-orange)] hover:underline transition duration-150"
+														>
+															{manga.title}
+														</a>
+														{!manga.mangadex_id && (
+															<span className="inline-flex items-center ml-2.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 align-middle">
+																Manual
+															</span>
+														)}
+													</div>
+												</td>
+												<td className="py-3 px-4 text-[var(--text-secondary)] font-medium">
+													<div className="space-y-0.5">
+														<div className="line-clamp-1">
+															<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
+																Auth:
+															</span>
+															{renderCreatorLinks(manga.author)}
+														</div>
+														<div className="line-clamp-1">
+															<span className="text-[10px] font-bold uppercase tracking-wider text-zinc-450 mr-1">
+																Art:
+															</span>
+															{renderCreatorLinks(manga.artist)}
+														</div>
+													</div>
+												</td>
+												<td className="py-3 px-4 text-[var(--text-secondary)] font-semibold">
+													<div className="flex flex-col items-start gap-1">
+														<span className="text-xs font-semibold text-[var(--text-primary)]">
+															{manga.year || "N/A"}
+														</span>
+														{manga.status &&
+															renderPublicationStatusBadge(manga.status)}
+													</div>
+												</td>
+												<td className="py-3 px-4">
+													{manga.publication_demographic ? (
+														<span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100/60 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/50 dark:border-orange-900/30">
+															{manga.publication_demographic}
+														</span>
+													) : (
+														<span className="text-zinc-400 text-xs">-</span>
+													)}
+												</td>
+												<td className="py-3 px-4">
+													<div
+														className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+														onClick={(e) => e.stopPropagation()}
+														onMouseDown={(e) => e.stopPropagation()}
+														onMouseUp={(e) => e.stopPropagation()}
+													>
+														<Star
+															size={12}
+															className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
+														/>
+														<select
+															value={manga.personal_rating ?? ""}
+															onChange={(e) => {
+																const val =
+																	e.target.value === ""
+																		? null
+																		: Number(e.target.value);
+																handleQuickUpdateRating(manga._id, val);
+															}}
+															className={`pl-6 pr-2 py-1 rounded-xl text-xs font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
+																manga.personal_rating !== null
+																	? "text-yellow-600 dark:text-yellow-455 font-extrabold"
+																	: "text-zinc-400"
+															}`}
+														>
+															<option
+																value=""
+																className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+															>
+																-
+															</option>
+															{Array.from({ length: 21 }, (_, i) => {
+																const num = 10 - i * 0.5;
+																return (
+																	<option
+																		key={num}
+																		value={num}
+																		className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+																	>
+																		{num.toFixed(1)}
+																	</option>
+																);
+															})}
+														</select>
+													</div>
+												</td>
+												<td className="py-3 px-4">
+													<select
+														value={manga.read_status}
+														onClick={(e) => e.stopPropagation()}
+														onMouseDown={(e) => e.stopPropagation()}
+														onMouseUp={(e) => e.stopPropagation()}
+														onChange={(e) =>
+															handleQuickUpdateStatus(manga._id, e.target.value)
+														}
+														className={`px-2 py-1 rounded-xl text-xs font-bold border border-transparent cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-[var(--brand-orange)] ${getStatusColorClass(manga.read_status)}`}
+													>
+														<option
+															value="unread"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Unread
+														</option>
+														<option
+															value="reading"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Reading
+														</option>
+														<option
+															value="completed"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Completed
+														</option>
+														<option
+															value="dropped"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Dropped
+														</option>
+														<option
+															value="on_hold"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															On Hold
+														</option>
+														<option
+															value="plan_to_read"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Plan to Read
+														</option>
+														<option
+															value="re_reading"
+															className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+														>
+															Re-Reading
+														</option>
+													</select>
+												</td>
+												<td className="py-3 px-6 text-right">
+													<a
+														href={`/manga/${manga._id}`}
+														onClick={(e) => {
+															if (
+																e.button === 1 ||
+																e.ctrlKey ||
+																e.metaKey ||
+																e.shiftKey
+															) {
+																return;
+															}
+															e.stopPropagation();
+															e.preventDefault();
+															navigate(`/manga/${manga._id}`);
+														}}
+														className="inline-block px-3 py-1.5 bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] font-bold text-xs rounded-lg transition"
+													>
+														View Details
+													</a>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+
+						{viewMode === "card" && (
+							<div className="space-y-4">
+								{mangas.map((manga) => (
+									<article
+										key={manga._id}
+										role="link"
+										tabIndex={0}
+										onKeyDown={(event) => {
+											if (
+												event.key === "Enter" &&
+												event.target === event.currentTarget
+											)
+												navigate(`/manga/${manga._id}`);
+										}}
+										onMouseDown={(e) => {
+											if (e.button === 1) e.preventDefault();
+										}}
+										onAuxClick={(e) => {
+											if (e.button === 1) {
+												const target = e.target as HTMLElement;
+												if (
+													!target.closest("select, button, a, .prevent-nav")
+												) {
+													window.open(`/manga/${manga._id}`, "_blank");
+												}
+											}
+										}}
+										onClick={(e) => {
+											if (e.button === 1) return;
+											if (e.ctrlKey || e.metaKey) {
+												window.open(`/manga/${manga._id}`, "_blank");
+												return;
+											}
+											const target = e.target as HTMLElement;
+											const closestAnchor = target.closest("a");
+											if (
+												target.closest("select") ||
+												target.closest("button") ||
+												target.closest(".prevent-nav") ||
+												closestAnchor
+											)
+												return;
+											e.preventDefault();
+											navigate(`/manga/${manga._id}`);
+										}}
+										className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer flex flex-col md:flex-row group"
+									>
+										{/* Cover Frame (larger) */}
+										<div
+											className="w-full md:w-48 aspect-[3/4] md:aspect-auto md:h-64 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 cursor-zoom-in"
+											onClick={(e) => {
+												if (manga.cover_url) {
+													e.stopPropagation();
+													e.preventDefault();
+													setZoomedCoverUrl(manga.cover_url);
+												}
+											}}
+										>
+											{manga.cover_url ? (
+												<BlurredCover
+													src={manga.cover_url}
+													alt={manga.title}
+													className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+													shouldBlur={shouldBlur(manga)}
+												/>
+											) : (
+												<div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 text-xs">
+													<span>No Cover Image</span>
+												</div>
+											)}
+											{/* Status Badge (Select) */}
+											<select
+												value={manga.read_status}
+												onClick={(e) => e.stopPropagation()}
+												onMouseDown={(e) => e.stopPropagation()}
+												onMouseUp={(e) => e.stopPropagation()}
+												onChange={(e) =>
+													handleQuickUpdateStatus(manga._id, e.target.value)
+												}
+												className={`absolute top-3 left-3 px-2.5 py-1 rounded text-[10px] uppercase font-bold tracking-wider border-none outline-none cursor-pointer shadow-sm transition hover:brightness-95 appearance-none ${getStatusColorClass(manga.read_status)}`}
+											>
+												<option
+													value="unread"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Unread
+												</option>
+												<option
+													value="reading"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Reading
+												</option>
+												<option
+													value="completed"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Completed
+												</option>
+												<option
+													value="dropped"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Dropped
+												</option>
+												<option
+													value="on_hold"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													On Hold
+												</option>
+												<option
+													value="plan_to_read"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Plan to Read
+												</option>
+												<option
+													value="re_reading"
+													className="text-zinc-800 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+												>
+													Re-Reading
+												</option>
+											</select>
 										</div>
-									</div>
-								</article>
-							))}
-						</div>
-					)}
+
+										{/* Details Section */}
+										<div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+											<div className="space-y-2">
+												<div className="flex flex-wrap items-center gap-2">
+													{manga.publication_demographic && (
+														<span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-850 dark:bg-orange-950 dark:text-orange-300">
+															{manga.publication_demographic}
+														</span>
+													)}
+													{manga.status &&
+														renderPublicationStatusBadge(manga.status)}
+													<div
+														className={`relative inline-flex items-center ${isRatingHidden ? "blur-[4px] pointer-events-none select-none" : ""}`}
+														onClick={(e) => e.stopPropagation()}
+														onMouseDown={(e) => e.stopPropagation()}
+														onMouseUp={(e) => e.stopPropagation()}
+													>
+														<Star
+															size={12}
+															className="absolute left-2 text-yellow-500 fill-yellow-500 pointer-events-none"
+														/>
+														<select
+															value={manga.personal_rating ?? ""}
+															onChange={(e) => {
+																const val =
+																	e.target.value === ""
+																		? null
+																		: Number(e.target.value);
+																handleQuickUpdateRating(manga._id, val);
+															}}
+															className={`pl-6 pr-2 py-0.5 rounded text-[11px] font-bold border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none cursor-pointer appearance-none shadow-sm transition hover:border-zinc-450 ${
+																manga.personal_rating !== null
+																	? "text-yellow-600 dark:text-yellow-400 font-extrabold"
+																	: "text-zinc-400"
+															}`}
+														>
+															<option
+																value=""
+																className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+															>
+																★ -
+															</option>
+															{Array.from({ length: 21 }, (_, i) => {
+																const num = 10 - i * 0.5;
+																return (
+																	<option
+																		key={num}
+																		value={num}
+																		className="text-zinc-850 bg-white dark:bg-zinc-900 dark:text-zinc-200"
+																	>
+																		{num.toFixed(1)} / 10
+																	</option>
+																);
+															})}
+														</select>
+													</div>
+													{manga.year && (
+														<span className="text-xs text-[var(--text-secondary)] font-semibold">
+															Released: {manga.year}
+														</span>
+													)}
+												</div>
+
+												<div className="flex items-center gap-2.5">
+													<h3 className="font-spartan font-extrabold text-xl leading-tight text-[var(--text-primary)]">
+														{manga.title}
+													</h3>
+													{!manga.mangadex_id && (
+														<span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+															Manual
+														</span>
+													)}
+												</div>
+
+												<div className="text-xs text-[var(--text-secondary)] font-medium flex flex-wrap gap-x-4 gap-y-1">
+													<span>
+														<span className="font-bold text-[var(--text-primary)]">
+															Author:
+														</span>{" "}
+														{renderCreatorLinks(manga.author)}
+													</span>
+													<span>
+														<span className="font-bold text-[var(--text-primary)]">
+															Artist:
+														</span>{" "}
+														{renderCreatorLinks(manga.artist)}
+													</span>
+												</div>
+
+												{manga.description && (
+													<p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed pt-1">
+														{manga.description}
+													</p>
+												)}
+											</div>
+
+											{/* Tags & Action Row */}
+											<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-[var(--border-primary)]">
+												<div className="flex flex-wrap gap-1.5">
+													{manga.tag_ids.map((tid) => {
+														const tag = allTags.find((t) => t._id === tid);
+														if (!tag) return null;
+														return (
+															<span
+																key={tid}
+																onClick={(e) => e.stopPropagation()}
+																className="px-2 py-0.5 rounded text-[10px] font-bold text-white transition hover:brightness-95"
+																style={{
+																	backgroundColor:
+																		tag.color || "var(--text-secondary)",
+																}}
+															>
+																{tag.name.en}
+															</span>
+														);
+													})}
+												</div>
+
+												<a
+													href={`/manga/${manga._id}`}
+													onClick={(e) => {
+														if (
+															e.button === 1 ||
+															e.ctrlKey ||
+															e.metaKey ||
+															e.shiftKey
+														) {
+															return;
+														}
+														e.stopPropagation();
+														e.preventDefault();
+														navigate(`/manga/${manga._id}`);
+													}}
+													className="flex-shrink-0 px-4 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold text-xs rounded-xl shadow transition duration-200"
+												>
+													View Details
+												</a>
+											</div>
+										</div>
+									</article>
+								))}
+							</div>
+						)}
+					</AnimatedViewSwitcher>
 
 					{/* Pagination */}
 					{total > limit && (
@@ -2732,104 +2784,93 @@ export const MangaListPage: React.FC = () => {
 			)}
 
 			{/* Add Manga Modal */}
-			{isAddModalOpen && (
-				<div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
-						{/* Modal Header */}
-						<div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
-							<div className="space-y-1">
-								<h2 className="text-xl font-bold flex items-center space-x-2">
-									<Plus size={20} className="text-[var(--brand-orange)]" />
-									<span>Add New Manga</span>
-								</h2>
-								<div className="flex space-x-4 text-xs font-semibold">
-									<button
-										onClick={() => setAddTab("dex")}
-										className={`pb-1 border-b-2 transition ${
-											addTab === "dex"
-												? "border-[var(--brand-orange)] text-[var(--text-primary)]"
-												: "border-transparent text-[var(--text-secondary)]"
-										}`}
-									>
-										Search MangaDex
-									</button>
-									<button
-										onClick={() => setAddTab("manual")}
-										className={`pb-1 border-b-2 transition ${
-											addTab === "manual"
-												? "border-[var(--brand-orange)] text-[var(--text-primary)]"
-												: "border-transparent text-[var(--text-secondary)]"
-										}`}
-									>
-										Add Manually
-									</button>
-								</div>
+			<ModalMotion
+				isOpen={isAddModalOpen}
+				onClose={() => setIsAddModalOpen(false)}
+				ariaLabel="Add New Manga"
+				maxWidthClass="max-w-3xl"
+				overlayClassName="z-50"
+			>
+				<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative">
+					{/* Modal Header */}
+					<div className="p-6 border-b border-[var(--border-primary)] flex justify-between items-center">
+						<div className="space-y-1">
+							<h2 className="text-xl font-bold flex items-center space-x-2">
+								<Plus size={20} className="text-[var(--brand-orange)]" />
+								<span>Add New Manga</span>
+							</h2>
+							<div className="flex space-x-4 text-xs font-semibold">
+								<button
+									onClick={() => setAddTab("dex")}
+									className={`pb-1 border-b-2 transition ${
+										addTab === "dex"
+											? "border-[var(--brand-orange)] text-[var(--text-primary)]"
+											: "border-transparent text-[var(--text-secondary)]"
+									}`}
+								>
+									Search MangaDex
+								</button>
+								<button
+									onClick={() => setAddTab("manual")}
+									className={`pb-1 border-b-2 transition ${
+										addTab === "manual"
+											? "border-[var(--brand-orange)] text-[var(--text-primary)]"
+											: "border-transparent text-[var(--text-secondary)]"
+									}`}
+								>
+									Add Manually
+								</button>
 							</div>
-							<button
-								onClick={() => setIsAddModalOpen(false)}
-								className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
-							>
-								<X size={20} />
-							</button>
 						</div>
+						<button
+							onClick={() => setIsAddModalOpen(false)}
+							className="p-1 rounded-lg text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
+						>
+							<X size={20} />
+						</button>
+					</div>
 
-						{/* Modal Body */}
-						<div className="flex-1 overflow-y-auto p-6 relative">
-							{importingManga && (
-								<div className="absolute inset-0 bg-[var(--bg-card)]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-200">
-									<div className="w-full max-w-md space-y-6">
-										<div className="text-center space-y-2">
-											<h3 className="text-lg font-extrabold font-spartan">
-												Importing MangaDex Manga
-											</h3>
-											<p className="text-xs text-[var(--text-secondary)] line-clamp-1">
-												UUID:{" "}
-												<span className="font-mono text-zinc-500 dark:text-zinc-400">
-													{importingManga}
-												</span>
-											</p>
+					{/* Modal Body */}
+					<div className="flex-1 overflow-y-auto p-6 relative">
+						{importingManga && (
+							<div className="absolute inset-0 bg-[var(--bg-card)]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-200">
+								<div className="w-full max-w-md space-y-6">
+									<div className="text-center space-y-2">
+										<h3 className="text-lg font-extrabold font-spartan">
+											Importing MangaDex Manga
+										</h3>
+										<p className="text-xs text-[var(--text-secondary)] line-clamp-1">
+											UUID:{" "}
+											<span className="font-mono text-zinc-500 dark:text-zinc-400">
+												{importingManga}
+											</span>
+										</p>
+									</div>
+
+									{/* Progress Bar */}
+									<div className="space-y-1.5">
+										<div className="flex justify-between text-xs font-bold">
+											<span className="text-[var(--brand-orange)]">
+												{importProgressMessage || "Initializing..."}
+											</span>
+											<span className="text-[var(--text-secondary)]">
+												{importProgressPercent}%
+											</span>
 										</div>
-
-										{/* Progress Bar */}
-										<div className="space-y-1.5">
-											<div className="flex justify-between text-xs font-bold">
-												<span className="text-[var(--brand-orange)]">
-													{importProgressMessage || "Initializing..."}
-												</span>
-												<span className="text-[var(--text-secondary)]">
-													{importProgressPercent}%
-												</span>
-											</div>
-											<div className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden border border-[var(--border-primary)] p-0.5">
-												<div
-													className="h-full bg-gradient-to-r from-[var(--brand-orange)] to-[var(--brand-coral)] rounded-full transition-all duration-300 ease-out"
-													style={{ width: `${importProgressPercent}%` }}
-												></div>
-											</div>
+										<div className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden border border-[var(--border-primary)] p-0.5">
+											<div
+												className="h-full bg-gradient-to-r from-[var(--brand-orange)] to-[var(--brand-coral)] rounded-full transition-all duration-300 ease-out"
+												style={{ width: `${importProgressPercent}%` }}
+											></div>
 										</div>
+									</div>
 
-										{/* Steps Checklist */}
-										<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-3.5 shadow-inner">
-											{(() => {
-												const getStepStatus = (stepName: string) => {
-													if (importProgressStep === "error") {
-														if (failedStep === stepName) return "failed";
-														const stepsOrder = [
-															"metadata",
-															"creators",
-															"tags",
-															"cover",
-															"save",
-															"sync_assets",
-														];
-														const failedIdx = stepsOrder.indexOf(
-															failedStep || "",
-														);
-														const thisIdx = stepsOrder.indexOf(stepName);
-														if (thisIdx < failedIdx) return "completed";
-														return "pending";
-													}
-
+									{/* Steps Checklist */}
+									<div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl p-5 space-y-3.5 shadow-inner">
+										{(() => {
+											const getStepStatus = (stepName: string) => {
+												if (importProgressStep === "error") {
+													if (failedStep === stepName) return "failed";
 													const stepsOrder = [
 														"metadata",
 														"creators",
@@ -2837,325 +2878,155 @@ export const MangaListPage: React.FC = () => {
 														"cover",
 														"save",
 														"sync_assets",
-														"done",
 													];
-													const currentStepIndex = importProgressStep
-														? stepsOrder.indexOf(importProgressStep)
-														: -1;
+													const failedIdx = stepsOrder.indexOf(
+														failedStep || "",
+													);
 													const thisIdx = stepsOrder.indexOf(stepName);
-
-													if (currentStepIndex === -1) {
-														return thisIdx === 0 ? "active" : "pending";
-													}
-													if (thisIdx < currentStepIndex) return "completed";
-													if (thisIdx === currentStepIndex) return "active";
+													if (thisIdx < failedIdx) return "completed";
 													return "pending";
-												};
+												}
 
-												const renderStepItem = (
-													label: string,
-													stepName: string,
-												) => {
-													const status = getStepStatus(stepName);
-													let icon = (
-														<Circle
+												const stepsOrder = [
+													"metadata",
+													"creators",
+													"tags",
+													"cover",
+													"save",
+													"sync_assets",
+													"done",
+												];
+												const currentStepIndex = importProgressStep
+													? stepsOrder.indexOf(importProgressStep)
+													: -1;
+												const thisIdx = stepsOrder.indexOf(stepName);
+
+												if (currentStepIndex === -1) {
+													return thisIdx === 0 ? "active" : "pending";
+												}
+												if (thisIdx < currentStepIndex) return "completed";
+												if (thisIdx === currentStepIndex) return "active";
+												return "pending";
+											};
+
+											const renderStepItem = (
+												label: string,
+												stepName: string,
+											) => {
+												const status = getStepStatus(stepName);
+												let icon = (
+													<Circle
+														size={18}
+														className="text-zinc-400 dark:text-zinc-600 flex-shrink-0"
+													/>
+												);
+												let textClass =
+													"text-zinc-500 dark:text-zinc-400 font-medium";
+
+												if (status === "active") {
+													icon = (
+														<Loader2
 															size={18}
-															className="text-zinc-400 dark:text-zinc-600 flex-shrink-0"
+															className="text-[var(--brand-orange)] animate-spin flex-shrink-0"
 														/>
 													);
-													let textClass =
-														"text-zinc-500 dark:text-zinc-400 font-medium";
-
-													if (status === "active") {
-														icon = (
-															<Loader2
-																size={18}
-																className="text-[var(--brand-orange)] animate-spin flex-shrink-0"
-															/>
-														);
-														textClass =
-															"text-[var(--text-primary)] font-bold animate-pulse";
-													} else if (status === "completed") {
-														icon = (
-															<CheckCircle2
-																size={18}
-																className="text-emerald-500 flex-shrink-0"
-															/>
-														);
-														textClass =
-															"text-zinc-700 dark:text-zinc-300 font-semibold";
-													} else if (status === "failed") {
-														icon = (
-															<XCircle
-																size={18}
-																className="text-rose-500 flex-shrink-0"
-															/>
-														);
-														textClass = "text-rose-500 font-bold";
-													}
-
-													return (
-														<div className="flex items-center space-x-3 text-sm transition duration-200">
-															{icon}
-															<span className={textClass}>{label}</span>
-														</div>
+													textClass =
+														"text-[var(--text-primary)] font-bold animate-pulse";
+												} else if (status === "completed") {
+													icon = (
+														<CheckCircle2
+															size={18}
+															className="text-emerald-500 flex-shrink-0"
+														/>
 													);
-												};
+													textClass =
+														"text-zinc-700 dark:text-zinc-300 font-semibold";
+												} else if (status === "failed") {
+													icon = (
+														<XCircle
+															size={18}
+															className="text-rose-500 flex-shrink-0"
+														/>
+													);
+													textClass = "text-rose-500 font-bold";
+												}
 
 												return (
-													<>
-														{renderStepItem(
-															"Fetch manga details from MangaDex",
-															"metadata",
-														)}
-														{renderStepItem(
-															"Sync author and artist profiles",
-															"creators",
-														)}
-														{renderStepItem(
-															"Organize and map genre tags",
-															"tags",
-														)}
-														{renderStepItem(
-															"Download cover & upload to storage",
-															"cover",
-														)}
-														{renderStepItem(
-															"Register manga in your library",
-															"save",
-														)}
-														{renderStepItem(
-															"Fetch alternative covers & recommendations",
-															"sync_assets",
-														)}
-													</>
-												);
-											})()}
-										</div>
-									</div>
-								</div>
-							)}
-							{addTab === "dex" ? (
-								/* MangaDex Tab */
-								<div className="space-y-6">
-									<form onSubmit={handleDexSearch} className="flex gap-2">
-										<input
-											type="text"
-											value={dexQuery}
-											onChange={(e) => setDexQuery(e.target.value)}
-											placeholder="Enter manga title or MangaDex UUID..."
-											className="flex-1 px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
-											required
-										/>
-										<button
-											type="submit"
-											disabled={dexSearching}
-											className="px-6 py-2 bg-[var(--brand-orange)] text-white font-bold rounded-xl hover:bg-[var(--brand-coral)] transition disabled:opacity-50 flex items-center space-x-2"
-										>
-											{dexSearching ? "Searching..." : "Search"}
-										</button>
-									</form>
-
-									{/* Import Configuration Panel */}
-									<div className="p-4 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl space-y-4">
-										<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-											Import Configuration (Set values before clicking Import)
-										</h4>
-										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-											<div>
-												<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-													Read Status
-												</label>
-												<select
-													value={importStatus}
-													onChange={(e) => setImportStatus(e.target.value)}
-													className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
-												>
-													<option value="unread">Unread</option>
-													<option value="reading">Reading</option>
-													<option value="completed">Completed</option>
-													<option value="dropped">Dropped</option>
-													<option value="on_hold">On Hold</option>
-													<option value="plan_to_read">Plan to Read</option>
-													<option value="re_reading">Re-Reading</option>
-												</select>
-											</div>
-
-											<div>
-												<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-													Personal Rating (0-10)
-												</label>
-												<input
-													type="number"
-													value={importRating}
-													onChange={(e) =>
-														setImportRating(
-															e.target.value === ""
-																? ""
-																: Number(e.target.value),
-														)
-													}
-													placeholder="e.g. 8.5"
-													min="0"
-													max="10"
-													step="0.5"
-													className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
-												/>
-											</div>
-										</div>
-
-										{/* Tag selector */}
-										{allTags.length > 0 && (
-											<GroupedTagSelector
-												allTags={allTags}
-												selectedTags={importTags}
-												onChange={setImportTags}
-												label="Assign Custom Tags on Import"
-												placeholder="Search tags to assign..."
-											/>
-										)}
-									</div>
-
-									{/* Search Results */}
-									<div className="space-y-4">
-										<h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-											Search Results
-										</h3>
-										{dexResults.length > 0 ? (
-											<div className="divide-y divide-[var(--border-primary)] max-h-96 overflow-y-auto pr-2 space-y-3">
-												{dexResults.map((m) => (
-													<div
-														key={m.id}
-														className="pt-3 flex gap-4 items-start justify-between"
-													>
-														<div className="flex gap-4">
-															<div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
-																{m.cover_url && (
-																	<BlurredCover
-																		src={m.cover_url}
-																		alt={m.title}
-																		className="w-full h-full object-cover"
-																		shouldBlur={shouldBlur(m)}
-																	/>
-																)}
-															</div>
-															<div className="space-y-1">
-																<h4 className="text-sm font-bold text-[var(--text-primary)] line-clamp-1">
-																	{m.title}
-																</h4>
-																<p className="text-xs text-[var(--text-secondary)]">
-																	By {m.author} • {m.year}
-																</p>
-																<p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">
-																	{m.description}
-																</p>
-															</div>
-														</div>
-														<button
-															onClick={() => handleImportManga(m.id)}
-															disabled={importingManga === m.id}
-															className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-xs font-bold transition disabled:opacity-50 flex-shrink-0"
-														>
-															{importingManga === m.id
-																? "Importing..."
-																: "Import"}
-														</button>
+													<div className="flex items-center space-x-3 text-sm transition duration-200">
+														{icon}
+														<span className={textClass}>{label}</span>
 													</div>
-												))}
-											</div>
-										) : (
-											<div className="text-center py-12 text-[var(--text-secondary)] text-sm">
-												No results found yet.
-											</div>
-										)}
+												);
+											};
+
+											return (
+												<>
+													{renderStepItem(
+														"Fetch manga details from MangaDex",
+														"metadata",
+													)}
+													{renderStepItem(
+														"Sync author and artist profiles",
+														"creators",
+													)}
+													{renderStepItem(
+														"Organize and map genre tags",
+														"tags",
+													)}
+													{renderStepItem(
+														"Download cover & upload to storage",
+														"cover",
+													)}
+													{renderStepItem(
+														"Register manga in your library",
+														"save",
+													)}
+													{renderStepItem(
+														"Fetch alternative covers & recommendations",
+														"sync_assets",
+													)}
+												</>
+											);
+										})()}
 									</div>
 								</div>
-							) : (
-								/* Manual Add Tab */
-								<form onSubmit={handleCreateManual} className="space-y-4">
+							</div>
+						)}
+						{addTab === "dex" ? (
+							/* MangaDex Tab */
+							<div className="space-y-6">
+								<form onSubmit={handleDexSearch} className="flex gap-2">
+									<input
+										type="text"
+										value={dexQuery}
+										onChange={(e) => setDexQuery(e.target.value)}
+										placeholder="Enter manga title or MangaDex UUID..."
+										className="flex-1 px-4 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] transition"
+										required
+									/>
+									<button
+										type="submit"
+										disabled={dexSearching}
+										className="px-6 py-2 bg-[var(--brand-orange)] text-white font-bold rounded-xl hover:bg-[var(--brand-coral)] transition disabled:opacity-50 flex items-center space-x-2"
+									>
+										{dexSearching ? "Searching..." : "Search"}
+									</button>
+								</form>
+
+								{/* Import Configuration Panel */}
+								<div className="p-4 border border-[var(--border-primary)] bg-[var(--bg-primary)] rounded-xl space-y-4">
+									<h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+										Import Configuration (Set values before clicking Import)
+									</h4>
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Manga Title *
-											</label>
-											<input
-												type="text"
-												value={manualTitle}
-												onChange={(e) => setManualTitle(e.target.value)}
-												placeholder="e.g. My Custom Manga"
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-												required
-											/>
-										</div>
-
-										<CreatorLiveSearchInput
-											label="Author"
-											role="author"
-											value={manualAuthor}
-											onChange={setManualAuthor}
-											placeholder="e.g. Oda Eiichiro"
-										/>
-
-										<CreatorLiveSearchInput
-											label="Artist"
-											role="artist"
-											value={manualArtist}
-											onChange={setManualArtist}
-											placeholder="e.g. Yusuke Murata"
-										/>
-
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Release Year
-											</label>
-											<input
-												type="text"
-												value={manualYear}
-												onChange={(e) => setManualYear(e.target.value)}
-												placeholder="e.g. 2021"
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
-											/>
-										</div>
-									</div>
-
-									<div>
-										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-											Description
-										</label>
-										<textarea
-											value={manualDescription}
-											onChange={(e) => setManualDescription(e.target.value)}
-											placeholder="Manga details, summary..."
-											rows={3}
-											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] resize-none"
-										/>
-									</div>
-
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Publish Status
-											</label>
-											<select
-												value={manualStatus}
-												onChange={(e) => setManualStatus(e.target.value)}
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											>
-												<option value="ongoing">Ongoing</option>
-												<option value="completed">Completed</option>
-												<option value="hiatus">Hiatus</option>
-												<option value="cancelled">Cancelled</option>
-											</select>
-										</div>
-
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
 												Read Status
 											</label>
 											<select
-												value={manualReadStatus}
-												onChange={(e) => setManualReadStatus(e.target.value)}
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+												value={importStatus}
+												onChange={(e) => setImportStatus(e.target.value)}
+												className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
 											>
 												<option value="unread">Unread</option>
 												<option value="reading">Reading</option>
@@ -3168,212 +3039,405 @@ export const MangaListPage: React.FC = () => {
 										</div>
 
 										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Rating (0-10)
+											<label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+												Personal Rating (0-10)
 											</label>
 											<input
 												type="number"
-												value={manualRating}
+												value={importRating}
 												onChange={(e) =>
-													setManualRating(
+													setImportRating(
 														e.target.value === "" ? "" : Number(e.target.value),
 													)
 												}
-												placeholder="e.g. 9.5"
+												placeholder="e.g. 8.5"
 												min="0"
 												max="10"
 												step="0.5"
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+												className="w-full px-3 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-card)] text-[var(--text-primary)] text-sm focus:outline-none"
 											/>
 										</div>
 									</div>
 
-									{/* Advanced Search Comparison Fields */}
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Original Language
-											</label>
-											<select
-												value={manualOriginalLanguage}
-												onChange={(e) =>
-													setManualOriginalLanguage(e.target.value)
-												}
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											>
-												<option value="ja">Japanese (ja)</option>
-												<option value="ko">Korean (ko)</option>
-												<option value="zh">Chinese (zh)</option>
-												<option value="en">English (en)</option>
-												<option value="vi">Vietnamese (vi)</option>
-												<option value="ru">Russian (ru)</option>
-											</select>
-										</div>
-
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Demographic
-											</label>
-											<select
-												value={manualPublicationDemographic}
-												onChange={(e) =>
-													setManualPublicationDemographic(e.target.value)
-												}
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											>
-												<option value="">None</option>
-												<option value="shounen">Shounen</option>
-												<option value="shoujo">Shoujo</option>
-												<option value="seinen">Seinen</option>
-												<option value="josei">Josei</option>
-											</select>
-										</div>
-
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Content Rating
-											</label>
-											<select
-												value={manualContentRating}
-												onChange={(e) => setManualContentRating(e.target.value)}
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											>
-												<option value="safe">Safe</option>
-												<option value="suggestive">Suggestive</option>
-												<option value="erotica">Erotica</option>
-												<option value="pornographic">Pornographic</option>
-											</select>
-										</div>
-									</div>
-
-									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Total Volumes
-											</label>
-											<input
-												type="number"
-												value={manualVolumes}
-												onChange={(e) =>
-													setManualVolumes(
-														e.target.value === "" ? "" : Number(e.target.value),
-													)
-												}
-												placeholder="e.g. 12"
-												min="0"
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											/>
-										</div>
-
-										<div>
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-												Total Chapters
-											</label>
-											<input
-												type="number"
-												value={manualChapters}
-												onChange={(e) =>
-													setManualChapters(
-														e.target.value === "" ? "" : Number(e.target.value),
-													)
-												}
-												placeholder="e.g. 120"
-												min="0"
-												className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
-											/>
-										</div>
-									</div>
-
-									{/* Assign Tags (reuses checklist code) */}
-									{/* Assign Tags */}
+									{/* Tag selector */}
 									{allTags.length > 0 && (
 										<GroupedTagSelector
 											allTags={allTags}
 											selectedTags={importTags}
 											onChange={setImportTags}
-											label="Assign Custom Tags"
+											label="Assign Custom Tags on Import"
 											placeholder="Search tags to assign..."
 										/>
 									)}
+								</div>
 
-									{/* Cover image upload */}
+								{/* Search Results */}
+								<div className="space-y-4">
+									<h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+										Search Results
+									</h3>
+									{dexResults.length > 0 ? (
+										<div className="divide-y divide-[var(--border-primary)] max-h-96 overflow-y-auto pr-2 space-y-3">
+											{dexResults.map((m) => (
+												<div
+													key={m.id}
+													className="pt-3 flex gap-4 items-start justify-between"
+												>
+													<div className="flex gap-4">
+														<div className="w-16 h-20 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden flex-shrink-0">
+															{m.cover_url && (
+																<BlurredCover
+																	src={m.cover_url}
+																	alt={m.title}
+																	className="w-full h-full object-cover"
+																	shouldBlur={shouldBlur(m)}
+																/>
+															)}
+														</div>
+														<div className="space-y-1">
+															<h4 className="text-sm font-bold text-[var(--text-primary)] line-clamp-1">
+																{m.title}
+															</h4>
+															<p className="text-xs text-[var(--text-secondary)]">
+																By {m.author} • {m.year}
+															</p>
+															<p className="text-xs text-[var(--text-secondary)] line-clamp-2 italic">
+																{m.description}
+															</p>
+														</div>
+													</div>
+													<button
+														onClick={() => handleImportManga(m.id)}
+														disabled={importingManga === m.id}
+														className="px-4 py-1.5 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-xs font-bold transition disabled:opacity-50 flex-shrink-0"
+													>
+														{importingManga === m.id
+															? "Importing..."
+															: "Import"}
+													</button>
+												</div>
+											))}
+										</div>
+									) : (
+										<div className="text-center py-12 text-[var(--text-secondary)] text-sm">
+											No results found yet.
+										</div>
+									)}
+								</div>
+							</div>
+						) : (
+							/* Manual Add Tab */
+							<form onSubmit={handleCreateManual} className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
 										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
-											Upload Cover Image
+											Manga Title *
 										</label>
-										<div className="flex items-center space-x-4">
-											<label className="flex items-center space-x-2 px-4 py-2 border border-[var(--border-primary)] rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
-												<Upload size={16} />
-												<span className="text-xs font-semibold">
-													Choose File
-												</span>
-												<input
-													type="file"
-													accept="image/*"
-													className="hidden"
-													onChange={handleCoverChange}
-												/>
-											</label>
-											{manualCoverPreview && (
-												<div className="w-12 h-16 rounded overflow-hidden bg-zinc-100 border border-[var(--border-primary)]">
-													<img
-														src={manualCoverPreview}
-														alt="Preview"
-														className="w-full h-full object-cover"
-													/>
-												</div>
-											)}
-										</div>
+										<input
+											type="text"
+											value={manualTitle}
+											onChange={(e) => setManualTitle(e.target.value)}
+											placeholder="e.g. My Custom Manga"
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
+											required
+										/>
 									</div>
 
-									{/* Modal Footer Submit */}
-									<div className="pt-4 border-t border-[var(--border-primary)] flex justify-end space-x-3">
-										<button
-											type="button"
-											onClick={() => setIsAddModalOpen(false)}
-											className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
-										>
-											Cancel
-										</button>
-										<button
-											type="submit"
-											disabled={submittingManual}
-											className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
-										>
-											{submittingManual ? "Adding..." : "Add Manga"}
-										</button>
+									<CreatorLiveSearchInput
+										label="Author"
+										role="author"
+										value={manualAuthor}
+										onChange={setManualAuthor}
+										placeholder="e.g. Oda Eiichiro"
+									/>
+
+									<CreatorLiveSearchInput
+										label="Artist"
+										role="artist"
+										value={manualArtist}
+										onChange={setManualArtist}
+										placeholder="e.g. Yusuke Murata"
+									/>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Release Year
+										</label>
+										<input
+											type="text"
+											value={manualYear}
+											onChange={(e) => setManualYear(e.target.value)}
+											placeholder="e.g. 2021"
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)]"
+										/>
 									</div>
-								</form>
-							)}
-						</div>
+								</div>
+
+								<div>
+									<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+										Description
+									</label>
+									<textarea
+										value={manualDescription}
+										onChange={(e) => setManualDescription(e.target.value)}
+										placeholder="Manga details, summary..."
+										rows={3}
+										className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-orange)] resize-none"
+									/>
+								</div>
+
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Publish Status
+										</label>
+										<select
+											value={manualStatus}
+											onChange={(e) => setManualStatus(e.target.value)}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										>
+											<option value="ongoing">Ongoing</option>
+											<option value="completed">Completed</option>
+											<option value="hiatus">Hiatus</option>
+											<option value="cancelled">Cancelled</option>
+										</select>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Read Status
+										</label>
+										<select
+											value={manualReadStatus}
+											onChange={(e) => setManualReadStatus(e.target.value)}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										>
+											<option value="unread">Unread</option>
+											<option value="reading">Reading</option>
+											<option value="completed">Completed</option>
+											<option value="dropped">Dropped</option>
+											<option value="on_hold">On Hold</option>
+											<option value="plan_to_read">Plan to Read</option>
+											<option value="re_reading">Re-Reading</option>
+										</select>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Rating (0-10)
+										</label>
+										<input
+											type="number"
+											value={manualRating}
+											onChange={(e) =>
+												setManualRating(
+													e.target.value === "" ? "" : Number(e.target.value),
+												)
+											}
+											placeholder="e.g. 9.5"
+											min="0"
+											max="10"
+											step="0.5"
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										/>
+									</div>
+								</div>
+
+								{/* Advanced Search Comparison Fields */}
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Original Language
+										</label>
+										<select
+											value={manualOriginalLanguage}
+											onChange={(e) =>
+												setManualOriginalLanguage(e.target.value)
+											}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										>
+											<option value="ja">Japanese (ja)</option>
+											<option value="ko">Korean (ko)</option>
+											<option value="zh">Chinese (zh)</option>
+											<option value="en">English (en)</option>
+											<option value="vi">Vietnamese (vi)</option>
+											<option value="ru">Russian (ru)</option>
+										</select>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Demographic
+										</label>
+										<select
+											value={manualPublicationDemographic}
+											onChange={(e) =>
+												setManualPublicationDemographic(e.target.value)
+											}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										>
+											<option value="">None</option>
+											<option value="shounen">Shounen</option>
+											<option value="shoujo">Shoujo</option>
+											<option value="seinen">Seinen</option>
+											<option value="josei">Josei</option>
+										</select>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Content Rating
+										</label>
+										<select
+											value={manualContentRating}
+											onChange={(e) => setManualContentRating(e.target.value)}
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										>
+											<option value="safe">Safe</option>
+											<option value="suggestive">Suggestive</option>
+											<option value="erotica">Erotica</option>
+											<option value="pornographic">Pornographic</option>
+										</select>
+									</div>
+								</div>
+
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Total Volumes
+										</label>
+										<input
+											type="number"
+											value={manualVolumes}
+											onChange={(e) =>
+												setManualVolumes(
+													e.target.value === "" ? "" : Number(e.target.value),
+												)
+											}
+											placeholder="e.g. 12"
+											min="0"
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										/>
+									</div>
+
+									<div>
+										<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+											Total Chapters
+										</label>
+										<input
+											type="number"
+											value={manualChapters}
+											onChange={(e) =>
+												setManualChapters(
+													e.target.value === "" ? "" : Number(e.target.value),
+												)
+											}
+											placeholder="e.g. 120"
+											min="0"
+											className="w-full px-3 py-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none"
+										/>
+									</div>
+								</div>
+
+								{/* Assign Tags (reuses checklist code) */}
+								{/* Assign Tags */}
+								{allTags.length > 0 && (
+									<GroupedTagSelector
+										allTags={allTags}
+										selectedTags={importTags}
+										onChange={setImportTags}
+										label="Assign Custom Tags"
+										placeholder="Search tags to assign..."
+									/>
+								)}
+
+								{/* Cover image upload */}
+								<div>
+									<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1.5">
+										Upload Cover Image
+									</label>
+									<div className="flex items-center space-x-4">
+										<label className="flex items-center space-x-2 px-4 py-2 border border-[var(--border-primary)] rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
+											<Upload size={16} />
+											<span className="text-xs font-semibold">Choose File</span>
+											<input
+												type="file"
+												accept="image/*"
+												className="hidden"
+												onChange={handleCoverChange}
+											/>
+										</label>
+										{manualCoverPreview && (
+											<div className="w-12 h-16 rounded overflow-hidden bg-zinc-100 border border-[var(--border-primary)]">
+												<img
+													src={manualCoverPreview}
+													alt="Preview"
+													className="w-full h-full object-cover"
+												/>
+											</div>
+										)}
+									</div>
+								</div>
+
+								{/* Modal Footer Submit */}
+								<div className="pt-4 border-t border-[var(--border-primary)] flex justify-end space-x-3">
+									<button
+										type="button"
+										onClick={() => setIsAddModalOpen(false)}
+										className="px-4 py-2 border border-[var(--border-primary)] rounded-xl text-sm font-bold text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+									>
+										Cancel
+									</button>
+									<button
+										type="submit"
+										disabled={submittingManual}
+										className="px-6 py-2 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] text-white font-bold rounded-xl shadow-lg transition disabled:opacity-50"
+									>
+										{submittingManual ? "Adding..." : "Add Manga"}
+									</button>
+								</div>
+							</form>
+						)}
 					</div>
 				</div>
-			)}
+			</ModalMotion>
 
 			{/* Lightbox Zoom Portal/Overlay */}
-			{zoomedCoverUrl && (
-				<div
-					className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
-					onClick={() => setZoomedCoverUrl(null)}
-				>
-					<button
+			<AnimatePresence>
+				{zoomedCoverUrl && (
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: 0.16, ease: MOTION_EASE }}
+						className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
 						onClick={() => setZoomedCoverUrl(null)}
-						className="absolute top-6 right-6 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700/80 text-white transition"
 					>
-						<X size={24} />
-					</button>
-					<div
-						className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 animate-in zoom-in-95 duration-200"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<img
-							src={zoomedCoverUrl}
-							alt="Zoomed cover"
-							className="max-w-full max-h-[90vh] object-contain"
-						/>
-					</div>
-				</div>
-			)}
+						<button
+							type="button"
+							aria-label="Đóng xem ảnh bìa"
+							onClick={() => setZoomedCoverUrl(null)}
+							className="absolute top-6 right-6 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700/80 text-white transition cursor-pointer"
+						>
+							<X size={24} />
+						</button>
+						<motion.div
+							initial={{ opacity: 0, scale: 0.92 }}
+							animate={{ opacity: 1, scale: 1 }}
+							exit={{ opacity: 0, scale: 0.94 }}
+							transition={MOTION_SPRING}
+							className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<img
+								src={zoomedCoverUrl}
+								alt="Zoomed cover"
+								className="max-w-full max-h-[90vh] object-contain"
+							/>
+						</motion.div>
+					</motion.div>
+				)}
+			</AnimatePresence>
 		</div>
 	);
 };

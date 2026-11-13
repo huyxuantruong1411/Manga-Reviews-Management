@@ -19,6 +19,7 @@ import {
 	subscribeToSyncProgress,
 	triggerExternalReviewSync,
 } from "../../api/externalReviews";
+import { useConfirm } from "../../hooks/useConfirm";
 import type {
 	ExternalReview,
 	ExternalReviewStatsSummary,
@@ -45,6 +46,7 @@ export const ExternalReviewsManagerPanel: React.FC<
 	className = "",
 	onMetadataUpdated,
 }) => {
+	const { confirm } = useConfirm();
 	// Query & filter states
 	const [source, setSource] = useState<string>("all");
 	const [recommendation, setRecommendation] = useState<string>("all");
@@ -194,7 +196,14 @@ export const ExternalReviewsManagerPanel: React.FC<
 	};
 
 	const handleDeleteReview = async (reviewId: string) => {
-		if (!window.confirm("Bạn có chắc chắn muốn xóa bài đánh giá này?")) return;
+		const ok = await confirm({
+			title: "Xóa bài đánh giá này?",
+			message: "Bạn có chắc chắn muốn xóa bài đánh giá bên thứ ba này?",
+			confirmLabel: "Xóa",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) return;
 		try {
 			await deleteExternalReview(mangaId, reviewId);
 			setReviews((prev) => prev.filter((r) => r._id !== reviewId));
@@ -205,12 +214,15 @@ export const ExternalReviewsManagerPanel: React.FC<
 	};
 
 	const handleClearAll = async () => {
-		if (
-			!window.confirm(
+		const ok = await confirm({
+			title: "Xóa toàn bộ đánh giá bên thứ ba?",
+			message:
 				"Xác nhận xóa TOÀN BỘ bài đánh giá bên thứ ba của manga này? (Thao tác này chỉ xóa bản lưu trữ cục bộ, bạn có thể đồng bộ lại bất kỳ lúc nào)",
-			)
-		)
-			return;
+			confirmLabel: "Xóa tất cả",
+			cancelLabel: "Hủy",
+			variant: "danger",
+		});
+		if (!ok) return;
 
 		try {
 			await clearMangaExternalReviews(mangaId);

@@ -101,13 +101,25 @@ export const MediaImage: React.FC<MediaImageProps> = ({
 
 	return (
 		<div
+			role={onClick ? "button" : undefined}
+			tabIndex={onClick ? 0 : undefined}
 			className={cn("relative overflow-hidden", containerClassName)}
 			style={aspectRatio ? { aspectRatio } : undefined}
 			onClick={onClick}
+			onKeyDown={
+				onClick
+					? (e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								onClick(e as unknown as React.MouseEvent);
+							}
+						}
+					: undefined
+			}
 		>
 			{!loaded && (
 				<Skeleton
-					className="absolute inset-0 w-full h-full rounded-none"
+					className="absolute inset-0 w-full h-full rounded-none animate-shimmer motion-reduce:after:hidden"
 					aria-hidden="true"
 				/>
 			)}

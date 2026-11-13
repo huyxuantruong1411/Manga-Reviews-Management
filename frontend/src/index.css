@@ -15,6 +15,8 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant data-open (&:where([data-open], [data-state="open"]));
+@custom-variant data-closed (&:where([data-closed], [data-state="closed"]));
 
 @theme {
 	--font-spartan:
@@ -36,7 +38,9 @@
 @layer base {
 	:root {
 		--bg-primary: #f9fafb;
+		--bg-secondary: #f3f4f6;
 		--bg-card: #ffffff;
+		--bg-input: #ffffff;
 		--text-primary: #111827;
 		--text-secondary: #4b5563;
 		--border-primary: #e5e7eb;
@@ -47,7 +51,9 @@
 
 	.dark {
 		--bg-primary: #0f0f11;
+		--bg-secondary: #1e1e26;
 		--bg-card: #18181c;
+		--bg-input: #141418;
 		--text-primary: #e4e4e7;
 		--text-secondary: #a1a1aa;
 		--border-primary: #2a2a32;
@@ -76,6 +82,12 @@
 	}
 	* {
 		@apply border-border outline-ring/50;
+		scrollbar-width: thin;
+		scrollbar-color: transparent transparent;
+		transition: scrollbar-color 0.3s ease;
+	}
+	*:hover {
+		scrollbar-color: rgba(160, 160, 175, 0.22) transparent;
 	}
 	html {
 		@apply font-sans;
@@ -99,26 +111,13 @@ svg.recharts-surface:focus {
 	box-shadow: none !important;
 }
 
-/* Smooth Container Width Transition for Review Editor & Dynamic Layouts.
- * Must stay unlayered: the global `*` scrollbar transition below would otherwise
- * override Tailwind's layered `transition-*` utilities. */
+/* Smooth Container Width Transition for Review Editor & Dynamic Layouts */
 .review-editor-container,
 .review-editor-canvas {
 	transition:
-		max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-		width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		max-width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+		width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 	will-change: max-width;
-}
-
-/* Sleek Auto-Hiding Scrollbar with subtle contrast */
-* {
-	scrollbar-width: thin;
-	scrollbar-color: transparent transparent;
-	transition: scrollbar-color 0.3s ease;
-}
-
-*:hover {
-	scrollbar-color: rgba(160, 160, 175, 0.22) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -296,8 +295,65 @@ svg.recharts-surface:focus {
 	}
 }
 
+@keyframes wiggle {
+	0%,
+	100% {
+		transform: rotate(0deg);
+	}
+	25% {
+		transform: rotate(-8deg);
+	}
+	75% {
+		transform: rotate(8deg);
+	}
+}
+
+@keyframes shimmer-sweep {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(100%);
+	}
+}
+
 .animate-pulse-subtle {
 	animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-wiggle {
+	animation: wiggle 0.55s cubic-bezier(0.22, 1, 0.36, 1) 1;
+}
+
+.animate-shimmer {
+	position: relative;
+	overflow: hidden;
+}
+
+.animate-shimmer::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	transform: translateX(-100%);
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		rgba(255, 255, 255, 0.14) 50%,
+		transparent 100%
+	);
+	animation: shimmer-sweep 1.6s infinite;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
 }
 
 /* Tiptap table styling */

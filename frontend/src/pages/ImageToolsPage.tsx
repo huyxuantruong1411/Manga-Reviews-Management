@@ -17,11 +17,19 @@ import {
 	Trash2,
 	Wrench,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import {
+	AnimatedTabPanel,
+	AnimatedTabPill,
+	MOTION_EASE,
+	MOTION_SPRING,
+} from "@/components/motion/MotionPrimitives";
 import client from "../api/client";
 import { Skeleton } from "../components/ui/skeleton";
 import { useAlert } from "../hooks/useAlert";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Manga {
 	_id: string;
@@ -74,6 +82,7 @@ interface ConversionStats {
 
 export const ImageToolsPage: React.FC = () => {
 	const { showAlert, showToast } = useAlert();
+	const { confirm } = useConfirm();
 
 	// Navigation & Mode State
 	const [activeTab, setActiveTab] = useState<"duplicates" | "converter">(
@@ -354,10 +363,24 @@ export const ImageToolsPage: React.FC = () => {
 
 		if (willDeleteAllInAnyGroup) {
 			const warningMessage = `CAUTION: In one or more duplicate groups, you have selected ALL copies for deletion. This means the image will be COMPLETELY deleted, leaving you with NO copies of that page. Do you still want to delete all copies?`;
-			if (!window.confirm(warningMessage)) return;
+			const ok = await confirm({
+				title: "Cảnh báo xóa toàn bộ bản sao!",
+				message: warningMessage,
+				confirmLabel: "Vẫn xóa tất cả",
+				cancelLabel: "Hủy",
+				variant: "danger",
+			});
+			if (!ok) return;
 		} else {
 			const confirmMessage = `Are you sure you want to permanently delete these ${selectedDuplicatePaths.size} duplicate image files? This action cannot be undone!`;
-			if (!window.confirm(confirmMessage)) return;
+			const ok = await confirm({
+				title: "Xóa ảnh trùng lặp?",
+				message: confirmMessage,
+				confirmLabel: "Xóa vĩnh viễn",
+				cancelLabel: "Hủy",
+				variant: "danger",
+			});
+			if (!ok) return;
 		}
 
 		try {
@@ -438,10 +461,24 @@ export const ImageToolsPage: React.FC = () => {
 		);
 		if (allSelected) {
 			const warning = `CAUTION: You have selected ALL copies in this group for deletion. The image will be COMPLETELY deleted, leaving you with NO copies of this page. Do you still want to delete all copies?`;
-			if (!window.confirm(warning)) return;
+			const ok = await confirm({
+				title: "Cảnh báo xóa sạch nhóm ảnh!",
+				message: warning,
+				confirmLabel: "Vẫn xóa",
+				cancelLabel: "Hủy",
+				variant: "danger",
+			});
+			if (!ok) return;
 		} else {
-			const confirm = `Are you sure you want to permanently delete these ${groupPathsToDelete.length} duplicate file(s) in this group?`;
-			if (!window.confirm(confirm)) return;
+			const confirmMsg = `Are you sure you want to permanently delete these ${groupPathsToDelete.length} duplicate file(s) in this group?`;
+			const ok = await confirm({
+				title: "Xóa ảnh đã chọn?",
+				message: confirmMsg,
+				confirmLabel: "Xóa",
+				cancelLabel: "Hủy",
+				variant: "danger",
+			});
+			if (!ok) return;
 		}
 
 		try {
@@ -673,26 +710,40 @@ export const ImageToolsPage: React.FC = () => {
 				{/* Tab Selection */}
 				<div className="flex bg-[var(--bg-primary)] p-1 rounded-xl border border-[var(--border-primary)] self-start md:self-auto shadow-sm">
 					<button
+						type="button"
 						onClick={() => setActiveTab("duplicates")}
-						className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+						className={`relative flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors duration-200 cursor-pointer ${
 							activeTab === "duplicates"
-								? "bg-[var(--bg-card)] text-[var(--brand-orange)] border border-[var(--border-primary)] shadow-sm font-bold"
+								? "text-[var(--brand-orange)] font-bold"
 								: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 						}`}
 					>
-						<Layers size={16} />
-						<span>Duplicate Scanner</span>
+						{activeTab === "duplicates" && (
+							<AnimatedTabPill
+								layoutId="image-tools-main-tab"
+								className="rounded-lg bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-sm"
+							/>
+						)}
+						<Layers size={16} className="relative z-10" />
+						<span className="relative z-10">Duplicate Scanner</span>
 					</button>
 					<button
+						type="button"
 						onClick={() => setActiveTab("converter")}
-						className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+						className={`relative flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors duration-200 cursor-pointer ${
 							activeTab === "converter"
-								? "bg-[var(--bg-card)] text-[var(--brand-orange)] border border-[var(--border-primary)] shadow-sm font-bold"
+								? "text-[var(--brand-orange)] font-bold"
 								: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 						}`}
 					>
-						<ImageIcon size={16} />
-						<span>Format Converter</span>
+						{activeTab === "converter" && (
+							<AnimatedTabPill
+								layoutId="image-tools-main-tab"
+								className="rounded-lg bg-[var(--bg-card)] border border-[var(--border-primary)] shadow-sm"
+							/>
+						)}
+						<ImageIcon size={16} className="relative z-10" />
+						<span className="relative z-10">Format Converter</span>
 					</button>
 				</div>
 			</div>
@@ -874,869 +925,906 @@ export const ImageToolsPage: React.FC = () => {
 				</div>
 			</div>
 
-			{/* ─── TAB 1: DUPLICATE IMAGE SCANNER CONTENT ─────────────────────────── */}
-			{activeTab === "duplicates" && (
-				<div className="space-y-6">
-					{/* Scanning Overlay / Loader */}
-					{isScanningDuplicates && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-6 max-w-xl mx-auto animate-in fade-in duration-200">
-							<div className="relative w-16 h-16 mx-auto">
-								<div className="absolute inset-0 rounded-full border-4 border-[var(--border-primary)]"></div>
-								<div className="absolute inset-0 rounded-full border-4 border-t-[var(--brand-orange)] animate-spin"></div>
-							</div>
-							<div className="space-y-2">
-								<h3 className="text-xl font-spartan font-bold text-[var(--text-primary)]">
-									Scanning for Duplicate Images
-								</h3>
-								<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-									Computing MD5 hashes in parallel across image folders. This
-									processes hundreds of files in seconds...
-								</p>
-							</div>
+			{/* ─── TAB CONTENT ─────────────────────────── */}
+			<AnimatedTabPanel tabKey={activeTab}>
+				{activeTab === "duplicates" && (
+					<div className="space-y-6">
+						{/* Scanning Overlay / Loader */}
+						{isScanningDuplicates && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-6 max-w-xl mx-auto animate-in fade-in duration-200">
+								<div className="relative w-16 h-16 mx-auto">
+									<div className="absolute inset-0 rounded-full border-4 border-[var(--border-primary)]"></div>
+									<div className="absolute inset-0 rounded-full border-4 border-t-[var(--brand-orange)] animate-spin"></div>
+								</div>
+								<div className="space-y-2">
+									<h3 className="text-xl font-spartan font-bold text-[var(--text-primary)]">
+										Scanning for Duplicate Images
+									</h3>
+									<p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
+										Computing MD5 hashes in parallel across image folders. This
+										processes hundreds of files in seconds...
+									</p>
+								</div>
 
-							{scanProgress && (
-								<div className="space-y-4 max-w-sm mx-auto p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl">
-									{scanProgress.total_files === 0 ? (
-										<div className="text-xs font-semibold text-[var(--text-secondary)] animate-pulse flex items-center justify-center space-x-2">
-											<Loader2
-												className="animate-spin text-[var(--brand-orange)]"
-												size={14}
-											/>
-											<span>Walking directory and counting image files...</span>
-										</div>
-									) : (
-										<div className="space-y-3">
-											{/* Stats */}
-											<div className="flex justify-between text-xs font-bold text-[var(--text-secondary)]">
-												<span>Progress</span>
-												<span className="text-[var(--brand-orange)] font-extrabold">
-													{Math.round(
-														(scanProgress.scanned_files /
-															scanProgress.total_files) *
-															100,
-													)}
-													%
+								{scanProgress && (
+									<div className="space-y-4 max-w-sm mx-auto p-4 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-2xl">
+										{scanProgress.total_files === 0 ? (
+											<div className="text-xs font-semibold text-[var(--text-secondary)] animate-pulse flex items-center justify-center space-x-2">
+												<Loader2
+													className="animate-spin text-[var(--brand-orange)]"
+													size={14}
+												/>
+												<span>
+													Walking directory and counting image files...
 												</span>
 											</div>
-
-											{/* Progress Bar */}
-											<div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner">
-												<div
-													className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 rounded-full"
-													style={{
-														width: `${(scanProgress.scanned_files / scanProgress.total_files) * 100}%`,
-													}}
-												/>
-											</div>
-
-											{/* Details */}
-											<div className="flex flex-col space-y-1 text-[11px] font-semibold text-[var(--text-secondary)] text-left border-t border-[var(--border-primary)] pt-2.5 mt-2">
-												<div className="flex justify-between">
-													<span>Files Scanned:</span>
-													<span className="font-bold text-[var(--text-primary)]">
-														{scanProgress.scanned_files} /{" "}
-														{scanProgress.total_files}
-													</span>
-												</div>
-												<div className="flex justify-between text-rose-500">
-													<span>Duplicates Detected:</span>
-													<span className="font-extrabold">
-														{scanProgress.duplicates_found} pages
-													</span>
-												</div>
-											</div>
-										</div>
-									)}
-								</div>
-							)}
-						</div>
-					)}
-
-					{/* Stats & Actions Bar when duplicates found */}
-					{dupStats && dupGroups.length > 0 && !isScanningDuplicates && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 md:p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-							<div className="space-y-1">
-								<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-									Scan Results: {dupStats.total_files} Total Files Scanned
-								</span>
-								<div className="flex flex-wrap items-center gap-3">
-									<div className="flex items-center space-x-1.5 bg-rose-50 dark:bg-rose-950/20 px-3 py-1 rounded-lg border border-rose-100 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 text-sm font-bold">
-										<span>{dupStats.total_groups} Duplicate Groups</span>
-									</div>
-									<div className="flex items-center space-x-1.5 bg-orange-50 dark:bg-orange-950/20 px-3 py-1 rounded-lg border border-orange-100 dark:border-orange-900/30 text-[var(--brand-orange)] text-sm font-bold">
-										<span>
-											{formatBytes(dupStats.total_wasted_bytes)} Waste Space
-										</span>
-									</div>
-								</div>
-							</div>
-
-							{/* Bulk operations */}
-							<div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
-								<button
-									onClick={handleToggleAllDups}
-									className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
-									title={isAllDupsSelected ? "Deselect All" : "Select All"}
-								>
-									{isAllDupsSelected ? (
-										<Square size={14} />
-									) : (
-										<CheckSquare size={14} />
-									)}
-									<span>
-										{isAllDupsSelected ? "Deselect All" : "Select All"}
-									</span>
-								</button>
-								<button
-									onClick={handleSelectAllDuplicatesExceptFirst}
-									className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
-									title="Select all redundant pages, keeping only the first original of each group"
-								>
-									<Layers size={14} />
-									<span>Clean Mode (Keep 1st)</span>
-								</button>
-								<button
-									onClick={handleDeleteSelectedDuplicates}
-									disabled={selectedDuplicatePaths.size === 0 || isDeleting}
-									className="flex-1 md:flex-initial px-5 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-400 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
-								>
-									{isDeleting ? (
-										<RefreshCw size={14} className="animate-spin" />
-									) : (
-										<Trash2 size={14} />
-									)}
-									<span>Delete Selected ({selectedDuplicatePaths.size})</span>
-								</button>
-							</div>
-						</div>
-					)}
-
-					{/* Duplicates Groups List */}
-					{dupGroups.length > 0 && !isScanningDuplicates && (
-						<div className="space-y-4">
-							{dupGroups.map((group, groupIndex) => (
-								<div
-									key={group.hash}
-									className="bg-[var(--bg-card)] border border-[var(--border-primary)] hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl p-4 md:p-6 transition shadow-sm flex flex-col md:flex-row gap-5"
-								>
-									{/* Image Preview Thumbnail */}
-									<div
-										onClick={() =>
-											group.files.length > 0 &&
-											setZoomedImagePath(group.files[0].path)
-										}
-										className={`relative w-24 h-36 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center group/thumb self-center md:self-start shadow-inner transition duration-150 ${
-											group.files.length > 0
-												? "cursor-zoom-in hover:border-zinc-400 dark:hover:border-zinc-500"
-												: ""
-										}`}
-										title={
-											group.files.length > 0
-												? "Click to preview image in full resolution"
-												: undefined
-										}
-									>
-										{group.thumbnail ? (
-											<img
-												src={`data:image/jpeg;base64,${group.thumbnail}`}
-												alt="Duplicate preview"
-												className="w-full h-full object-cover transform group-hover/thumb:scale-110 transition duration-300"
-											/>
 										) : (
-											<ImageIcon
-												size={32}
-												className="text-[var(--text-secondary)] opacity-45"
-											/>
+											<div className="space-y-3">
+												{/* Stats */}
+												<div className="flex justify-between text-xs font-bold text-[var(--text-secondary)]">
+													<span>Progress</span>
+													<span className="text-[var(--brand-orange)] font-extrabold">
+														{Math.round(
+															(scanProgress.scanned_files /
+																scanProgress.total_files) *
+																100,
+														)}
+														%
+													</span>
+												</div>
+
+												{/* Progress Bar */}
+												<div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden shadow-inner">
+													<div
+														className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-300 rounded-full"
+														style={{
+															width: `${(scanProgress.scanned_files / scanProgress.total_files) * 100}%`,
+														}}
+													/>
+												</div>
+
+												{/* Details */}
+												<div className="flex flex-col space-y-1 text-[11px] font-semibold text-[var(--text-secondary)] text-left border-t border-[var(--border-primary)] pt-2.5 mt-2">
+													<div className="flex justify-between">
+														<span>Files Scanned:</span>
+														<span className="font-bold text-[var(--text-primary)]">
+															{scanProgress.scanned_files} /{" "}
+															{scanProgress.total_files}
+														</span>
+													</div>
+													<div className="flex justify-between text-rose-500">
+														<span>Duplicates Detected:</span>
+														<span className="font-extrabold">
+															{scanProgress.duplicates_found} pages
+														</span>
+													</div>
+												</div>
+											</div>
 										)}
-										<div className="absolute bottom-1 right-1 bg-black/65 backdrop-blur-sm text-[10px] text-white px-1.5 py-0.5 rounded font-mono">
-											{formatBytes(group.file_size, 0)}
+									</div>
+								)}
+							</div>
+						)}
+
+						{/* Stats & Actions Bar when duplicates found */}
+						{dupStats && dupGroups.length > 0 && !isScanningDuplicates && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-4 md:p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+								<div className="space-y-1">
+									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+										Scan Results: {dupStats.total_files} Total Files Scanned
+									</span>
+									<div className="flex flex-wrap items-center gap-3">
+										<div className="flex items-center space-x-1.5 bg-rose-50 dark:bg-rose-950/20 px-3 py-1 rounded-lg border border-rose-100 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 text-sm font-bold">
+											<span>{dupStats.total_groups} Duplicate Groups</span>
+										</div>
+										<div className="flex items-center space-x-1.5 bg-orange-50 dark:bg-orange-950/20 px-3 py-1 rounded-lg border border-orange-100 dark:border-orange-900/30 text-[var(--brand-orange)] text-sm font-bold">
+											<span>
+												{formatBytes(dupStats.total_wasted_bytes)} Waste Space
+											</span>
 										</div>
 									</div>
+								</div>
 
-									{/* Duplicate Group Files & Actions */}
-									<div className="flex-1 min-w-0 flex flex-col justify-between">
-										<div className="space-y-2">
-											{(() => {
-												const isGroupAllSelected = group.files.every((f) =>
-													selectedDuplicatePaths.has(f.path),
-												);
-												const handleToggleGroupAll = () => {
-													const updated = new Set(selectedDuplicatePaths);
-													const groupPaths = group.files.map((f) => f.path);
-													if (isGroupAllSelected) {
-														groupPaths.forEach((path) => updated.delete(path));
-													} else {
-														groupPaths.forEach((path) => updated.add(path));
-													}
-													setSelectedDuplicatePaths(updated);
-												};
+								{/* Bulk operations */}
+								<div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
+									<button
+										onClick={handleToggleAllDups}
+										className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
+										title={isAllDupsSelected ? "Deselect All" : "Select All"}
+									>
+										{isAllDupsSelected ? (
+											<Square size={14} />
+										) : (
+											<CheckSquare size={14} />
+										)}
+										<span>
+											{isAllDupsSelected ? "Deselect All" : "Select All"}
+										</span>
+									</button>
+									<button
+										onClick={handleSelectAllDuplicatesExceptFirst}
+										className="flex-1 md:flex-initial px-4 py-2 border border-[var(--border-primary)] hover:border-[var(--brand-orange)] bg-[var(--bg-primary)] hover:bg-[var(--bg-card)] rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
+										title="Select all redundant pages, keeping only the first original of each group"
+									>
+										<Layers size={14} />
+										<span>Clean Mode (Keep 1st)</span>
+									</button>
+									<button
+										onClick={handleDeleteSelectedDuplicates}
+										disabled={selectedDuplicatePaths.size === 0 || isDeleting}
+										className="flex-1 md:flex-initial px-5 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-400 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+									>
+										{isDeleting ? (
+											<RefreshCw size={14} className="animate-spin" />
+										) : (
+											<Trash2 size={14} />
+										)}
+										<span>Delete Selected ({selectedDuplicatePaths.size})</span>
+									</button>
+								</div>
+							</div>
+						)}
 
-												const redundantPaths = group.files
-													.slice(1)
-													.map((f) => f.path);
-												const isGroupCleanSelected =
-													redundantPaths.length > 0 &&
-													redundantPaths.every((path) =>
-														selectedDuplicatePaths.has(path),
-													) &&
-													!selectedDuplicatePaths.has(group.files[0].path);
+						{/* Duplicates Groups List */}
+						{dupGroups.length > 0 && !isScanningDuplicates && (
+							<div className="space-y-4">
+								{dupGroups.map((group, groupIndex) => (
+									<div
+										key={group.hash}
+										className="bg-[var(--bg-card)] border border-[var(--border-primary)] hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl p-4 md:p-6 transition shadow-sm flex flex-col md:flex-row gap-5"
+									>
+										{/* Image Preview Thumbnail */}
+										<div
+											onClick={() =>
+												group.files.length > 0 &&
+												setZoomedImagePath(group.files[0].path)
+											}
+											className={`relative w-24 h-36 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center group/thumb self-center md:self-start shadow-inner transition duration-150 ${
+												group.files.length > 0
+													? "cursor-zoom-in hover:border-zinc-400 dark:hover:border-zinc-500"
+													: ""
+											}`}
+											title={
+												group.files.length > 0
+													? "Click to preview image in full resolution"
+													: undefined
+											}
+										>
+											{group.thumbnail ? (
+												<img
+													src={`data:image/jpeg;base64,${group.thumbnail}`}
+													alt="Duplicate preview"
+													className="w-full h-full object-cover transform group-hover/thumb:scale-110 transition duration-300"
+												/>
+											) : (
+												<ImageIcon
+													size={32}
+													className="text-[var(--text-secondary)] opacity-45"
+												/>
+											)}
+											<div className="absolute bottom-1 right-1 bg-black/65 backdrop-blur-sm text-[10px] text-white px-1.5 py-0.5 rounded font-mono">
+												{formatBytes(group.file_size, 0)}
+											</div>
+										</div>
 
-												const handleToggleGroupClean = () => {
-													const updated = new Set(selectedDuplicatePaths);
-													if (isGroupCleanSelected) {
-														redundantPaths.forEach((path) =>
-															updated.delete(path),
-														);
-													} else {
-														redundantPaths.forEach((path) => updated.add(path));
-														if (group.files.length > 0) {
-															updated.delete(group.files[0].path);
+										{/* Duplicate Group Files & Actions */}
+										<div className="flex-1 min-w-0 flex flex-col justify-between">
+											<div className="space-y-2">
+												{(() => {
+													const isGroupAllSelected = group.files.every((f) =>
+														selectedDuplicatePaths.has(f.path),
+													);
+													const handleToggleGroupAll = () => {
+														const updated = new Set(selectedDuplicatePaths);
+														const groupPaths = group.files.map((f) => f.path);
+														if (isGroupAllSelected) {
+															groupPaths.forEach((path) =>
+																updated.delete(path),
+															);
+														} else {
+															groupPaths.forEach((path) => updated.add(path));
 														}
-													}
-													setSelectedDuplicatePaths(updated);
-												};
+														setSelectedDuplicatePaths(updated);
+													};
 
-												const groupSelectedCount = group.files.filter((f) =>
-													selectedDuplicatePaths.has(f.path),
-												).length;
+													const redundantPaths = group.files
+														.slice(1)
+														.map((f) => f.path);
+													const isGroupCleanSelected =
+														redundantPaths.length > 0 &&
+														redundantPaths.every((path) =>
+															selectedDuplicatePaths.has(path),
+														) &&
+														!selectedDuplicatePaths.has(group.files[0].path);
 
-												return (
-													<div className="flex items-center justify-between">
-														<div className="flex flex-wrap items-center gap-2">
-															<h4 className="text-sm font-bold flex items-center space-x-2">
-																<span className="text-[var(--text-secondary)] font-spartan">
-																	Group #{groupIndex + 1}
-																</span>
-																<span className="text-zinc-300 dark:text-zinc-700">
-																	•
-																</span>
-																<span className="text-rose-500 font-semibold">
-																	{group.count} copies
-																</span>
-															</h4>
+													const handleToggleGroupClean = () => {
+														const updated = new Set(selectedDuplicatePaths);
+														if (isGroupCleanSelected) {
+															redundantPaths.forEach((path) =>
+																updated.delete(path),
+															);
+														} else {
+															redundantPaths.forEach((path) =>
+																updated.add(path),
+															);
+															if (group.files.length > 0) {
+																updated.delete(group.files[0].path);
+															}
+														}
+														setSelectedDuplicatePaths(updated);
+													};
 
-															<button
-																type="button"
-																onClick={handleToggleGroupAll}
-																className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold border transition duration-155 select-none ${
-																	isGroupAllSelected
-																		? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)]/30 text-[var(--brand-orange)]"
-																		: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-zinc-500"
-																}`}
-															>
-																{isGroupAllSelected ? (
-																	<CheckSquare size={11} />
-																) : (
-																	<Square size={11} />
-																)}
-																<span>
-																	{isGroupAllSelected
-																		? "Group Deselect All"
-																		: "Group Select All"}
-																</span>
-															</button>
+													const groupSelectedCount = group.files.filter((f) =>
+														selectedDuplicatePaths.has(f.path),
+													).length;
 
-															{group.files.length > 1 && (
+													return (
+														<div className="flex items-center justify-between">
+															<div className="flex flex-wrap items-center gap-2">
+																<h4 className="text-sm font-bold flex items-center space-x-2">
+																	<span className="text-[var(--text-secondary)] font-spartan">
+																		Group #{groupIndex + 1}
+																	</span>
+																	<span className="text-zinc-300 dark:text-zinc-700">
+																		•
+																	</span>
+																	<span className="text-rose-500 font-semibold">
+																		{group.count} copies
+																	</span>
+																</h4>
+
 																<button
 																	type="button"
-																	onClick={handleToggleGroupClean}
+																	onClick={handleToggleGroupAll}
 																	className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold border transition duration-155 select-none ${
-																		isGroupCleanSelected
+																		isGroupAllSelected
 																			? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)]/30 text-[var(--brand-orange)]"
 																			: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-zinc-500"
 																	}`}
 																>
-																	<Layers size={11} />
-																	<span>
-																		{isGroupCleanSelected
-																			? "Group Clean Deselect"
-																			: "Group Clean Mode"}
-																	</span>
-																</button>
-															)}
-														</div>
-
-														<div className="flex items-center space-x-2">
-															{groupSelectedCount > 0 && (
-																<button
-																	type="button"
-																	onClick={() =>
-																		handleDeleteGroupSelected(group)
-																	}
-																	disabled={isDeleting}
-																	className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded-lg shadow-sm transition flex items-center space-x-1 disabled:opacity-50"
-																>
-																	<Trash2 size={11} />
-																	<span>
-																		Delete Selected ({groupSelectedCount})
-																	</span>
-																</button>
-															)}
-
-															<span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
-																Wasted: {formatBytes(group.wasted_bytes)}
-															</span>
-														</div>
-													</div>
-												);
-											})()}
-
-											<div className="border border-[var(--border-primary)] rounded-xl overflow-hidden divide-y divide-[var(--border-primary)] bg-[var(--bg-primary)]">
-												{group.files.map((file, fileIdx) => {
-													const isSelected = selectedDuplicatePaths.has(
-														file.path,
-													);
-													return (
-														<div
-															key={file.path}
-															className={`flex items-center justify-between p-3 gap-3 transition-colors ${
-																isSelected
-																	? "bg-rose-500/5 dark:bg-rose-500/10"
-																	: "hover:bg-[var(--bg-card)]"
-															}`}
-														>
-															<div className="flex items-center space-x-3 min-w-0">
-																{/* Custom Checkbox */}
-																<button
-																	type="button"
-																	onClick={() => handleToggleDupFile(file.path)}
-																	className={`p-1.5 rounded transition ${
-																		isSelected
-																			? "text-rose-500"
-																			: "text-[var(--text-secondary)] hover:text-zinc-500"
-																	}`}
-																	title={
-																		isSelected
-																			? "Deselect from deletion list"
-																			: "Select for deletion"
-																	}
-																>
-																	{isSelected ? (
-																		<CheckSquare size={18} />
+																	{isGroupAllSelected ? (
+																		<CheckSquare size={11} />
 																	) : (
-																		<Square size={18} />
+																		<Square size={11} />
 																	)}
+																	<span>
+																		{isGroupAllSelected
+																			? "Group Deselect All"
+																			: "Group Select All"}
+																	</span>
 																</button>
 
-																<div className="text-xs min-w-0 leading-relaxed">
-																	<div className="font-bold flex items-center space-x-2">
-																		<span className="text-[var(--brand-orange)] font-semibold truncate">
-																			{file.chapter}
-																		</span>
-																		<span className="text-zinc-300 dark:text-zinc-700">
-																			/
-																		</span>
-																		<span className="text-[var(--text-primary)] truncate font-semibold">
-																			{file.filename}
-																		</span>
-																		{fileIdx === 0 && (
-																			<span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/30 uppercase font-bold tracking-wider">
-																				Original
-																			</span>
-																		)}
-																	</div>
-																	<p
-																		className="text-[10px] text-[var(--text-secondary)] font-mono truncate max-w-xl md:max-w-2xl mt-0.5"
-																		title={file.path}
+																{group.files.length > 1 && (
+																	<button
+																		type="button"
+																		onClick={handleToggleGroupClean}
+																		className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold border transition duration-155 select-none ${
+																			isGroupCleanSelected
+																				? "bg-[var(--brand-orange)]/10 border-[var(--brand-orange)]/30 text-[var(--brand-orange)]"
+																				: "bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-zinc-500"
+																		}`}
 																	>
-																		{file.path}
-																	</p>
-																</div>
+																		<Layers size={11} />
+																		<span>
+																			{isGroupCleanSelected
+																				? "Group Clean Deselect"
+																				: "Group Clean Mode"}
+																		</span>
+																	</button>
+																)}
 															</div>
 
-															{/* Individual deletion button (only if not original or if confirmed) */}
-															<button
-																onClick={async () => {
-																	if (fileIdx === 0) {
-																		const confirm = window.confirm(
-																			"This is flagged as the 'Original' copy in this duplicate group. Deleting it might leave you without this page. Are you sure?",
-																		);
-																		if (!confirm) return;
-																	} else {
-																		if (
-																			!window.confirm(
-																				"Permanently delete this file?",
-																			)
-																		)
-																			return;
-																	}
-																	try {
-																		const res = await client.post(
-																			"/api/image-tools/delete-duplicates",
-																			{
-																				file_paths: [file.path],
-																			},
-																		);
-																		if (res.data.deleted_count > 0) {
-																			showToast(
-																				"Deleted duplicate successfully",
-																				"success",
-																			);
-																			// Remove just this file locally
-																			const updatedFiles = group.files.filter(
-																				(f) => f.path !== file.path,
-																			);
-																			const newWasted =
-																				updatedFiles.length > 1
-																					? group.file_size *
-																						(updatedFiles.length - 1)
-																					: 0;
-
-																			const updatedGroups = dupGroups
-																				.map((g) => {
-																					if (g.hash === group.hash) {
-																						return {
-																							...g,
-																							files: updatedFiles,
-																							count: updatedFiles.length,
-																							wasted_bytes: newWasted,
-																						};
-																					}
-																					return g;
-																				})
-																				.filter((g) => g.count > 0); // Keep groups with at least 1 file remaining
-
-																			setDupGroups(updatedGroups);
-
-																			// Recalculate stats
-																			const newTotalWasted =
-																				updatedGroups.reduce(
-																					(acc, g) => acc + g.wasted_bytes,
-																					0,
-																				);
-																			if (dupStats) {
-																				setDupStats({
-																					...dupStats,
-																					total_groups: updatedGroups.length,
-																					total_wasted_bytes: newTotalWasted,
-																				});
-																			}
+															<div className="flex items-center space-x-2">
+																{groupSelectedCount > 0 && (
+																	<button
+																		type="button"
+																		onClick={() =>
+																			handleDeleteGroupSelected(group)
 																		}
-																	} catch (err) {
-																		showToast("Failed to delete file", "error");
-																	}
-																}}
-																className="p-2 text-zinc-400 hover:text-red-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition"
-																title="Delete Single File"
-															>
-																<Trash2 size={15} />
-															</button>
+																		disabled={isDeleting}
+																		className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded-lg shadow-sm transition flex items-center space-x-1 disabled:opacity-50"
+																	>
+																		<Trash2 size={11} />
+																		<span>
+																			Delete Selected ({groupSelectedCount})
+																		</span>
+																	</button>
+																)}
+
+																<span className="text-xs text-[var(--text-secondary)] font-mono font-semibold bg-[var(--bg-primary)] px-2.5 py-1 border border-[var(--border-primary)] rounded-lg">
+																	Wasted: {formatBytes(group.wasted_bytes)}
+																</span>
+															</div>
 														</div>
 													);
-												})}
+												})()}
+
+												<div className="border border-[var(--border-primary)] rounded-xl overflow-hidden divide-y divide-[var(--border-primary)] bg-[var(--bg-primary)]">
+													{group.files.map((file, fileIdx) => {
+														const isSelected = selectedDuplicatePaths.has(
+															file.path,
+														);
+														return (
+															<div
+																key={file.path}
+																className={`flex items-center justify-between p-3 gap-3 transition-colors ${
+																	isSelected
+																		? "bg-rose-500/5 dark:bg-rose-500/10"
+																		: "hover:bg-[var(--bg-card)]"
+																}`}
+															>
+																<div className="flex items-center space-x-3 min-w-0">
+																	{/* Custom Checkbox */}
+																	<button
+																		type="button"
+																		onClick={() =>
+																			handleToggleDupFile(file.path)
+																		}
+																		className={`p-1.5 rounded transition ${
+																			isSelected
+																				? "text-rose-500"
+																				: "text-[var(--text-secondary)] hover:text-zinc-500"
+																		}`}
+																		title={
+																			isSelected
+																				? "Deselect from deletion list"
+																				: "Select for deletion"
+																		}
+																	>
+																		{isSelected ? (
+																			<CheckSquare size={18} />
+																		) : (
+																			<Square size={18} />
+																		)}
+																	</button>
+
+																	<div className="text-xs min-w-0 leading-relaxed">
+																		<div className="font-bold flex items-center space-x-2">
+																			<span className="text-[var(--brand-orange)] font-semibold truncate">
+																				{file.chapter}
+																			</span>
+																			<span className="text-zinc-300 dark:text-zinc-700">
+																				/
+																			</span>
+																			<span className="text-[var(--text-primary)] truncate font-semibold">
+																				{file.filename}
+																			</span>
+																			{fileIdx === 0 && (
+																				<span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/30 uppercase font-bold tracking-wider">
+																					Original
+																				</span>
+																			)}
+																		</div>
+																		<p
+																			className="text-[10px] text-[var(--text-secondary)] font-mono truncate max-w-xl md:max-w-2xl mt-0.5"
+																			title={file.path}
+																		>
+																			{file.path}
+																		</p>
+																	</div>
+																</div>
+
+																{/* Individual deletion button (only if not original or if confirmed) */}
+																<button
+																	type="button"
+																	onClick={async () => {
+																		if (fileIdx === 0) {
+																			const ok = await confirm({
+																				title: "Xóa bản gốc trong nhóm trùng?",
+																				message:
+																					"This is flagged as the 'Original' copy in this duplicate group. Deleting it might leave you without this page. Are you sure?",
+																				confirmLabel: "Vẫn xóa",
+																				cancelLabel: "Hủy",
+																				variant: "danger",
+																			});
+																			if (!ok) return;
+																		} else {
+																			const ok = await confirm({
+																				title: "Xóa tệp ảnh?",
+																				message:
+																					"Permanently delete this file?",
+																				confirmLabel: "Xóa",
+																				cancelLabel: "Hủy",
+																				variant: "danger",
+																			});
+																			if (!ok) return;
+																		}
+																		try {
+																			const res = await client.post(
+																				"/api/image-tools/delete-duplicates",
+																				{
+																					file_paths: [file.path],
+																				},
+																			);
+																			if (res.data.deleted_count > 0) {
+																				showToast(
+																					"Deleted duplicate successfully",
+																					"success",
+																				);
+																				// Remove just this file locally
+																				const updatedFiles = group.files.filter(
+																					(f) => f.path !== file.path,
+																				);
+																				const newWasted =
+																					updatedFiles.length > 1
+																						? group.file_size *
+																							(updatedFiles.length - 1)
+																						: 0;
+
+																				const updatedGroups = dupGroups
+																					.map((g) => {
+																						if (g.hash === group.hash) {
+																							return {
+																								...g,
+																								files: updatedFiles,
+																								count: updatedFiles.length,
+																								wasted_bytes: newWasted,
+																							};
+																						}
+																						return g;
+																					})
+																					.filter((g) => g.count > 0); // Keep groups with at least 1 file remaining
+
+																				setDupGroups(updatedGroups);
+
+																				// Recalculate stats
+																				const newTotalWasted =
+																					updatedGroups.reduce(
+																						(acc, g) => acc + g.wasted_bytes,
+																						0,
+																					);
+																				if (dupStats) {
+																					setDupStats({
+																						...dupStats,
+																						total_groups: updatedGroups.length,
+																						total_wasted_bytes: newTotalWasted,
+																					});
+																				}
+																			}
+																		} catch (err) {
+																			showToast(
+																				"Failed to delete file",
+																				"error",
+																			);
+																		}
+																	}}
+																	className="p-2 text-zinc-400 hover:text-red-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition"
+																	title="Delete Single File"
+																>
+																	<Trash2 size={15} />
+																</button>
+															</div>
+														);
+													})}
+												</div>
 											</div>
 										</div>
 									</div>
-								</div>
-							))}
-						</div>
-					)}
-
-					{/* Empty States */}
-					{dupStats && dupGroups.length === 0 && !isScanningDuplicates && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
-							<div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
-								<CheckCircle size={32} />
-							</div>
-							<div className="space-y-1">
-								<h3 className="text-lg font-bold">No Duplicates Found</h3>
-								<p className="text-sm text-[var(--text-secondary)] max-w-sm mx-auto">
-									Awesome! All image files inside the directory are unique.
-									Storage is fully optimized.
-								</p>
-							</div>
-						</div>
-					)}
-
-					{/* Initial State */}
-					{!dupStats && !isScanningDuplicates && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
-							<div className="w-16 h-16 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded-full flex items-center justify-center mx-auto border border-[var(--border-primary)]">
-								<Layers size={28} className="opacity-70" />
-							</div>
-							<div className="space-y-1">
-								<h3 className="text-lg font-bold">
-									Duplicate credits/pages scanner
-								</h3>
-								<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto">
-									Select a manga above or type a custom directory path and click
-									"Scan Path" to locate exact duplicate images across chapters
-									(e.g. credits pages, repeating translation ads).
-								</p>
-							</div>
-						</div>
-					)}
-				</div>
-			)}
-
-			{/* ─── TAB 2: IMAGE FORMAT CONVERTER CONTENT ──────────────────────────── */}
-			{activeTab === "converter" && (
-				<div className="space-y-6">
-					{/* Format Settings Bar */}
-					<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 shadow-sm space-y-3">
-						<h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
-							Conversion Configuration
-						</h3>
-
-						<div className="flex flex-col sm:flex-row sm:items-center gap-4">
-							<div className="flex items-center space-x-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] px-4 py-2 rounded-xl">
-								<span className="text-xs font-bold text-[var(--text-secondary)] uppercase">
-									Target Format
-								</span>
-								<select
-									value={targetFormat}
-									onChange={(e) => setTargetFormat(e.target.value)}
-									className="bg-transparent text-sm font-bold text-[var(--brand-orange)] focus:outline-none cursor-pointer"
-								>
-									<option value=".png">PNG (.png)</option>
-									<option value=".jpg">JPEG (.jpg)</option>
-								</select>
-							</div>
-
-							<p className="text-xs text-[var(--text-secondary)] max-w-lg leading-normal">
-								This utility scans for any images that do <strong>not</strong>{" "}
-								match your chosen target format. Converting non-matching formats
-								keeps your manga library pages uniform and helps save disk space
-								(especially when converting to optimized JPEGs).
-							</p>
-						</div>
-					</div>
-
-					{/* Scanning Loader */}
-					{isScanningConverter && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
-							<div className="relative w-16 h-16 mx-auto">
-								<div className="absolute inset-0 rounded-full border-4 border-[var(--border-primary)]"></div>
-								<div className="absolute inset-0 rounded-full border-4 border-t-[var(--brand-orange)] animate-spin"></div>
-							</div>
-							<div>
-								<h3 className="text-lg font-bold">
-									Scanning for Non-Target Formats
-								</h3>
-								<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto mt-1">
-									Walking through subfolders to find images matching formats
-									other than {targetFormat.toUpperCase()}...
-								</p>
-							</div>
-						</div>
-					)}
-
-					{/* Stats Bar */}
-					{conversionStats &&
-						convertibleChapters.length > 0 &&
-						!isScanningConverter && (
-							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-								<div>
-									<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-										Conversion Status
-									</span>
-									<h4 className="text-lg font-bold flex items-center space-x-2 mt-0.5">
-										<span className="text-[var(--brand-orange)]">
-											{conversionStats.total_convertible} convertible images
-										</span>
-										<span className="text-zinc-300 dark:text-zinc-700">•</span>
-										<span>
-											{conversionStats.total_chapters} chapters affected
-										</span>
-									</h4>
-								</div>
-
-								<button
-									onClick={handleConvertImages}
-									disabled={selectedConvertiblePaths.size === 0 || isConverting}
-									className="w-full md:w-auto px-6 py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:bg-zinc-400 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50"
-								>
-									{isConverting ? (
-										<RefreshCw size={16} className="animate-spin" />
-									) : (
-										<FileCheck size={16} />
-									)}
-									<span>
-										Convert Selected ({selectedConvertiblePaths.size}) to{" "}
-										{targetFormat.toUpperCase()}
-									</span>
-								</button>
+								))}
 							</div>
 						)}
 
-					{/* Conversion results report card */}
-					{conversionResult && !isScanningConverter && (
-						<div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl p-5 space-y-3">
-							<h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
-								<CheckCircle size={16} />
-								<span>Conversion Report Summary</span>
-							</h4>
-							<div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-								<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
-									<span className="text-[var(--text-secondary)] uppercase">
-										Successfully Converted
-									</span>
-									<p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-										{conversionResult.converted}
-									</p>
-								</div>
-								<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
-									<span className="text-[var(--text-secondary)] uppercase">
-										Failed / Skipped
-									</span>
-									<p className="text-lg font-extrabold text-rose-500">
-										{conversionResult.failed}
-									</p>
-								</div>
-								<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
-									<span className="text-[var(--text-secondary)] uppercase">
-										Previous Size
-									</span>
-									<p className="text-lg font-extrabold text-[var(--text-primary)]">
-										{formatBytes(conversionResult.total_old_size)}
-									</p>
-								</div>
-								<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
-									<span className="text-[var(--text-secondary)] uppercase">
-										Converted Size
-									</span>
-									<p className="text-lg font-extrabold text-[var(--brand-orange)]">
-										{formatBytes(conversionResult.total_new_size)}
-										{conversionResult.total_old_size >
-											conversionResult.total_new_size && (
-											<span className="text-[10px] text-emerald-500 ml-1.5 font-semibold">
-												(-
-												{Math.round(
-													((conversionResult.total_old_size -
-														conversionResult.total_new_size) /
-														conversionResult.total_old_size) *
-														100,
-												)}
-												%)
-											</span>
-										)}
-									</p>
-								</div>
-							</div>
-
-							{conversionResult.errors &&
-								conversionResult.errors.length > 0 && (
-									<div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl space-y-1">
-										<span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-											Errors Encountered:
-										</span>
-										<ul className="list-disc pl-4 text-[10px] text-rose-700 dark:text-rose-300 space-y-0.5">
-											{conversionResult.errors.map(
-												(errStr: string, idx: number) => (
-													<li key={idx} className="truncate">
-														{errStr}
-													</li>
-												),
-											)}
-										</ul>
-									</div>
-								)}
-						</div>
-					)}
-
-					{/* Chapters/Folders Accordion */}
-					{convertibleChapters.length > 0 && !isScanningConverter && (
-						<div className="space-y-3">
-							{convertibleChapters.map((ch) => {
-								const isExpanded = expandedChapters.has(ch.chapter);
-								const filePaths = ch.files.map((f) => f.path);
-								const selectedCount = filePaths.filter((path) =>
-									selectedConvertiblePaths.has(path),
-								).length;
-								const isAllSelected = selectedCount === ch.files.length;
-								const isSomeSelected =
-									selectedCount > 0 && selectedCount < ch.files.length;
-
-								return (
-									<div
-										key={ch.chapter}
-										className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm"
-									>
-										{/* Chapter Accordion Header */}
-										<div
-											onClick={() => handleToggleExpandChapter(ch.chapter)}
-											className="p-4 flex items-center justify-between cursor-pointer hover:bg-[var(--bg-primary)] transition select-none gap-4"
-										>
-											<div className="flex items-center space-x-3 min-w-0">
-												{/* Checkbox for Chapter Selection */}
-												<button
-													type="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														handleToggleConvertChapter(ch);
-													}}
-													className={`p-1.5 rounded transition ${
-														isAllSelected
-															? "text-[var(--brand-orange)]"
-															: isSomeSelected
-																? "text-orange-400"
-																: "text-[var(--text-secondary)] hover:text-zinc-500"
-													}`}
-												>
-													{isAllSelected ? (
-														<CheckSquare size={18} />
-													) : isSomeSelected ? (
-														<span className="w-[18px] h-[18px] border-2 border-orange-400 rounded flex items-center justify-center font-bold text-xs">
-															-
-														</span>
-													) : (
-														<Square size={18} />
-													)}
-												</button>
-
-												<div className="min-w-0">
-													<h4 className="text-sm font-bold flex items-center space-x-2">
-														<span className="text-[var(--brand-orange)]">
-															{ch.chapter}
-														</span>
-														<span className="text-zinc-300 dark:text-zinc-700">
-															•
-														</span>
-														<span className="text-xs text-[var(--text-secondary)] font-normal">
-															{ch.file_count} images to convert ({selectedCount}{" "}
-															selected)
-														</span>
-													</h4>
-													<p
-														className="text-[10px] text-[var(--text-secondary)] truncate font-mono mt-0.5"
-														title={ch.full_path}
-													>
-														{ch.full_path}
-													</p>
-												</div>
-											</div>
-
-											<div className="flex items-center space-x-3 flex-shrink-0">
-												<span className="text-xs text-[var(--text-secondary)] font-semibold bg-[var(--bg-primary)] border border-[var(--border-primary)] px-2.5 py-1 rounded-lg">
-													Size:{" "}
-													{formatBytes(
-														ch.files.reduce((acc, f) => acc + f.size, 0),
-													)}
-												</span>
-												<ChevronDown
-													size={18}
-													className={`text-[var(--text-secondary)] transform transition-transform duration-200 ${
-														isExpanded ? "rotate-180" : ""
-													}`}
-												/>
-											</div>
-										</div>
-
-										{/* Chapter Files List (Expanded content) */}
-										{isExpanded && (
-											<div className="border-t border-[var(--border-primary)] bg-[var(--bg-primary)] p-4 divide-y divide-[var(--border-primary)]/50">
-												{ch.files.map((file) => {
-													const isFileSelected = selectedConvertiblePaths.has(
-														file.path,
-													);
-													return (
-														<div
-															key={file.path}
-															className="py-2.5 flex items-center justify-between gap-4 text-xs"
-														>
-															<div className="flex items-center space-x-3 min-w-0">
-																<button
-																	type="button"
-																	onClick={() =>
-																		handleToggleConvertFile(file.path)
-																	}
-																	className={`p-1.5 rounded transition ${
-																		isFileSelected
-																			? "text-[var(--brand-orange)]"
-																			: "text-[var(--text-secondary)] hover:text-zinc-500"
-																	}`}
-																>
-																	{isFileSelected ? (
-																		<CheckSquare size={16} />
-																	) : (
-																		<Square size={16} />
-																	)}
-																</button>
-																<span className="font-semibold text-[var(--text-primary)] truncate">
-																	{file.filename}
-																</span>
-																<span className="bg-red-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[10px] px-1.5 py-0.5 rounded font-mono uppercase font-bold">
-																	{file.current_ext.substring(1)}
-																</span>
-															</div>
-
-															<div className="flex items-center space-x-3 text-[var(--text-secondary)] font-semibold flex-shrink-0">
-																<span>{formatBytes(file.size)}</span>
-																<ArrowRight size={12} />
-																<span className="text-[var(--brand-orange)] uppercase">
-																	{targetFormat.substring(1)}
-																</span>
-															</div>
-														</div>
-													);
-												})}
-											</div>
-										)}
-									</div>
-								);
-							})}
-						</div>
-					)}
-
-					{/* Empty States */}
-					{conversionStats &&
-						convertibleChapters.length === 0 &&
-						!isScanningConverter && (
+						{/* Empty States */}
+						{dupStats && dupGroups.length === 0 && !isScanningDuplicates && (
 							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
 								<div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
 									<CheckCircle size={32} />
 								</div>
 								<div className="space-y-1">
-									<h3 className="text-lg font-bold">
-										All Files Match Target Format
-									</h3>
+									<h3 className="text-lg font-bold">No Duplicates Found</h3>
 									<p className="text-sm text-[var(--text-secondary)] max-w-sm mx-auto">
-										Awesome! All image files inside the directory are already in{" "}
-										{targetFormat.toUpperCase()} format. No conversions needed.
+										Awesome! All image files inside the directory are unique.
+										Storage is fully optimized.
 									</p>
 								</div>
 							</div>
 						)}
 
-					{/* Initial State */}
-					{!conversionStats && !isScanningConverter && (
-						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
-							<div className="w-16 h-16 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded-full flex items-center justify-center mx-auto border border-[var(--border-primary)]">
-								<ImageIcon size={28} className="opacity-70" />
+						{/* Initial State */}
+						{!dupStats && !isScanningDuplicates && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
+								<div className="w-16 h-16 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded-full flex items-center justify-center mx-auto border border-[var(--border-primary)]">
+									<Layers size={28} className="opacity-70" />
+								</div>
+								<div className="space-y-1">
+									<h3 className="text-lg font-bold">
+										Duplicate credits/pages scanner
+									</h3>
+									<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto">
+										Select a manga above or type a custom directory path and
+										click "Scan Path" to locate exact duplicate images across
+										chapters (e.g. credits pages, repeating translation ads).
+									</p>
+								</div>
 							</div>
-							<div className="space-y-1">
-								<h3 className="text-lg font-bold">
-									Image format uniform converter
-								</h3>
-								<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto">
-									Select a manga or type a directory path, choose a target
-									format (PNG or JPEG), and click "Scan Path" to scan for images
-									of different formats to convert.
+						)}
+					</div>
+				)}
+
+				{/* ─── TAB 2: IMAGE FORMAT CONVERTER CONTENT ──────────────────────────── */}
+				{activeTab === "converter" && (
+					<div className="space-y-6">
+						{/* Format Settings Bar */}
+						<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 shadow-sm space-y-3">
+							<h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
+								Conversion Configuration
+							</h3>
+
+							<div className="flex flex-col sm:flex-row sm:items-center gap-4">
+								<div className="flex items-center space-x-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] px-4 py-2 rounded-xl">
+									<span className="text-xs font-bold text-[var(--text-secondary)] uppercase">
+										Target Format
+									</span>
+									<select
+										value={targetFormat}
+										onChange={(e) => setTargetFormat(e.target.value)}
+										className="bg-transparent text-sm font-bold text-[var(--brand-orange)] focus:outline-none cursor-pointer"
+									>
+										<option value=".png">PNG (.png)</option>
+										<option value=".jpg">JPEG (.jpg)</option>
+									</select>
+								</div>
+
+								<p className="text-xs text-[var(--text-secondary)] max-w-lg leading-normal">
+									This utility scans for any images that do <strong>not</strong>{" "}
+									match your chosen target format. Converting non-matching
+									formats keeps your manga library pages uniform and helps save
+									disk space (especially when converting to optimized JPEGs).
 								</p>
 							</div>
 						</div>
-					)}
-				</div>
-			)}
+
+						{/* Scanning Loader */}
+						{isScanningConverter && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
+								<div className="relative w-16 h-16 mx-auto">
+									<div className="absolute inset-0 rounded-full border-4 border-[var(--border-primary)]"></div>
+									<div className="absolute inset-0 rounded-full border-4 border-t-[var(--brand-orange)] animate-spin"></div>
+								</div>
+								<div>
+									<h3 className="text-lg font-bold">
+										Scanning for Non-Target Formats
+									</h3>
+									<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto mt-1">
+										Walking through subfolders to find images matching formats
+										other than {targetFormat.toUpperCase()}...
+									</p>
+								</div>
+							</div>
+						)}
+
+						{/* Stats Bar */}
+						{conversionStats &&
+							convertibleChapters.length > 0 &&
+							!isScanningConverter && (
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+									<div>
+										<span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+											Conversion Status
+										</span>
+										<h4 className="text-lg font-bold flex items-center space-x-2 mt-0.5">
+											<span className="text-[var(--brand-orange)]">
+												{conversionStats.total_convertible} convertible images
+											</span>
+											<span className="text-zinc-300 dark:text-zinc-700">
+												•
+											</span>
+											<span>
+												{conversionStats.total_chapters} chapters affected
+											</span>
+										</h4>
+									</div>
+
+									<button
+										onClick={handleConvertImages}
+										disabled={
+											selectedConvertiblePaths.size === 0 || isConverting
+										}
+										className="w-full md:w-auto px-6 py-3 bg-[var(--brand-orange)] hover:bg-[var(--brand-coral)] disabled:bg-zinc-400 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50"
+									>
+										{isConverting ? (
+											<RefreshCw size={16} className="animate-spin" />
+										) : (
+											<FileCheck size={16} />
+										)}
+										<span>
+											Convert Selected ({selectedConvertiblePaths.size}) to{" "}
+											{targetFormat.toUpperCase()}
+										</span>
+									</button>
+								</div>
+							)}
+
+						{/* Conversion results report card */}
+						{conversionResult && !isScanningConverter && (
+							<div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl p-5 space-y-3">
+								<h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
+									<CheckCircle size={16} />
+									<span>Conversion Report Summary</span>
+								</h4>
+								<div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+									<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
+										<span className="text-[var(--text-secondary)] uppercase">
+											Successfully Converted
+										</span>
+										<p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+											{conversionResult.converted}
+										</p>
+									</div>
+									<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
+										<span className="text-[var(--text-secondary)] uppercase">
+											Failed / Skipped
+										</span>
+										<p className="text-lg font-extrabold text-rose-500">
+											{conversionResult.failed}
+										</p>
+									</div>
+									<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
+										<span className="text-[var(--text-secondary)] uppercase">
+											Previous Size
+										</span>
+										<p className="text-lg font-extrabold text-[var(--text-primary)]">
+											{formatBytes(conversionResult.total_old_size)}
+										</p>
+									</div>
+									<div className="bg-[var(--bg-card)] p-3 border border-[var(--border-primary)] rounded-xl space-y-0.5">
+										<span className="text-[var(--text-secondary)] uppercase">
+											Converted Size
+										</span>
+										<p className="text-lg font-extrabold text-[var(--brand-orange)]">
+											{formatBytes(conversionResult.total_new_size)}
+											{conversionResult.total_old_size >
+												conversionResult.total_new_size && (
+												<span className="text-[10px] text-emerald-500 ml-1.5 font-semibold">
+													(-
+													{Math.round(
+														((conversionResult.total_old_size -
+															conversionResult.total_new_size) /
+															conversionResult.total_old_size) *
+															100,
+													)}
+													%)
+												</span>
+											)}
+										</p>
+									</div>
+								</div>
+
+								{conversionResult.errors &&
+									conversionResult.errors.length > 0 && (
+										<div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl space-y-1">
+											<span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+												Errors Encountered:
+											</span>
+											<ul className="list-disc pl-4 text-[10px] text-rose-700 dark:text-rose-300 space-y-0.5">
+												{conversionResult.errors.map(
+													(errStr: string, idx: number) => (
+														<li key={idx} className="truncate">
+															{errStr}
+														</li>
+													),
+												)}
+											</ul>
+										</div>
+									)}
+							</div>
+						)}
+
+						{/* Chapters/Folders Accordion */}
+						{convertibleChapters.length > 0 && !isScanningConverter && (
+							<div className="space-y-3">
+								{convertibleChapters.map((ch) => {
+									const isExpanded = expandedChapters.has(ch.chapter);
+									const filePaths = ch.files.map((f) => f.path);
+									const selectedCount = filePaths.filter((path) =>
+										selectedConvertiblePaths.has(path),
+									).length;
+									const isAllSelected = selectedCount === ch.files.length;
+									const isSomeSelected =
+										selectedCount > 0 && selectedCount < ch.files.length;
+
+									return (
+										<div
+											key={ch.chapter}
+											className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl overflow-hidden shadow-sm"
+										>
+											{/* Chapter Accordion Header */}
+											<div
+												onClick={() => handleToggleExpandChapter(ch.chapter)}
+												className="p-4 flex items-center justify-between cursor-pointer hover:bg-[var(--bg-primary)] transition select-none gap-4"
+											>
+												<div className="flex items-center space-x-3 min-w-0">
+													{/* Checkbox for Chapter Selection */}
+													<button
+														type="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															handleToggleConvertChapter(ch);
+														}}
+														className={`p-1.5 rounded transition ${
+															isAllSelected
+																? "text-[var(--brand-orange)]"
+																: isSomeSelected
+																	? "text-orange-400"
+																	: "text-[var(--text-secondary)] hover:text-zinc-500"
+														}`}
+													>
+														{isAllSelected ? (
+															<CheckSquare size={18} />
+														) : isSomeSelected ? (
+															<span className="w-[18px] h-[18px] border-2 border-orange-400 rounded flex items-center justify-center font-bold text-xs">
+																-
+															</span>
+														) : (
+															<Square size={18} />
+														)}
+													</button>
+
+													<div className="min-w-0">
+														<h4 className="text-sm font-bold flex items-center space-x-2">
+															<span className="text-[var(--brand-orange)]">
+																{ch.chapter}
+															</span>
+															<span className="text-zinc-300 dark:text-zinc-700">
+																•
+															</span>
+															<span className="text-xs text-[var(--text-secondary)] font-normal">
+																{ch.file_count} images to convert (
+																{selectedCount} selected)
+															</span>
+														</h4>
+														<p
+															className="text-[10px] text-[var(--text-secondary)] truncate font-mono mt-0.5"
+															title={ch.full_path}
+														>
+															{ch.full_path}
+														</p>
+													</div>
+												</div>
+
+												<div className="flex items-center space-x-3 flex-shrink-0">
+													<span className="text-xs text-[var(--text-secondary)] font-semibold bg-[var(--bg-primary)] border border-[var(--border-primary)] px-2.5 py-1 rounded-lg">
+														Size:{" "}
+														{formatBytes(
+															ch.files.reduce((acc, f) => acc + f.size, 0),
+														)}
+													</span>
+													<ChevronDown
+														size={18}
+														className={`text-[var(--text-secondary)] transform transition-transform duration-200 ${
+															isExpanded ? "rotate-180" : ""
+														}`}
+													/>
+												</div>
+											</div>
+
+											{/* Chapter Files List (Expanded content) */}
+											{isExpanded && (
+												<div className="border-t border-[var(--border-primary)] bg-[var(--bg-primary)] p-4 divide-y divide-[var(--border-primary)]/50">
+													{ch.files.map((file) => {
+														const isFileSelected = selectedConvertiblePaths.has(
+															file.path,
+														);
+														return (
+															<div
+																key={file.path}
+																className="py-2.5 flex items-center justify-between gap-4 text-xs"
+															>
+																<div className="flex items-center space-x-3 min-w-0">
+																	<button
+																		type="button"
+																		onClick={() =>
+																			handleToggleConvertFile(file.path)
+																		}
+																		className={`p-1.5 rounded transition ${
+																			isFileSelected
+																				? "text-[var(--brand-orange)]"
+																				: "text-[var(--text-secondary)] hover:text-zinc-500"
+																		}`}
+																	>
+																		{isFileSelected ? (
+																			<CheckSquare size={16} />
+																		) : (
+																			<Square size={16} />
+																		)}
+																	</button>
+																	<span className="font-semibold text-[var(--text-primary)] truncate">
+																		{file.filename}
+																	</span>
+																	<span className="bg-red-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[10px] px-1.5 py-0.5 rounded font-mono uppercase font-bold">
+																		{file.current_ext.substring(1)}
+																	</span>
+																</div>
+
+																<div className="flex items-center space-x-3 text-[var(--text-secondary)] font-semibold flex-shrink-0">
+																	<span>{formatBytes(file.size)}</span>
+																	<ArrowRight size={12} />
+																	<span className="text-[var(--brand-orange)] uppercase">
+																		{targetFormat.substring(1)}
+																	</span>
+																</div>
+															</div>
+														);
+													})}
+												</div>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						)}
+
+						{/* Empty States */}
+						{conversionStats &&
+							convertibleChapters.length === 0 &&
+							!isScanningConverter && (
+								<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
+									<div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+										<CheckCircle size={32} />
+									</div>
+									<div className="space-y-1">
+										<h3 className="text-lg font-bold">
+											All Files Match Target Format
+										</h3>
+										<p className="text-sm text-[var(--text-secondary)] max-w-sm mx-auto">
+											Awesome! All image files inside the directory are already
+											in {targetFormat.toUpperCase()} format. No conversions
+											needed.
+										</p>
+									</div>
+								</div>
+							)}
+
+						{/* Initial State */}
+						{!conversionStats && !isScanningConverter && (
+							<div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-12 text-center shadow-sm space-y-4">
+								<div className="w-16 h-16 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded-full flex items-center justify-center mx-auto border border-[var(--border-primary)]">
+									<ImageIcon size={28} className="opacity-70" />
+								</div>
+								<div className="space-y-1">
+									<h3 className="text-lg font-bold">
+										Image format uniform converter
+									</h3>
+									<p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto">
+										Select a manga or type a directory path, choose a target
+										format (PNG or JPEG), and click "Scan Path" to scan for
+										images of different formats to convert.
+									</p>
+								</div>
+							</div>
+						)}
+					</div>
+				)}
+			</AnimatedTabPanel>
 
 			{/* Lightbox Zoom Overlay */}
-			{zoomedImagePath && (
-				<div
-					className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
-					onClick={() => setZoomedImagePath(null)}
-				>
-					<div
-						className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 animate-in zoom-in-95 duration-200"
-						onClick={(e) => e.stopPropagation()}
+			<AnimatePresence>
+				{zoomedImagePath && (
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: 0.16, ease: MOTION_EASE }}
+						className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
+						onClick={() => setZoomedImagePath(null)}
 					>
-						<img
-							src={`${client.defaults.baseURL || ""}/api/image-tools/file?path=${encodeURIComponent(zoomedImagePath)}`}
-							alt="Zoomed duplicate preview"
-							className="max-w-full max-h-[90vh] object-contain rounded-2xl"
-						/>
-					</div>
-				</div>
-			)}
+						<motion.div
+							initial={{ opacity: 0, scale: 0.92 }}
+							animate={{ opacity: 1, scale: 1 }}
+							exit={{ opacity: 0, scale: 0.94 }}
+							transition={MOTION_SPRING}
+							className="relative max-w-full max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-800"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<img
+								src={`${client.defaults.baseURL || ""}/api/image-tools/file?path=${encodeURIComponent(zoomedImagePath)}`}
+								alt="Zoomed duplicate preview"
+								className="max-w-full max-h-[90vh] object-contain rounded-2xl"
+							/>
+						</motion.div>
+					</motion.div>
+				)}
+			</AnimatePresence>
 		</div>
 	);
 };
