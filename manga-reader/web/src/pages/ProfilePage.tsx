@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { User, Lock, Upload, Save, Shield } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { User, Lock, Save } from "lucide-react";
 import { api, UserProfile } from "@/api/client";
+import { useToast } from "@/components/ToastProvider";
 
 interface ProfilePageProps {
   currentUser: UserProfile | null;
@@ -8,26 +9,19 @@ interface ProfilePageProps {
   onOpenAuth: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateUser, onOpenAuth }) => {
-  if (!currentUser) {
-    return (
-      <div className="max-w-md mx-auto my-16 p-8 text-center rounded bg-zinc-900 border border-zinc-800 space-y-4">
-        <User className="w-10 h-10 text-emerald-400 mx-auto" />
-        <h2 className="text-base font-bold font-mono text-zinc-100">HỒ SƠ CÁ NHÂN</h2>
-        <p className="text-xs text-zinc-400">Vui lòng đăng nhập để xem và quản lý thông tin tài khoản.</p>
-        <button
-          onClick={onOpenAuth}
-          className="px-4 py-2 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-bold text-xs"
-        >
-          Đăng Nhập Ngay
-        </button>
-      </div>
-    );
-  }
+export const ProfilePage: React.FC<ProfilePageProps> = ({
+  currentUser,
+  onUpdateUser,
+  onOpenAuth,
+}) => {
+  const { showToast } = useToast();
 
-  const [displayName, setDisplayName] = useState(currentUser.display_name || "");
-  const [bio, setBio] = useState(currentUser.bio || "");
-  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // Declare all hooks unconditionally before any early return
+  const [displayName, setDisplayName] = useState(currentUser?.display_name || "");
+  const [bio, setBio] = useState(currentUser?.bio || "");
+  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(
+    null
+  );
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Password update
@@ -37,6 +31,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
   const [passMsg, setPassMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [passLoading, setPassLoading] = useState(false);
 
+  useEffect(() => {
+    setDisplayName(currentUser?.display_name || "");
+    setBio(currentUser?.bio || "");
+  }, [currentUser]);
+
+  if (!currentUser) {
+    return (
+      <div className="max-w-md mx-auto my-16 p-8 text-center rounded bg-zinc-900 border border-zinc-800 space-y-4">
+        <User className="w-10 h-10 text-emerald-400 mx-auto" />
+        <h2 className="text-base font-bold font-mono text-zinc-100">HỒ SƠ CÁ NHÂN</h2>
+        <p className="text-xs text-zinc-400">
+          Vui lòng đăng nhập để xem và quản lý thông tin tài khoản.
+        </p>
+        <button
+          type="button"
+          onClick={onOpenAuth}
+          className="px-4 py-2 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-bold text-xs transition-colors"
+        >
+          Đăng Nhập Ngay
+        </button>
+      </div>
+    );
+  }
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileMsg(null);
@@ -44,9 +62,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
     try {
       const updated = await api.updateProfile({ display_name: displayName, bio });
       onUpdateUser(updated);
-      setProfileMsg({ type: "success", text: "Đã cập nhật thông tin hồ sơ thành công." });
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Không thể cập nhật hồ sơ." });
+      const msg = "Đã cập nhật thông tin hồ sơ thành công.";
+      setProfileMsg({ type: "success", text: msg });
+      showToast(msg, "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Không thể cập nhật hồ sơ.";
+      setProfileMsg({ type: "error", text: msg });
+      showToast(msg, "error");
     } finally {
       setProfileLoading(false);
     }
@@ -62,22 +84,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
     setPassLoading(true);
     try {
       await api.updatePassword({ old_password: oldPassword, new_password: newPassword });
-      setPassMsg({ type: "success", text: "Đổi mật khẩu thành công. Các phiên đăng nhập khác đã được thu hồi." });
+      const msg = "Đổi mật khẩu thành công. Các phiên đăng nhập khác đã được thu hồi.";
+      setPassMsg({ type: "success", text: msg });
+      showToast("Đã cập nhật mật khẩu thành công.", "success");
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err: any) {
-      setPassMsg({ type: "error", text: err.message || "Đổi mật khẩu thất bại." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Đổi mật khẩu thất bại.";
+      setPassMsg({ type: "error", text: msg });
+      showToast(msg, "error");
     } finally {
       setPassLoading(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8">
       <div className="pb-4 border-b border-zinc-800">
-        <h1 className="text-lg font-bold font-mono text-zinc-100 tracking-tight">CÀI ĐẶT HỒ SƠ & BẢO MẬT</h1>
-        <p className="text-xs text-zinc-400 mt-0.5">Quản lý định danh độc giả, mật khẩu và phiên làm việc</p>
+        <h1 className="text-lg font-bold font-mono text-zinc-100 tracking-tight">
+          CÀI ĐẶT HỒ SƠ & BẢO MẬT
+        </h1>
+        <p className="text-xs text-zinc-400 mt-0.5">
+          Quản lý định danh độc giả, mật khẩu và phiên làm việc
+        </p>
       </div>
 
       {/* Profile Form */}
@@ -89,6 +119,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
 
         {profileMsg && (
           <div
+            role="status"
             className={`p-3 rounded text-xs font-mono border ${
               profileMsg.type === "success"
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
@@ -101,18 +132,24 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
 
         <form onSubmit={handleUpdateProfile} className="space-y-4 text-xs font-mono">
           <div>
-            <label className="block text-zinc-400 mb-1 text-[11px]">EMAIL ĐĂNG KÝ (BẤT BIẾN)</label>
+            <label htmlFor="profile-email" className="block text-zinc-400 mb-1 text-[11px]">
+              EMAIL ĐĂNG KÝ (BẤT BIẾN)
+            </label>
             <input
+              id="profile-email"
               type="text"
               disabled
               value={currentUser.email}
-              className="w-full bg-zinc-950/50 border border-zinc-800/80 rounded p-2 text-zinc-500 cursor-not-allowed"
+              className="w-full bg-zinc-950/50 border border-zinc-800/80 rounded p-2 text-zinc-400 cursor-not-allowed"
             />
           </div>
 
           <div>
-            <label className="block text-zinc-400 mb-1 text-[11px]">TÊN HIỂN THỊ (PUBLIC DISPLAY NAME)</label>
+            <label htmlFor="profile-display-name" className="block text-zinc-400 mb-1 text-[11px]">
+              TÊN HIỂN THỊ (PUBLIC DISPLAY NAME)
+            </label>
             <input
+              id="profile-display-name"
               type="text"
               required
               value={displayName}
@@ -122,8 +159,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
           </div>
 
           <div>
-            <label className="block text-zinc-400 mb-1 text-[11px]">TIỂU SỬ (BIO - TỐI ĐA 500 KÝ TỰ)</label>
+            <label htmlFor="profile-bio" className="block text-zinc-400 mb-1 text-[11px]">
+              TIỂU SỬ (BIO - TỐI ĐA 500 KÝ TỰ)
+            </label>
             <textarea
+              id="profile-bio"
               rows={3}
               maxLength={500}
               value={bio}
@@ -155,6 +195,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
 
         {passMsg && (
           <div
+            role="status"
             className={`p-3 rounded text-xs font-mono border ${
               passMsg.type === "success"
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
@@ -167,8 +208,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
 
         <form onSubmit={handleUpdatePassword} className="space-y-4 text-xs font-mono">
           <div>
-            <label className="block text-zinc-400 mb-1 text-[11px]">MẬT KHẨU HIỆN TẠI</label>
+            <label htmlFor="profile-old-pass" className="block text-zinc-400 mb-1 text-[11px]">
+              MẬT KHẨU HIỆN TẠI
+            </label>
             <input
+              id="profile-old-pass"
               type="password"
               required
               value={oldPassword}
@@ -179,8 +223,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-zinc-400 mb-1 text-[11px]">MẬT KHẨU MỚI (≥ 8 KÝ TỰ, CHỮ & SỐ)</label>
+              <label htmlFor="profile-new-pass" className="block text-zinc-400 mb-1 text-[11px]">
+                MẬT KHẨU MỚI (≥ 8 KÝ TỰ, CHỮ & SỐ)
+              </label>
               <input
+                id="profile-new-pass"
                 type="password"
                 required
                 value={newPassword}
@@ -189,8 +236,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
               />
             </div>
             <div>
-              <label className="block text-zinc-400 mb-1 text-[11px]">XÁC NHẬN MẬT KHẨU MỚI</label>
+              <label
+                htmlFor="profile-confirm-pass"
+                className="block text-zinc-400 mb-1 text-[11px]"
+              >
+                XÁC NHẬN MẬT KHẨU MỚI
+              </label>
               <input
+                id="profile-confirm-pass"
                 type="password"
                 required
                 value={confirmPassword}
@@ -214,4 +267,3 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onUpdateU
     </div>
   );
 };
-

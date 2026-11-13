@@ -19,9 +19,15 @@ import {
   Calendar,
   Layers,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import { api, MangaItem, ChapterItem, CommentItem, UserProfile } from "@/api/client";
+import { CoverImage } from "@/components/CoverImage";
+import { ModalMotion } from "@/components/MotionPrimitives";
+import { useToast } from "@/components/ToastProvider";
 
 interface MangaDetailPageProps {
   currentUser: UserProfile | null;
@@ -31,6 +37,7 @@ interface MangaDetailPageProps {
 export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, onOpenAuth }) => {
   const { idOrSlug } = useParams<{ idOrSlug: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [manga, setManga] = useState<MangaItem | null>(null);
   const [chapters, setChapters] = useState<ChapterItem[]>([]);
@@ -75,6 +82,7 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
   // Edit history modal
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [expandSynopsis, setExpandSynopsis] = useState(false);
 
   const fetchData = async () => {
     if (!idOrSlug) return;
@@ -126,13 +134,22 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
     }
   }, [sortOrder, chapterSearch, readFilter]);
 
+  useEffect(() => {
+    if (manga) {
+      api
+        .getComments(manga.pool_manga_id, { sort_by: commentSort })
+        .then((res) => setComments(res.items || []))
+        .catch(() => {});
+    }
+  }, [commentSort]);
+
   const handleReadFirst = async () => {
     if (!manga) return;
     try {
       const res = await api.getReadFirst(manga.pool_manga_id);
       navigate(`/read/${res.chapter_id}`);
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể mở chương đầu tiên.", "error");
     }
   };
 
@@ -146,7 +163,7 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       const res = await api.getContinueReading(manga.pool_manga_id);
       navigate(`/read/${res.chapter_id}`);
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể tiếp tục đọc.", "error");
     }
   };
 
@@ -160,12 +177,14 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       if (status === "none") {
         await api.deleteReadingStatus(manga.pool_manga_id);
         setCurrentReadingStatus("");
+        showToast("Đã xóa trạng thái đọc.", "info");
       } else {
         await api.setReadingStatus(manga.pool_manga_id, status);
         setCurrentReadingStatus(status);
+        showToast("Đã cập nhật trạng thái đọc.", "success");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể cập nhật trạng thái.", "error");
     }
   };
 
@@ -185,6 +204,7 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
         rating_count: res.rating_count,
       });
       setShowRatingModal(false);
+      showToast(`Đã chấm điểm ${score}/10 thành công.`, "success");
     } catch (err: any) {
       setRatingError(err.message || "Bạn cần đọc truyện trước khi chấm điểm.");
     }
@@ -203,13 +223,14 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
         description: reportDesc,
       });
       setReportSuccess(true);
+      showToast("Đã gửi báo cáo thành công.", "success");
       setTimeout(() => {
         setShowReportModal(false);
         setReportSuccess(false);
         setReportDesc("");
       }, 1500);
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể gửi báo cáo.", "error");
     }
   };
 
@@ -238,9 +259,9 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       setShowListModal(false);
       setSelectedListIds([]);
       setNewListName("");
-      alert("Đã thêm truyện vào danh sách thành công.");
+      showToast("Đã thêm truyện vào danh sách thành công.", "success");
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể lưu vào danh sách.", "error");
     }
   };
 
@@ -260,6 +281,7 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       setComments([newC, ...comments]);
       setCommentContent("");
       setIsCommentSpoiler(false);
+      showToast("Đã đăng bình luận.", "success");
     } catch (err: any) {
       setCommentError(err.message);
     }
@@ -280,7 +302,7 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
         )
       );
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể tương tác bình luận.", "error");
     }
   };
 
@@ -290,15 +312,15 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       setHistoryItems(res.items || []);
       setShowHistoryModal(true);
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Không thể tải lịch sử chỉnh sửa.", "error");
     }
   };
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 animate-pulse space-y-6">
-        <div className="h-64 bg-zinc-900 rounded border border-zinc-800" />
-        <div className="h-96 bg-zinc-900 rounded border border-zinc-800" />
+      <div role="status" aria-busy="true" className="space-y-6">
+        <div className="h-64 bg-zinc-900 rounded border border-zinc-800 animate-shimmer motion-reduce:after:hidden" />
+        <div className="h-96 bg-zinc-900 rounded border border-zinc-800 animate-shimmer motion-reduce:after:hidden" />
       </div>
     );
   }
@@ -325,17 +347,17 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       <div className="p-6 rounded bg-zinc-900/80 border border-zinc-800 flex flex-col md:flex-row gap-6 relative overflow-hidden">
         {/* Cover Preview */}
         <div className="w-full md:w-56 shrink-0 aspect-[3/4] bg-zinc-950 rounded border border-zinc-800 overflow-hidden shadow-2xl relative">
-          {manga.cover_url ? (
-            <img src={manga.cover_url} alt={manga.title} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-600 font-mono text-xs">
-              NO_COVER
-            </div>
-          )}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-zinc-700 text-xs font-mono text-amber-300 flex items-center gap-1">
+          <CoverImage
+            src={manga.cover_url}
+            alt={manga.title}
+            priority
+            containerClassName="w-full h-full"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm border border-zinc-700 text-xs font-mono text-amber-300 flex items-center gap-1 pointer-events-none">
             <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
             <span>{Number(manga.average_rating || 0).toFixed(1)}</span>
-            <span className="text-[10px] text-zinc-400">({manga.rating_count})</span>
+            <span className="text-[10px] text-zinc-300">({manga.rating_count})</span>
           </div>
         </div>
 
@@ -384,10 +406,35 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
               </div>
             )}
 
-            {/* Synopsis */}
-            <p className="text-xs text-zinc-300 leading-relaxed mt-4 line-clamp-4 font-sans">
-              {manga.description || "Chưa có mô tả cho bộ truyện này."}
-            </p>
+            {/* Synopsis with expand/collapse toggle */}
+            <div className="mt-4 space-y-1.5">
+              <p
+                className={`text-xs text-zinc-300 leading-relaxed font-sans ${
+                  expandSynopsis ? "" : "line-clamp-4"
+                }`}
+              >
+                {manga.description || "Chưa có mô tả cho bộ truyện này."}
+              </p>
+              {manga.description && manga.description.length > 180 && (
+                <button
+                  type="button"
+                  onClick={() => setExpandSynopsis((prev) => !prev)}
+                  className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 transition-colors"
+                >
+                  {expandSynopsis ? (
+                    <>
+                      <span>Thu gọn mô tả</span>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Xem thêm mô tả</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Action Toolbar */}
@@ -542,24 +589,25 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
               .filter((v, i, a) => a.findIndex((t) => t.pool_manga_id === v.pool_manga_id) === i)
               .slice(0, 6)
               .map((rec) => (
-                <div
+                <Link
                   key={rec.pool_manga_id}
-                  onClick={() => navigate(`/mangas/${rec.slug || rec.pool_manga_id}`)}
-                  className="cursor-pointer group p-2 rounded bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 transition-colors"
+                  to={`/mangas/${rec.slug || rec.pool_manga_id}`}
+                  className="group p-2 rounded bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 transition-colors block"
                 >
-                  <div className="aspect-[3/4] bg-zinc-950 rounded overflow-hidden mb-2">
-                    {rec.cover_url ? (
-                      <img src={rec.cover_url} alt={rec.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-700 text-[10px] font-mono">NO_IMG</div>
-                    )}
-                  </div>
-                  <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-400 truncate">{rec.title}</h4>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 mt-1">
+                  <CoverImage
+                    src={rec.cover_url}
+                    alt={rec.title}
+                    containerClassName="aspect-[3/4] rounded mb-2"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-400 truncate">
+                    {rec.title}
+                  </h4>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 mt-1">
                     <span>★ {Number(rec.average_rating || 0).toFixed(1)}</span>
                     <span>{rec.chapter_count} ch</span>
                   </div>
-                </div>
+                </Link>
               ))}
           </div>
         </section>
@@ -646,197 +694,272 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
       </section>
 
       {/* Rating Prerequisite Modal (UC-4.7) */}
-      {showRatingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded p-6 space-y-4">
-            <div className="text-center">
-              <Star className="w-8 h-8 text-amber-400 fill-amber-400 mx-auto mb-2" />
-              <h3 className="text-sm font-bold font-mono text-zinc-100">ĐÁNH GIÁ ĐIỂM TRUYỆN</h3>
-              <p className="text-xs text-zinc-400 mt-1">Chấm điểm từ 1 đến 10 dựa trên trải nghiệm của bạn</p>
-            </div>
+      <ModalMotion
+        isOpen={showRatingModal}
+        onClose={() => setShowRatingModal(false)}
+        ariaLabel="Đánh giá điểm truyện"
+        maxWidthClass="max-w-sm"
+      >
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4 shadow-2xl relative">
+          <button
+            type="button"
+            onClick={() => setShowRatingModal(false)}
+            aria-label="Đóng"
+            className="absolute top-3.5 right-3.5 p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
 
-            {ratingError && (
-              <div className="p-2.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-                {ratingError}
-              </div>
-            )}
-
-            <div className="grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => handleRateSubmit(num)}
-                  className={`py-2 rounded font-mono font-bold text-xs border transition-colors ${
-                    userScore === num
-                      ? "bg-amber-500 text-zinc-950 border-amber-400"
-                      : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:border-amber-400/50"
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowRatingModal(false)}
-              className="w-full py-2 rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono"
-            >
-              Đóng
-            </button>
+          <div className="text-center">
+            <Star className="w-8 h-8 text-amber-400 fill-amber-400 mx-auto mb-2" />
+            <h3 className="text-sm font-bold font-mono text-zinc-100">ĐÁNH GIÁ ĐIỂM TRUYỆN</h3>
+            <p className="text-xs text-zinc-400 mt-1">
+              Chấm điểm từ 1 đến 10 dựa trên trải nghiệm của bạn
+            </p>
           </div>
+
+          {ratingError && (
+            <div
+              role="alert"
+              className="p-2.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs"
+            >
+              {ratingError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-5 gap-2">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => handleRateSubmit(num)}
+                className={`py-2 rounded font-mono font-bold text-xs border transition-colors ${
+                  userScore === num
+                    ? "bg-amber-500 text-zinc-950 border-amber-400"
+                    : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:border-amber-400/50"
+                }`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowRatingModal(false)}
+            className="w-full py-2 rounded bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-mono"
+          >
+            Đóng
+          </button>
         </div>
-      )}
+      </ModalMotion>
 
       {/* Report Manga Modal (UC-4.9) */}
-      {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded p-6 space-y-4">
+      <ModalMotion
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        ariaLabel="Báo cáo sự cố hoặc vi phạm"
+        maxWidthClass="max-w-md"
+      >
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4 shadow-2xl relative">
+          <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-rose-400" />
               <span>BÁO CÁO SỰ CỐ / VI PHẠM</span>
             </h3>
-
-            {reportSuccess ? (
-              <div className="p-4 rounded bg-emerald-500/10 text-emerald-400 text-xs text-center font-mono">
-                Đã ghi nhận báo cáo thành công. Cảm ơn đóng góp của bạn!
-              </div>
-            ) : (
-              <form onSubmit={handleReportSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">LÝ DO BÁO CÁO</label>
-                  <select
-                    value={reportReason}
-                    onChange={(e) => setReportReason(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-xs text-zinc-200 font-sans"
-                  >
-                    <option value="broken_images">Ảnh bị lỗi / không tải được</option>
-                    <option value="wrong_chapter_order">Sai thứ tự chương / trang</option>
-                    <option value="inappropriate_content">Nội dung vi phạm quy định</option>
-                    <option value="copyright">Vi phạm bản quyền</option>
-                    <option value="other">Lý do khác</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">CHI TIẾT MÔ TẢ (TÙY CHỌN)</label>
-                  <textarea
-                    rows={3}
-                    maxLength={1000}
-                    value={reportDesc}
-                    onChange={(e) => setReportDesc(e.target.value)}
-                    placeholder="Mô tả cụ thể trang hoặc lỗi phát sinh..."
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 text-xs text-zinc-200"
-                  />
-                </div>
-
-                <div className="flex gap-2 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowReportModal(false)}
-                    className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono"
-                  >
-                    HỦY
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 rounded bg-rose-500 hover:bg-rose-400 text-zinc-950 font-mono font-semibold text-xs"
-                  >
-                    GỬI BÁO CÁO
-                  </button>
-                </div>
-              </form>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowReportModal(false)}
+              aria-label="Đóng"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
+
+          {reportSuccess ? (
+            <div className="p-4 rounded bg-emerald-500/10 text-emerald-400 text-xs text-center font-mono">
+              Đã ghi nhận báo cáo thành công. Cảm ơn đóng góp của bạn!
+            </div>
+          ) : (
+            <form onSubmit={handleReportSubmit} className="space-y-3">
+              <div>
+                <label htmlFor="report-reason" className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  LÝ DO BÁO CÁO
+                </label>
+                <select
+                  id="report-reason"
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-xs text-zinc-200 font-sans"
+                >
+                  <option value="broken_images">Ảnh bị lỗi / không tải được</option>
+                  <option value="wrong_chapter_order">Sai thứ tự chương / trang</option>
+                  <option value="inappropriate_content">Nội dung vi phạm quy định</option>
+                  <option value="copyright">Vi phạm bản quyền</option>
+                  <option value="other">Lý do khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="report-desc" className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  CHI TIẾT MÔ TẢ (TÙY CHỌN)
+                </label>
+                <textarea
+                  id="report-desc"
+                  rows={3}
+                  maxLength={1000}
+                  value={reportDesc}
+                  onChange={(e) => setReportDesc(e.target.value)}
+                  placeholder="Mô tả cụ thể trang hoặc lỗi phát sinh..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 text-xs text-zinc-200"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-mono"
+                >
+                  HỦY
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded bg-rose-500 hover:bg-rose-400 text-zinc-950 font-mono font-semibold text-xs"
+                >
+                  GỬI BÁO CÁO
+                </button>
+              </div>
+            </form>
+          )}
         </div>
-      )}
+      </ModalMotion>
 
       {/* Add to List Modal (UC-8.3) */}
-      {showListModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded p-6 space-y-4">
+      <ModalMotion
+        isOpen={showListModal}
+        onClose={() => setShowListModal(false)}
+        ariaLabel="Lưu vào danh sách đọc"
+        maxWidthClass="max-w-sm"
+      >
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4 shadow-2xl relative">
+          <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
               <BookmarkPlus className="w-4 h-4 text-emerald-400" />
               <span>LƯU VÀO DANH SÁCH ĐỌC</span>
             </h3>
-
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {userLists.map((l) => (
-                <label
-                  key={l.list_id}
-                  className="flex items-center gap-2 p-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 cursor-pointer hover:border-zinc-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedListIds.includes(l.list_id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedListIds([...selectedListIds, l.list_id]);
-                      } else {
-                        setSelectedListIds(selectedListIds.filter((id) => id !== l.list_id));
-                      }
-                    }}
-                    className="rounded border-zinc-700 text-emerald-500"
-                  />
-                  <span className="font-medium truncate">{l.name}</span>
-                  <span className="text-[10px] font-mono text-zinc-500 ml-auto">({l.manga_count} truyện)</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="pt-2 border-t border-zinc-800">
-              <label className="block text-[11px] font-mono text-zinc-400 mb-1">HOẶC TẠO LIST MỚI TẠI CHỖ</label>
-              <input
-                type="text"
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                placeholder="Tên danh sách mới..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowListModal(false)}
-                className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono"
-              >
-                HỦY
-              </button>
-              <button
-                onClick={handleAddToLists}
-                disabled={selectedListIds.length === 0 && !newListName.trim()}
-                className="px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-semibold text-xs disabled:opacity-40"
-              >
-                LƯU LẠI
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Comment Edit History Modal (UC-5.4) */}
-      {showHistoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded p-6 space-y-4">
-            <h3 className="text-sm font-bold font-mono text-zinc-100">LỊCH SỬ CHỈNH SỬA BÌNH LUẬN</h3>
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-              {historyItems.map((h) => (
-                <div key={h.edit_id} className="p-3 rounded bg-zinc-950 border border-zinc-800 text-xs space-y-1">
-                  <p className="text-zinc-300 font-sans">{h.previous_content}</p>
-                  <p className="text-[10px] font-mono text-zinc-500">
-                    Sửa đổi lúc: {new Date(h.edited_at).toLocaleString("vi-VN")}
-                  </p>
-                </div>
-              ))}
-            </div>
             <button
-              onClick={() => setShowHistoryModal(false)}
-              className="w-full py-1.5 rounded bg-zinc-800 text-zinc-300 text-xs font-mono"
+              type="button"
+              onClick={() => setShowListModal(false)}
+              aria-label="Đóng"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
             >
-              Đóng
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {userLists.map((l) => (
+              <label
+                key={l.list_id}
+                className="flex items-center gap-2 p-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 cursor-pointer hover:border-zinc-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedListIds.includes(l.list_id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedListIds([...selectedListIds, l.list_id]);
+                    } else {
+                      setSelectedListIds(selectedListIds.filter((id) => id !== l.list_id));
+                    }
+                  }}
+                  className="rounded border-zinc-700 text-emerald-500"
+                />
+                <span className="font-medium truncate">{l.name}</span>
+                <span className="text-[10px] font-mono text-zinc-400 ml-auto">
+                  ({l.manga_count} truyện)
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="pt-2 border-t border-zinc-800">
+            <label htmlFor="detail-new-list" className="block text-[11px] font-mono text-zinc-400 mb-1">
+              HOẶC TẠO LIST MỚI TẠI CHỖ
+            </label>
+            <input
+              id="detail-new-list"
+              type="text"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder="Tên danh sách mới..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowListModal(false)}
+              className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-mono"
+            >
+              HỦY
+            </button>
+            <button
+              type="button"
+              onClick={handleAddToLists}
+              disabled={selectedListIds.length === 0 && !newListName.trim()}
+              className="px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-semibold text-xs disabled:opacity-40"
+            >
+              LƯU LẠI
             </button>
           </div>
         </div>
-      )}
+      </ModalMotion>
+
+      {/* Comment Edit History Modal (UC-5.4) */}
+      <ModalMotion
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        ariaLabel="Lịch sử chỉnh sửa bình luận"
+        maxWidthClass="max-w-md"
+      >
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4 shadow-2xl relative">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold font-mono text-zinc-100">LỊCH SỬ CHỈNH SỬA BÌNH LUẬN</h3>
+            <button
+              type="button"
+              onClick={() => setShowHistoryModal(false)}
+              aria-label="Đóng"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {historyItems.map((h) => (
+              <div
+                key={h.edit_id}
+                className="p-3 rounded bg-zinc-950 border border-zinc-800 text-xs space-y-1"
+              >
+                <p className="text-zinc-300 font-sans">{h.previous_content}</p>
+                <p className="text-[10px] font-mono text-zinc-400">
+                  Sửa đổi lúc: {new Date(h.edited_at).toLocaleString("vi-VN")}
+                </p>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowHistoryModal(false)}
+            className="w-full py-1.5 rounded bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-mono"
+          >
+            Đóng
+          </button>
+        </div>
+      </ModalMotion>
     </div>
   );
 };
@@ -858,13 +981,14 @@ const CommentCard: React.FC<{
             {comment.display_name.charAt(0).toUpperCase()}
           </div>
           <span className="font-semibold text-zinc-200">{comment.display_name}</span>
-          <span className="text-[10px] font-mono text-zinc-500">
+          <span className="text-[10px] font-mono text-zinc-400">
             {new Date(comment.created_at).toLocaleDateString("vi-VN")}
           </span>
           {comment.is_edited && (
             <button
+              type="button"
               onClick={onViewHistory}
-              className="text-[10px] font-mono text-zinc-500 hover:text-emerald-400 underline"
+              className="text-[10px] font-mono text-zinc-400 hover:text-emerald-400 underline"
             >
               (Đã chỉnh sửa)
             </button>
@@ -880,22 +1004,26 @@ const CommentCard: React.FC<{
 
       {/* Content with Spoiler Mask */}
       {comment.is_deleted ? (
-        <p className="text-xs text-zinc-500 italic">[Bình luận đã bị xóa]</p>
+        <p className="text-xs text-zinc-400 italic">[Bình luận đã bị xóa]</p>
       ) : comment.is_spoiler && !spoilerRevealed ? (
-        <div
+        <button
+          type="button"
           onClick={() => setSpoilerRevealed(true)}
-          className="p-3 rounded bg-zinc-950 border border-zinc-800/80 text-center cursor-pointer hover:border-amber-500/40 transition-colors"
+          className="w-full p-3 rounded bg-zinc-950 border border-zinc-800/80 text-center cursor-pointer hover:border-amber-500/40 transition-colors"
         >
-          <p className="text-xs font-mono text-amber-400/90 font-medium">Spoiler - Nhấn để xem nội dung</p>
-        </div>
+          <span className="text-xs font-mono text-amber-400/90 font-medium">
+            Spoiler - Nhấn để xem nội dung
+          </span>
+        </button>
       ) : (
         <p className="text-xs text-zinc-300 leading-relaxed font-sans">{comment.content}</p>
       )}
 
       {/* Reaction and action footer */}
       {!comment.is_deleted && (
-        <div className="flex items-center gap-4 pt-1 text-[11px] font-mono text-zinc-500">
+        <div className="flex items-center gap-4 pt-1 text-[11px] font-mono text-zinc-400">
           <button
+            type="button"
             onClick={() => onReaction("like")}
             className={`flex items-center gap-1 hover:text-emerald-400 transition-colors ${
               comment.user_reaction === "like" ? "text-emerald-400 font-bold" : ""

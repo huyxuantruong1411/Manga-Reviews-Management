@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { LayoutGroup } from "motion/react";
 import {
   api,
   type ReportItem,
@@ -6,6 +7,7 @@ import {
   type EtlPackageItem,
   type EtlSourcesResponse,
 } from "../api/client";
+import { AnimatedTabPanel, AnimatedTabPill } from "../components/MotionPrimitives";
 
 export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"reports" | "mangas" | "users" | "datalake">("datalake");
@@ -267,56 +269,81 @@ export const AdminPage: React.FC = () => {
       )}
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-zinc-800 text-xs font-mono overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("datalake")}
-          className={`px-4 py-2 border-b-2 font-medium transition flex items-center gap-2 ${
-            activeTab === "datalake"
-              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <span>CHỌN SOURCE TẢI TRUYỆN (UC-2.3)</span>
-          {etlData && (
-            <span className="px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 text-[10px]">
-              {etlData.datalake_packages.length}
+      <LayoutGroup id="admin-console-tabs">
+        <div className="flex border-b border-zinc-800 text-xs font-mono overflow-x-auto gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("datalake")}
+            className={`relative shrink-0 px-4 py-2.5 font-medium transition-colors flex items-center gap-2 rounded-t ${
+              activeTab === "datalake" ? "text-amber-300" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {activeTab === "datalake" && (
+              <AnimatedTabPill
+                layoutId="admin-console-tab-pill"
+                className="rounded-t bg-zinc-900/70 border-b-2 border-amber-500"
+              />
+            )}
+            <span className="relative z-10">CHỌN SOURCE TẢI TRUYỆN (UC-2.3)</span>
+            {etlData && (
+              <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 text-[10px]">
+                {etlData.datalake_packages.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("reports")}
+            className={`relative shrink-0 px-4 py-2.5 font-medium transition-colors rounded-t ${
+              activeTab === "reports" ? "text-amber-300" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {activeTab === "reports" && (
+              <AnimatedTabPill
+                layoutId="admin-console-tab-pill"
+                className="rounded-t bg-zinc-900/70 border-b-2 border-amber-500"
+              />
+            )}
+            <span className="relative z-10">
+              REPORTS MODERATION ({reports.filter((r) => r.status === "pending").length})
             </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("reports")}
-          className={`px-4 py-2 border-b-2 font-medium transition ${
-            activeTab === "reports"
-              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          REPORTS MODERATION ({reports.filter((r) => r.status === "pending").length})
-        </button>
-        <button
-          onClick={() => setActiveTab("mangas")}
-          className={`px-4 py-2 border-b-2 font-medium transition ${
-            activeTab === "mangas"
-              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          MANGA CATALOG MANAGEMENT
-        </button>
-        <button
-          onClick={() => setActiveTab("users")}
-          className={`px-4 py-2 border-b-2 font-medium transition ${
-            activeTab === "users"
-              ? "border-amber-500 text-amber-400 bg-zinc-900/40"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          USER GOVERNANCE
-        </button>
-      </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("mangas")}
+            className={`relative shrink-0 px-4 py-2.5 font-medium transition-colors rounded-t ${
+              activeTab === "mangas" ? "text-amber-300" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {activeTab === "mangas" && (
+              <AnimatedTabPill
+                layoutId="admin-console-tab-pill"
+                className="rounded-t bg-zinc-900/70 border-b-2 border-amber-500"
+              />
+            )}
+            <span className="relative z-10">MANGA CATALOG MANAGEMENT</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("users")}
+            className={`relative shrink-0 px-4 py-2.5 font-medium transition-colors rounded-t ${
+              activeTab === "users" ? "text-amber-300" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {activeTab === "users" && (
+              <AnimatedTabPill
+                layoutId="admin-console-tab-pill"
+                className="rounded-t bg-zinc-900/70 border-b-2 border-amber-500"
+              />
+            )}
+            <span className="relative z-10">USER GOVERNANCE</span>
+          </button>
+        </div>
+      </LayoutGroup>
 
-      {/* TAB 1: DATA LAKE ETL INGESTION (UC-2.3) */}
-      {activeTab === "datalake" && (
+      <AnimatedTabPanel tabKey={activeTab}>
+        {/* TAB 1: DATA LAKE ETL INGESTION (UC-2.3) */}
+        {activeTab === "datalake" && (
         <div className="space-y-6">
           {/* Header & Connection Status */}
           <div className="border border-zinc-800 bg-zinc-900/40 rounded p-5 space-y-4">
@@ -808,14 +835,14 @@ export const AdminPage: React.FC = () => {
       {activeTab === "mangas" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-zinc-900/40 p-3 rounded border border-zinc-800">
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-zinc-400">Action Reason (Audit Trail):</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs font-mono w-full sm:w-auto">
+              <span className="text-zinc-400 shrink-0">Action Reason (Audit Trail):</span>
               <input
                 type="text"
                 value={mangaActionReason}
                 onChange={(e) => setMangaActionReason(e.target.value)}
                 placeholder="Reason for hiding/showing..."
-                className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-zinc-200 text-xs w-64"
+                className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-zinc-200 text-xs w-full sm:w-64"
               />
             </div>
             <button
@@ -918,6 +945,7 @@ export const AdminPage: React.FC = () => {
                 Lock Account (7 Days)
               </button>
               <button
+                type="button"
                 onClick={handleUnlockUser}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded"
               >
@@ -927,6 +955,7 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
       )}
+      </AnimatedTabPanel>
     </div>
   );
 };
