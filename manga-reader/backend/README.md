@@ -35,23 +35,33 @@ Toàn bộ dịch vụ của `manga-reader` sử dụng dải cổng riêng bi�
 
 ---
 
-## 3. Hướng dẫn Khởi chạy & Kiểm thử
+## 3. Cấu trúc Subsystems trong `manga-reader/`
+
+- **`manga-reader/backend/`**: Standalone FastAPI API (cổng `18000`), PostgreSQL 16 + Alembic migrations, Redis 7, MinIO S3 (`19000`/`19001`).
+- **`manga-reader/web/`**: Standalone Reader & Admin Web Frontend (React 19 + TypeScript + Vite + Tailwind CSS + Motion UI, cổng `15173`).
+- **`manga-reader/MangaReader-Android/`**: Native Java Android Client kết nối trực tiếp Backend API.
+
+---
+
+## 4. Hướng dẫn Khởi chạy & Kiểm thử
 
 ```bash
 # 1. Kiểm tra cổng, dung lượng ổ D và khởi chạy hạ tầng Docker (Postgres 16, Redis 7, MinIO)
-uv run --project manga-reader python manga-reader/scripts/preflight_check.py
+uv run --project manga-reader/backend python manga-reader/backend/scripts/preflight_check.py
 docker compose -f manga-reader/docker-compose.yml up -d
-uv run --project manga-reader python manga-reader/scripts/verify_infra.py
+uv run --project manga-reader/backend python manga-reader/backend/scripts/verify_infra.py
 
-# 2. Chạy миграции cơ sở dữ liệu Alembic (25 bảng + 12 kiểu ENUM)
-uv run --project manga-reader --directory manga-reader alembic upgrade head
+# 2. Chạy migrations cơ sở dữ liệu Alembic (25 bảng + 12 kiểu ENUM)
+uv run --directory manga-reader/backend alembic upgrade head
 
-# 3. Nạp gói dữ liệu mẫu Data Contract v2.0
-uv run --project manga-reader python manga-reader/scripts/seed_sample_package.py
+# 3. Nạp tài khoản demo & gói dữ liệu mẫu Data Contract v2.0
+uv run --directory manga-reader/backend python scripts/seed_demo_accounts.py
+uv run --project manga-reader/backend python manga-reader/backend/scripts/seed_sample_package.py
 
 # 4. Chạy toàn bộ bộ kiểm thử tự động (Pytest)
-uv run --project manga-reader --directory manga-reader pytest -v
+uv run --directory manga-reader/backend pytest -v
 
-# 5. Khởi chạy máy chủ API trên cổng 18000
-uv run --project manga-reader --directory manga-reader uvicorn app.main:app --host 127.0.0.1 --port 18000 --reload
+# 5. Khởi chạy máy chủ API (18000) & Web Frontend (15173)
+uv run --directory manga-reader/backend uvicorn app.main:app --host 127.0.0.1 --port 18000 --reload
+pnpm --dir manga-reader/web dev
 ```

@@ -128,15 +128,15 @@ Total Endpoints Discovered: **223**
 | `POST` | `/api/manga/{manga_id}/recommendations/sync` | `force_sync_recommendations` | Recommendations | [`recommendations.py:27`](../../backend/routers/recommendations.py#L27) | Yes |
 | `GET` | `/api/manga/{manga_id}/reviews` | `list_reviews` | Reviews | [`reviews.py:59`](../../backend/routers/reviews.py#L59) | Yes |
 | `POST` | `/api/manga/{manga_id}/reviews` | `create_review` | Reviews | [`reviews.py:79`](../../backend/routers/reviews.py#L79) | Yes |
-| `GET` | `/api/manga/{manga_id}/reviews/media/{bucket}/{filename:path}` | `get_review_media` | Reviews | [`reviews.py:273`](../../backend/routers/reviews.py#L273) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/upload-image` | `upload_review_image` | Reviews | [`reviews.py:282`](../../backend/routers/reviews.py#L282) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/upload-image-url` | `upload_image_from_url` | Reviews | [`reviews.py:320`](../../backend/routers/reviews.py#L320) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/upload-media` | `upload_review_media` | Reviews | [`reviews.py:440`](../../backend/routers/reviews.py#L440) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/upload-video` | `upload_review_video` | Reviews | [`reviews.py:370`](../../backend/routers/reviews.py#L370) | Yes |
-| `DELETE` | `/api/manga/{manga_id}/reviews/{review_id}` | `delete_review` | Reviews | [`reviews.py:165`](../../backend/routers/reviews.py#L165) | Yes |
-| `PUT` | `/api/manga/{manga_id}/reviews/{review_id}` | `update_review` | Reviews | [`reviews.py:118`](../../backend/routers/reviews.py#L118) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/{review_id}/cleanup` | `cleanup_review_tabs` | Reviews | [`reviews.py:198`](../../backend/routers/reviews.py#L198) | Yes |
-| `POST` | `/api/manga/{manga_id}/reviews/{review_id}/finalize` | `finalize_review` | Reviews | [`reviews.py:532`](../../backend/routers/reviews.py#L532) | Yes |
+| `GET` | `/api/manga/{manga_id}/reviews/media/{bucket}/{filename:path}` | `get_review_media` | Reviews | [`reviews.py:276`](../../backend/routers/reviews.py#L276) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/upload-image` | `upload_review_image` | Reviews | [`reviews.py:285`](../../backend/routers/reviews.py#L285) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/upload-image-url` | `upload_image_from_url` | Reviews | [`reviews.py:323`](../../backend/routers/reviews.py#L323) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/upload-media` | `upload_review_media` | Reviews | [`reviews.py:443`](../../backend/routers/reviews.py#L443) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/upload-video` | `upload_review_video` | Reviews | [`reviews.py:373`](../../backend/routers/reviews.py#L373) | Yes |
+| `DELETE` | `/api/manga/{manga_id}/reviews/{review_id}` | `delete_review` | Reviews | [`reviews.py:167`](../../backend/routers/reviews.py#L167) | Yes |
+| `PUT` | `/api/manga/{manga_id}/reviews/{review_id}` | `update_review` | Reviews | [`reviews.py:119`](../../backend/routers/reviews.py#L119) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/{review_id}/cleanup` | `cleanup_review_tabs` | Reviews | [`reviews.py:201`](../../backend/routers/reviews.py#L201) | Yes |
+| `POST` | `/api/manga/{manga_id}/reviews/{review_id}/finalize` | `finalize_review` | Reviews | [`reviews.py:535`](../../backend/routers/reviews.py#L535) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan-folder` | `scan_local_folder` | Chapters & Reader | [`chapters.py:215`](../../backend/routers/chapters.py#L215) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan-panels` | `trigger_manga_scan` | vision | [`vision.py:195`](../../backend/routers/vision.py#L195) | Yes |
 | `POST` | `/api/manga/{manga_id}/scan-panels/cancel` | `cancel_manga_panels_scan` | vision | [`vision.py:227`](../../backend/routers/vision.py#L227) | Yes |
@@ -186,10 +186,10 @@ Total Endpoints Discovered: **223**
 | `GET` | `/api/system-logs` | `get_system_logs` | System Logs | [`system_logs.py:20`](../../backend/routers/system_logs.py#L20) | Yes |
 | `GET` | `/api/system-logs/elk-status` | `get_elk_status` | System Logs | [`system_logs.py:56`](../../backend/routers/system_logs.py#L56) | Yes |
 | `GET` | `/api/system-logs/stats` | `get_system_log_stats` | System Logs | [`system_logs.py:50`](../../backend/routers/system_logs.py#L50) | Yes |
-| `GET` | `/api/tags` | `list_tags` | Tags | [`tags.py:15`](../../backend/routers/tags.py#L15) | Yes |
-| `POST` | `/api/tags` | `create_custom_tag` | Tags | [`tags.py:44`](../../backend/routers/tags.py#L44) | Yes |
-| `DELETE` | `/api/tags/{tag_id}` | `delete_custom_tag` | Tags | [`tags.py:74`](../../backend/routers/tags.py#L74) | Yes |
-| `PUT` | `/api/tags/{tag_id}` | `update_tag` | Tags | [`tags.py:95`](../../backend/routers/tags.py#L95) | Yes |
+| `GET` | `/api/tags` | `list_tags` | Tags | [`tags.py:16`](../../backend/routers/tags.py#L16) | Yes |
+| `POST` | `/api/tags` | `create_custom_tag` | Tags | [`tags.py:45`](../../backend/routers/tags.py#L45) | Yes |
+| `DELETE` | `/api/tags/{tag_id}` | `delete_custom_tag` | Tags | [`tags.py:76`](../../backend/routers/tags.py#L76) | Yes |
+| `PUT` | `/api/tags/{tag_id}` | `update_tag` | Tags | [`tags.py:98`](../../backend/routers/tags.py#L98) | Yes |
 | `POST` | `/api/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | No (Alias) |
 | `GET` | `/api/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | No (Alias) |
 | `GET` | `/api/tierlists/manga/{manga_id}/cover-image` | `stream_cover_image` | Creator Tierlists | [`tierlists.py:47`](../../backend/routers/tierlists.py#L47) | Yes |

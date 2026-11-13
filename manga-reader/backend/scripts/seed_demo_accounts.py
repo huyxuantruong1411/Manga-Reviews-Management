@@ -7,15 +7,13 @@ Idempotent: updates existing accounts or inserts new active verified accounts.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import uuid
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models import AccountStatus, User, UserRole
+from sqlalchemy import select
 
 DEMO_ACCOUNTS = [
     {
@@ -95,4 +93,3 @@ async def seed_accounts() -> None:
 
 if __name__ == "__main__":
     asyncio.run(seed_accounts())
-

@@ -245,6 +245,7 @@ erDiagram
 |---|---|---|---|---|
 | `manga:detail:{manga_id}` | Redis | 300s (5 min) | Manga update, chapter add/delete, rating edit | Direct read from MongoDB `mangas` |
 | `reviews:manga:{manga_id}` | Redis | 180s (3 min) | Review create, update, or delete | Direct read from MongoDB `reviews` |
+| `analytics:{endpoint}:{hash}`<br>`analytics:review-corpus:summary` | Redis | 180s (3 min) | Manga/review/tag mutations, metadata merge, source binding (`delete_cache_pattern("analytics:*")`) | Consolidated MongoDB `$facet` + `asyncio.gather()` pipelines |
 | `task:ocr:{task_id}` | Redis | 3,600s (queued/running)<br>86,400s (finished) | Natural TTL expiration | Returns ARQ job status or 404 |
 | `trans:job:{job_id}` | Redis | 86,400s (24h) | Job completion or cancellation | Direct read from MongoDB `translation_jobs` |
 

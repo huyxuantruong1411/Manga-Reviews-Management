@@ -50,9 +50,11 @@ Trước khi thực hiện bất kỳ yêu cầu code/refactor nào, hãy tự t
   - Manga Detail: `manga:detail:{manga_id}` (TTL: 300s).
   - Reviews List: `reviews:manga:{manga_id}` (TTL: 180s).
   - OCR Task Status: `task:ocr:{job_id}` (TTL: 86400s).
+  - Analytics Aggregations: `analytics:{endpoint}:{sha256[:24]}` và `analytics:review-corpus:summary` (TTL: 180s).
 - **Quy tắc vô hiệu hóa Cache (Cache Invalidation)**:
   - Khi cập nhật/xóa manga: gọi `delete_cache(f"manga:detail:{manga_id}")`.
   - Khi thêm/sửa/xóa review: gọi `delete_cache(f"reviews:manga:{manga_id}")`.
+  - Khi biến động manga/review/tag, merge metadata hoặc source binding: gọi `delete_cache_pattern("analytics:*")` (hoặc `AnalyticsService.invalidate_cache()`).
 
 ### 3. Background Task Queue (ARQ Worker)
 - **Cấu hình Worker**: [`backend/tasks/worker.py`](file:///d:/Projects/Manga/Manga-Reviews-Management/backend/tasks/worker.py) với `WorkerSettings`.

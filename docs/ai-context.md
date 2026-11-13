@@ -103,9 +103,10 @@ The system employs three asynchronous execution paths:
   - Cache Keys & TTLs:
     - Manga Details: `manga:detail:{manga_id}` (TTL: 300s)
     - Manga Reviews: `reviews:manga:{manga_id}` (TTL: 180s)
+    - Analytics: `analytics:{endpoint}:{hash}` & `analytics:review-corpus:summary` (TTL: 180s)
     - OCR Task in-progress: `task:ocr:{task_id}` (TTL: 3,600s)
     - OCR Task completed: `task:ocr:{task_id}` (TTL: 86,400s)
-  - Invalidation: Called on updates/deletions in [`backend/services/manga_service.py`](../backend/services/manga_service.py) and [`backend/routers/reviews.py`](../backend/routers/reviews.py).
+  - Invalidation: Called on updates/deletions in [`backend/services/manga_service.py`](../backend/services/manga_service.py), [`backend/services/audit_service.py`](../backend/services/audit_service.py), [`backend/routers/reviews.py`](../backend/routers/reviews.py), and [`backend/routers/tags.py`](../backend/routers/tags.py).
 - **Logging & Observability**:
   - Structured ECS logs written to `logs/manga-*.ndjson` with automatic redaction of presigned URLs, Google AI keys, and tokens.
   - Elasticsearch (`manga-logs-*`, `manga-audit-*`) queried via [`backend/routers/system_logs.py`](../backend/routers/system_logs.py) and [`backend/services/audit_search_service.py`](../backend/services/audit_search_service.py).
