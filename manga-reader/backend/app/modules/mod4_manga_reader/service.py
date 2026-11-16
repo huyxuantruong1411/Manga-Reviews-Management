@@ -56,8 +56,8 @@ class MangaReaderService:
         manga = await db.get(Manga, manga_id)
         if manga is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bộ truyện.")
-        is_admin = viewer is not None and viewer.role == UserRole.admin
-        if manga.visibility_status == MangaVisibilityStatus.hidden and not is_admin:
+        is_staff = viewer is not None and viewer.role in (UserRole.admin, UserRole.moderator)
+        if manga.visibility_status == MangaVisibilityStatus.hidden and not is_staff:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Truyện hiện đang tạm ẩn và không thể truy cập.",
@@ -293,7 +293,37 @@ class MangaReaderService:
             "background_color": "dark",
             "preload_pages": 3,
         }
-        reader_settings = viewer.reader_settings if (viewer and viewer.reader_settings) else default_settings
+        raw_settings = dict(viewer.reader_settings) if (viewer and viewer.reader_settings) else {}
+        mode_map = {
+            "vertical": "vertical_scroll",
+            "paged": "single_page",
+            "single": "single_page",
+            "double": "double_page",
+        }
+        fit_map = {"width": "fit_width", "height": "fit_height"}
+        raw_mode = str(raw_settings.get("reading_mode", default_settings["reading_mode"]))
+        raw_dir = str(
+            raw_settings.get("reading_direction")
+            or raw_settings.get("direction")
+            or default_settings["reading_direction"]
+        )
+        raw_fit = str(raw_settings.get("fit_mode", default_settings["fit_mode"]))
+        reader_settings = {
+            "reading_mode": mode_map.get(
+                raw_mode,
+                raw_mode
+                if raw_mode in ("vertical_scroll", "single_page", "double_page")
+                else default_settings["reading_mode"],
+            ),
+            "reading_direction": raw_dir if raw_dir in ("ltr", "rtl") else default_settings["reading_direction"],
+            "fit_mode": fit_map.get(
+                raw_fit, raw_fit if raw_fit in ("fit_width", "fit_height", "original") else default_settings["fit_mode"]
+            ),
+            "background_color": raw_settings.get("background_color")
+            if raw_settings.get("background_color") in ("dark", "black", "light", "sepia")
+            else default_settings["background_color"],
+            "preload_pages": int(raw_settings.get("preload_pages", default_settings["preload_pages"])),
+        }
 
         return ChapterPagesResponse(
             pool_chapter_id=chapter.pool_chapter_id,

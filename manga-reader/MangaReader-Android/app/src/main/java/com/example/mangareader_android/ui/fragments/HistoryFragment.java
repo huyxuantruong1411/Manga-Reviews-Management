@@ -12,10 +12,13 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.data.api.RetrofitClient;
 import com.example.mangareader_android.data.model.ReadingListModels.ReadingHistoryItem;
+import com.example.mangareader_android.data.model.ReadingListModels.ReadingHistoryResponse;
 import com.example.mangareader_android.databinding.FragmentHistoryBinding;
+import com.example.mangareader_android.ui.activities.MangaDetailActivity;
 import com.example.mangareader_android.ui.activities.ReaderActivity;
 import com.example.mangareader_android.ui.adapters.HistoryAdapter;
 import com.example.mangareader_android.util.UiMotionUtils;
+import java.util.Collections;
 import java.util.List;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -38,9 +41,17 @@ public class HistoryFragment extends Fragment implements UiMotionUtils.OnTabRese
         super.onViewCreated(view, savedInstanceState);
 
         adapter = new HistoryAdapter(item -> {
-            Intent intent = new Intent(requireContext(), ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, item.chapter_id);
-            startActivity(intent);
+            if (item.last_read_chapter_id != null && !item.last_read_chapter_id.isEmpty()) {
+                Intent intent = new Intent(requireContext(), ReaderActivity.class);
+                intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, item.last_read_chapter_id);
+                intent.putExtra(ReaderActivity.EXTRA_INITIAL_PAGE, Math.max(1, item.last_read_page_number));
+                startActivity(intent);
+            } else {
+                Intent intent = new Intent(requireContext(), MangaDetailActivity.class);
+                String targetSlug = (item.slug != null && !item.slug.isEmpty()) ? item.slug : item.manga_id;
+                intent.putExtra(MangaDetailActivity.EXTRA_SLUG, targetSlug);
+                startActivity(intent);
+            }
             UiMotionUtils.applyActivityOpenTransition(requireActivity());
         });
         binding.rvHistory.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -71,14 +82,16 @@ public class HistoryFragment extends Fragment implements UiMotionUtils.OnTabRese
         }
         binding.swipeRefreshHistory.setRefreshing(true);
 
-        RetrofitClient.getApi().getReadingHistory().enqueue(new Callback<List<ReadingHistoryItem>>() {
+        RetrofitClient.getApi().getReadingHistory(1, 20).enqueue(new Callback<ReadingHistoryResponse>() {
             @Override
-            public void onResponse(@NonNull Call<List<ReadingHistoryItem>> call, @NonNull Response<List<ReadingHistoryItem>> response) {
+            public void onResponse(@NonNull Call<ReadingHistoryResponse> call, @NonNull Response<ReadingHistoryResponse> response) {
                 if (!isAdded() || binding == null) return;
                 binding.swipeRefreshHistory.setRefreshing(false);
                 binding.pbHistory.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
-                    List<ReadingHistoryItem> list = response.body();
+                    List<ReadingHistoryItem> list = response.body().items != null
+                            ? response.body().items
+                            : Collections.emptyList();
                     UiMotionUtils.transitionLayout(binding.layoutHistoryRoot);
                     adapter.setHistoryList(list);
                     binding.tvEmptyHistory.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
@@ -95,7 +108,7 @@ public class HistoryFragment extends Fragment implements UiMotionUtils.OnTabRese
             }
 
             @Override
-            public void onFailure(@NonNull Call<List<ReadingHistoryItem>> call, @NonNull Throwable t) {
+            public void onFailure(@NonNull Call<ReadingHistoryResponse> call, @NonNull Throwable t) {
                 if (!isAdded() || binding == null) return;
                 binding.swipeRefreshHistory.setRefreshing(false);
                 binding.pbHistory.setVisibility(View.GONE);

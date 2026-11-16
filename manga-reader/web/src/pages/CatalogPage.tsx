@@ -231,10 +231,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ currentUser }) => {
               <option value="latest_update" className="bg-zinc-900">
                 Mới cập nhật
               </option>
-              <option value="most_views" className="bg-zinc-900">
+              <option value="views" className="bg-zinc-900">
                 Nhiều lượt xem nhất
               </option>
-              <option value="highest_rating" className="bg-zinc-900">
+              <option value="rating" className="bg-zinc-900">
                 Điểm cao nhất
               </option>
               <option value="title_asc" className="bg-zinc-900">
@@ -316,7 +316,19 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ currentUser }) => {
             <div>
               <p className="text-[11px] font-mono text-zinc-400 mb-1.5 uppercase">THỂ LOẠI (TAG)</p>
               <div className="flex flex-wrap gap-1.5">
-                {["action", "comedy", "drama", "fantasy", "romance", "sci-fi", "slice-of-life"].map((t) => (
+                {[
+                  "action",
+                  "comedy",
+                  "drama",
+                  "fantasy",
+                  "horror",
+                  "mystery",
+                  "psychological",
+                  "romance",
+                  "sci-fi",
+                  "slice-of-life",
+                  "supernatural",
+                ].map((t) => (
                   <button
                     key={t}
                     type="button"

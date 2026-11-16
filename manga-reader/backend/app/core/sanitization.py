@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import re
 import unicodedata
+from typing import Any
 
 # UC-6.2 BR1: Forbidden system impersonation keywords in display_name
 FORBIDDEN_DISPLAY_NAME_TERMS = (
@@ -69,3 +70,21 @@ def contains_forbidden_comment_words(content: str) -> bool:
     """Check if comment contains banned terms."""
     lowered = content.lower()
     return any(word in lowered for word in FORBIDDEN_COMMENT_WORDS)
+
+
+def pick_localized_text(value: Any, fallback: str = "") -> str:
+    """Resolve an i18n JSONB dict (e.g. {'en': ..., 'vi': ...}) or string to plain text."""
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        return value.strip() or fallback
+    if isinstance(value, dict):
+        for lang in ("en", "vi", "ja", "ja-ro"):
+            cand = value.get(lang)
+            if isinstance(cand, str) and cand.strip():
+                return cand.strip()
+        for cand in value.values():
+            if isinstance(cand, str) and cand.strip():
+                return cand.strip()
+        return fallback
+    return str(value)

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin
+from app.core.security import get_current_admin, get_current_moderator_or_admin
 from app.models import User
 from app.modules.mod2_manga_management.schemas import (
     CdcChaptersWebhookRequest,
@@ -65,7 +65,7 @@ async def cdc_chapters_webhook(
 async def hide_manga(
     manga_id: str,
     payload: MangaReasonRequest,
-    admin: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_moderator_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Hide a manga from public discovery and invalidate catalog cache immediately (UC-2.1)."""
@@ -76,7 +76,7 @@ async def hide_manga(
 async def show_manga(
     manga_id: str,
     payload: MangaReasonRequest,
-    admin: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_moderator_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Restore a hidden manga to public visibility after metadata integrity check (UC-2.2)."""

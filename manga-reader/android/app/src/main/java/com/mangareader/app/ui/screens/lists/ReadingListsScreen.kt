@@ -46,6 +46,7 @@ fun ReadingListsScreen(
     var showMergeDialog by remember { mutableStateOf(false) }
     var mergeSourceId by remember { mutableStateOf("") }
     var mergeTargetId by remember { mutableStateOf("") }
+    var mergedListName by remember { mutableStateOf("") }
 
     val loadLists = {
         coroutineScope.launch {
@@ -86,17 +87,21 @@ fun ReadingListsScreen(
 
     val handleMergeLists = {
         if (mergeSourceId.isNotBlank() && mergeTargetId.isNotBlank() && mergeSourceId != mergeTargetId) {
+            val targetName = mergedListName.trim().ifBlank { "Merged Reading List" }
             coroutineScope.launch {
                 try {
                     val res = RetrofitClient.api.mergeReadingLists(
                         MergeListsRequest(
-                            source_list_id = mergeSourceId,
-                            target_list_id = mergeTargetId,
-                            delete_source_after_merge = true
+                            source_list_ids = listOf(mergeSourceId, mergeTargetId),
+                            new_list_name = targetName,
+                            description = "Merged from mobile reading lists",
+                            delete_source_lists = true,
+                            confirm_empty = true
                         )
                     )
                     if (res.isSuccessful) {
                         showMergeDialog = false
+                        mergedListName = ""
                         loadLists()
                     }
                 } catch (_: Exception) {}
@@ -251,8 +256,19 @@ fun ReadingListsScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Deduplicates items and merges source list into target list:", fontSize = 12.sp, color = TextSecondary)
-                    Text("Select source and target from existing lists.", fontSize = 11.sp, color = TextMuted)
+                    Text(
+                        text = "Merges '${lists.first().name}' and '${lists.last().name}' into a deduplicated collection:",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    OutlinedTextField(
+                        value = mergedListName,
+                        onValueChange = { mergedListName = it },
+                        label = { Text("New Merged List Name", fontSize = 12.sp) },
+                        placeholder = { Text("${lists.first().name} + ${lists.last().name}", color = TextMuted) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {

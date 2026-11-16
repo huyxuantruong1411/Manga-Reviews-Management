@@ -121,7 +121,7 @@ fun MangaNavHost() {
                 val idOrSlug = backStackEntry.arguments?.getString("idOrSlug") ?: ""
                 MangaDetailScreen(
                     idOrSlug = idOrSlug,
-                    onChapterClick = { chId -> navController.navigate(Screen.Reader.createRoute(chId)) },
+                    onChapterClick = { chId, page -> navController.navigate(Screen.Reader.createRoute(chId, page)) },
                     onMangaClick = { slug -> navController.navigate(Screen.MangaDetail.createRoute(slug)) },
                     onBackClick = { navController.popBackStack() },
                     onAuthRequired = { navController.navigate(Screen.Auth.route) }
@@ -130,12 +130,17 @@ fun MangaNavHost() {
 
             composable(
                 route = Screen.Reader.route,
-                arguments = listOf(navArgument("chapterId") { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument("chapterId") { type = NavType.StringType },
+                    navArgument("page") { type = NavType.IntType; defaultValue = 1 },
+                )
             ) { backStackEntry ->
                 val chapterId = backStackEntry.arguments?.getString("chapterId") ?: ""
+                val initialPage = backStackEntry.arguments?.getInt("page") ?: 1
                 ReaderScreen(
                     chapterId = chapterId,
-                    onNavigateChapter = { nextId -> navController.navigate(Screen.Reader.createRoute(nextId)) {
+                    initialPage = initialPage,
+                    onNavigateChapter = { nextId -> navController.navigate(Screen.Reader.createRoute(nextId, 1)) {
                         popUpTo(Screen.Reader.route) { inclusive = true }
                     } },
                     onBackClick = { navController.popBackStack() }
@@ -150,7 +155,8 @@ fun MangaNavHost() {
 
             composable(Screen.History.route) {
                 HistoryScreen(
-                    onChapterClick = { chId -> navController.navigate(Screen.Reader.createRoute(chId)) },
+                    onChapterClick = { chId, page -> navController.navigate(Screen.Reader.createRoute(chId, page)) },
+                    onMangaClick = { idOrSlug -> navController.navigate(Screen.MangaDetail.createRoute(idOrSlug)) },
                     onBackClick = { navController.popBackStack() }
                 )
             }

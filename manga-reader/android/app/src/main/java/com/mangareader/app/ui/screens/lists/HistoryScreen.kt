@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.mangareader.app.MangaReaderApplication
 import com.mangareader.app.data.api.RetrofitClient
 import com.mangareader.app.data.model.ReadingHistoryItem
 import com.mangareader.app.ui.components.EmptyState
@@ -30,7 +31,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HistoryScreen(
-    onChapterClick: (String) -> Unit,
+    onChapterClick: (String, Int) -> Unit,
+    onMangaClick: (String) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -44,7 +46,7 @@ fun HistoryScreen(
             try {
                 val res = RetrofitClient.api.getReadingHistory()
                 if (res.isSuccessful && res.body() != null) {
-                    historyItems = res.body()!!
+                    historyItems = res.body()!!.items
                 }
             } catch (_: Exception) {
             } finally {
@@ -98,21 +100,29 @@ fun HistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(historyItems, key = { it.history_id }) { item ->
+                    items(historyItems, key = { "${it.manga_id}:${it.last_read_chapter_id ?: ""}" }) { item ->
+                        val resumeAction: () -> Unit = {
+                            val chId = item.last_read_chapter_id
+                            if (!chId.isNullOrBlank()) {
+                                onChapterClick(chId, item.last_read_page_number.coerceAtLeast(1))
+                            } else {
+                                onMangaClick(item.slug.ifBlank { item.manga_id })
+                            }
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(DarkSurface)
                                 .border(1.dp, DarkBorder, RoundedCornerShape(4.dp))
-                                .clickable { onChapterClick(item.chapter_id) }
+                                .clickable { resumeAction() }
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             AsyncImage(
-                                model = item.cover_url,
-                                contentDescription = item.manga_title,
+                                model = MangaReaderApplication.resolveMediaUrl(item.cover_url),
+                                contentDescription = item.title,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(width = 46.dp, height = 64.dp)
@@ -122,24 +132,24 @@ fun HistoryScreen(
 
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(
-                                    text = item.manga_title,
+                                    text = item.title,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "Chapter ${item.chapter_number} • Page ${item.last_read_page}",
+                                    text = "Chapter ${item.last_read_chapter_number ?: "-"} • Page ${item.last_read_page_number}",
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
-                                if (item.is_completed) {
+                                if (item.is_chapter_completed) {
                                     IaaSBadge(text = "COMPLETED", textColor = AccentEmerald, borderColor = AccentEmeraldSubtle)
                                 }
                             }
 
                             Button(
-                                onClick = { onChapterClick(item.chapter_id) },
+                                onClick = resumeAction,
                                 colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceElevated, contentColor = AccentAmber),
                                 shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier.border(1.dp, DarkBorder, RoundedCornerShape(4.dp))

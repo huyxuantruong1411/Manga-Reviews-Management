@@ -27,6 +27,7 @@ import retrofit2.Response;
 public class ReaderActivity extends AppCompatActivity {
 
     public static final String EXTRA_CHAPTER_ID = "extra_chapter_id";
+    public static final String EXTRA_INITIAL_PAGE = "extra_initial_page";
 
     private static final int MODE_WEBTOON = 0;
     private static final int MODE_PAGED_LTR = 1;
@@ -53,6 +54,7 @@ public class ReaderActivity extends AppCompatActivity {
     private Runnable pendingSyncRunnable;
     private int currentMode = MODE_WEBTOON;
     private boolean userToggledMode = false;
+    private int initialPage = 1;
     private int currentPageNumber = 1;
     private int lastSyncedPage = -1;
     private boolean lastSyncedCompleted = false;
@@ -84,6 +86,7 @@ public class ReaderActivity extends AppCompatActivity {
         });
 
         currentChapterId = getIntent().getStringExtra(EXTRA_CHAPTER_ID);
+        initialPage = Math.max(1, getIntent().getIntExtra(EXTRA_INITIAL_PAGE, 1));
         if (currentChapterId == null || currentChapterId.isEmpty()) {
             finish();
             return;
@@ -292,8 +295,11 @@ public class ReaderActivity extends AppCompatActivity {
 
                     if (!userToggledMode && chapterData.reader_settings != null) {
                         int serverMode = MODE_WEBTOON;
-                        if ("paged".equalsIgnoreCase(chapterData.reader_settings.reading_mode)
-                                || "horizontal".equalsIgnoreCase(chapterData.reader_settings.reading_mode)) {
+                        String modeName = chapterData.reader_settings.reading_mode;
+                        if ("paged".equalsIgnoreCase(modeName)
+                                || "horizontal".equalsIgnoreCase(modeName)
+                                || "single_page".equalsIgnoreCase(modeName)
+                                || "double_page".equalsIgnoreCase(modeName)) {
                             serverMode = "rtl".equalsIgnoreCase(chapterData.reader_settings.reading_direction)
                                     ? MODE_PAGED_RTL
                                     : MODE_PAGED_LTR;
@@ -309,8 +315,14 @@ public class ReaderActivity extends AppCompatActivity {
                     binding.btnReaderNextChapter.setAlpha(chapterData.next_chapter_id != null ? 1f : 0.45f);
 
                     adapter.setPages(chapterData.pages);
-                    binding.rvReaderPages.scrollToPosition(0);
-                    scheduleSyncProgress(1, chapterData.page_count <= 1);
+                    int targetPage = Math.max(1, initialPage);
+                    initialPage = 1;
+                    int totalPages = chapterData.pages != null ? chapterData.pages.size() : 0;
+                    int targetPos = totalPages > 0 ? Math.min(targetPage - 1, totalPages - 1) : 0;
+                    currentPageNumber = targetPos + 1;
+                    updateProgressDisplay(currentPageNumber, chapterData.page_count);
+                    binding.rvReaderPages.scrollToPosition(targetPos);
+                    scheduleSyncProgress(currentPageNumber, currentPageNumber >= chapterData.page_count);
                 } else {
                     UiMotionUtils.showError(
                             binding.getRoot(),

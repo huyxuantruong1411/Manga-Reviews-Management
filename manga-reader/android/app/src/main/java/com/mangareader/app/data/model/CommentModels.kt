@@ -40,7 +40,7 @@ data class ReactCommentRequest(
 )
 
 data class ReportCommentRequest(
-    val reason: String,
-    val details: String? = null,
+    val reason_code: String,
+    val description: String? = null,
 )
 

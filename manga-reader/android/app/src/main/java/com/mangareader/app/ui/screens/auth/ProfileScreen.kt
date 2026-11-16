@@ -49,6 +49,7 @@ fun ProfileScreen(
     // Password fields
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
 
     // Server URL
     var currentBaseUrl by remember { mutableStateOf(MangaReaderApplication.instance.getBaseUrl()) }
@@ -98,15 +99,25 @@ fun ProfileScreen(
 
     val handleUpdatePassword = {
         coroutineScope.launch {
+            if (newPassword != confirmPassword) {
+                message = "New password and confirmation do not match"
+                isSuccess = false
+                return@launch
+            }
             try {
                 val res = RetrofitClient.api.updatePassword(
-                    UpdatePasswordRequest(current_password = currentPassword, new_password = newPassword)
+                    UpdatePasswordRequest(
+                        current_password = currentPassword,
+                        new_password = newPassword,
+                        confirm_password = confirmPassword
+                    )
                 )
                 if (res.isSuccessful) {
                     message = "Password changed! Active sessions revoked. Please sign in again."
                     isSuccess = true
                     currentPassword = ""
                     newPassword = ""
+                    confirmPassword = ""
                 } else {
                     message = res.errorBody()?.string() ?: "Failed to change password"
                     isSuccess = false
@@ -186,9 +197,10 @@ fun ProfileScreen(
                             .background(DarkSurfaceElevated)
                             .border(1.dp, DarkBorderSubtle, CircleShape)
                     ) {
-                        if (!p.avatar_url.isNullOrBlank()) {
+                        val resolvedAvatar = MangaReaderApplication.resolveMediaUrl(p.avatar_url)
+                        if (!resolvedAvatar.isNullOrBlank()) {
                             AsyncImage(
-                                model = p.avatar_url,
+                                model = resolvedAvatar,
                                 contentDescription = "Avatar",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
@@ -207,7 +219,7 @@ fun ProfileScreen(
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = p.display_name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-                        Text(text = "@${p.username} • ${p.email}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextSecondary)
+                        Text(text = "@${p.username} • ${p.email ?: ""}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextSecondary)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             IaaSBadge(text = p.role.uppercase(), textColor = AccentAmber)
                             IaaSBadge(text = p.status.uppercase(), textColor = AccentEmerald)
@@ -322,9 +334,24 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("Confirm New Password", fontSize = 12.sp) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentAmber,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = { handleUpdatePassword() },
-                    enabled = currentPassword.isNotBlank() && newPassword.length >= 8,
+                    enabled = currentPassword.isNotBlank() && newPassword.length >= 8 && confirmPassword == newPassword,
                     colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceElevated, contentColor = TextPrimary),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.align(Alignment.End).border(1.dp, DarkBorder, RoundedCornerShape(4.dp))

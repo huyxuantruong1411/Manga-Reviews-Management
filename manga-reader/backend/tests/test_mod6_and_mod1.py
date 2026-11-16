@@ -10,10 +10,10 @@ from app.core.database import AsyncSessionLocal
 from app.core.redis import get_email_otp, reset_login_failures
 from app.core.security import hash_password
 from app.main import app
-from app.models import AccountStatus, AdminAuditLog, Comment, Manga, ReportStatus, User, UserRole
+from app.models import AccountStatus, AdminAuditLog, Comment, Manga, Report, ReportStatus, User, UserRole
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
 
 
 def _create_png_bytes(width: int = 400, height: int = 300, color: tuple[int, int, int] = (200, 50, 50)) -> bytes:
@@ -24,12 +24,22 @@ def _create_png_bytes(width: int = 400, height: int = 300, color: tuple[int, int
 
 
 @pytest.fixture(autouse=True)
-async def _clean_mod6_mod1_data() -> None:
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(AdminAuditLog))
-        await db.execute(delete(User).where(User.email.like("%@test-mr2.%")))
-        await db.execute(delete(Manga).where(Manga.pool_manga_id.like("pm_test_p2_%")))
-        await db.commit()
+async def _clean_mod6_mod1_data():
+    async def _cleanup() -> None:
+        async with AsyncSessionLocal() as db:
+            test_uids = select(User.user_id).where(User.email.like("%@test-mr2.%"))
+            await db.execute(delete(AdminAuditLog).where(AdminAuditLog.admin_id.in_(test_uids)))
+            await db.execute(
+                delete(Report).where(or_(Report.reporter_id.in_(test_uids), Report.resolved_by.in_(test_uids)))
+            )
+            await db.execute(update(User).where(User.locked_by.in_(test_uids)).values(locked_by=None))
+            await db.execute(delete(Manga).where(Manga.pool_manga_id.like("pm_test_p2_%")))
+            await db.execute(delete(User).where(User.email.like("%@test-mr2.%")))
+            await db.commit()
+
+    await _cleanup()
+    yield
+    await _cleanup()
 
 
 async def _create_verified_user(

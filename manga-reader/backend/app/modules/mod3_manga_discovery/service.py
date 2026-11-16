@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.sanitization import strip_accents
+from app.core.sanitization import pick_localized_text, strip_accents
 from app.core.storage import storage_service
 from app.models import (
     Chapter,
@@ -60,6 +60,78 @@ def _serialize_manga_summary(m: Manga, tags: list[dict[str, Any]] | None = None)
         ),
         "tags": tags or [],
     }
+
+
+async def _load_tags_by_manga_ids(db: AsyncSession, manga_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Batch-load serialized tags for a list of manga IDs in one query."""
+    if not manga_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(MangaTag.manga_id, Tag.slug, Tag.tag_group, Tag.name)
+            .join(Tag, Tag.id == MangaTag.tag_id)
+            .where(MangaTag.manga_id.in_(manga_ids))
+            .order_by(asc(Tag.name))
+        )
+    ).all()
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for mid, slug, tag_group, name in rows:
+        grouped.setdefault(mid, []).append(
+            {
+                "slug": slug,
+                "group": tag_group.value if hasattr(tag_group, "value") else str(tag_group),
+                "name": pick_localized_text(name, slug),
+            }
+        )
+    return grouped
+
+
+def _trigram_similarity(a: str, b: str) -> float:
+    s1 = f"  {a} "
+    s2 = f"  {b} "
+    g1 = {s1[i : i + 3] for i in range(max(1, len(s1) - 2))}
+    g2 = {s2[i : i + 3] for i in range(max(1, len(s2) - 2))}
+    inter = len(g1 & g2)
+    union = len(g1 | g2)
+    return (inter / union) if union else 0.0
+
+
+def _fuzzy_text_score(q_unaccent: str, q_tokens: set[str], candidates: list[str]) -> float:
+    """Compute accent-insensitive exact, substring, token, and trigram similarity score."""
+    best_score = 0.0
+    sig_q_tokens = [t for t in q_tokens if len(t) >= 2] or list(q_tokens)
+    for text_val in candidates:
+        if not text_val:
+            continue
+        norm = strip_accents(text_val.lower())
+        if q_unaccent == norm:
+            best_score = max(best_score, 1.0)
+        elif q_unaccent in norm:
+            best_score = max(best_score, 0.85)
+        else:
+            c_tokens = [t for t in norm.split() if t]
+            c_token_set = set(c_tokens)
+            if q_tokens and q_tokens.issubset(c_token_set):
+                best_score = max(best_score, 0.78)
+            else:
+                full_sim = _trigram_similarity(q_unaccent, norm)
+                if len(sig_q_tokens) <= 1:
+                    tok_best = max((_trigram_similarity(q_unaccent, ct) for ct in c_tokens), default=0.0)
+                    sim = max(full_sim, tok_best)
+                    if sim >= 0.36:
+                        best_score = max(best_score, round(sim * 0.75, 3))
+                elif c_tokens:
+                    # Require every multi-char query token to reasonably match a candidate token
+                    token_sims = [
+                        max((1.0 if qt in ct else _trigram_similarity(qt, ct)) for ct in c_tokens)
+                        for qt in sig_q_tokens
+                    ]
+                    if all(ts >= 0.40 for ts in token_sims):
+                        avg_ts = sum(token_sims) / len(token_sims)
+                        best_score = max(best_score, round(max(full_sim, avg_ts) * 0.75, 3))
+                    elif full_sim >= 0.55:
+                        best_score = max(best_score, round(full_sim * 0.75, 3))
+    return best_score
 
 
 def _check_age_restriction(caller: User | None, rating: ContentRating | None) -> None:
@@ -151,9 +223,10 @@ class MangaDiscoveryService:
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = (await db.execute(stmt)).scalars().all()
+        tags_map = await _load_tags_by_manga_ids(db, [m.pool_manga_id for m in rows])
 
         return {
-            "items": [_serialize_manga_summary(m) for m in rows],
+            "items": [_serialize_manga_summary(m, tags=tags_map.get(m.pool_manga_id, [])) for m in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -164,60 +237,61 @@ class MangaDiscoveryService:
         db: AsyncSession,
         query_str: str,
         limit: int = 24,
+        search_type: str = "all",
     ) -> dict[str, Any]:
-        """UC-3.3: Accent-insensitive & Fuzzy Trigram search across title and alt_titles."""
+        """UC-3.3: Accent-insensitive & Fuzzy Trigram search across titles and/or creators."""
         q_clean = query_str.strip()
         if not q_clean:
-            return {"query": "", "items": []}
+            return {"query": "", "search_type": search_type, "total": 0, "items": []}
 
         q_unaccent = strip_accents(q_clean.lower())
+        q_tokens = set(q_unaccent.split())
+
         public_mangas = (
             (await db.execute(select(Manga).where(Manga.visibility_status == MangaVisibilityStatus.public)))
             .scalars()
             .all()
         )
 
-        scored: list[tuple[float, Manga]] = []
-        q_tokens = set(q_unaccent.split())
+        creators_by_manga: dict[str, list[str]] = {}
+        if search_type in ("all", "creator"):
+            cr_rows = (
+                await db.execute(
+                    select(MangaCreator.manga_id, Creator.name, Creator.slug).join(
+                        Creator, Creator.creator_id == MangaCreator.creator_id
+                    )
+                )
+            ).all()
+            for mid, name, slug in cr_rows:
+                creators_by_manga.setdefault(mid, []).extend([name, slug])
 
+        scored: list[tuple[float, Manga]] = []
         for m in public_mangas:
-            candidates = [m.title] + [str(t) for t in (m.alt_titles or [])]
             best_score = 0.0
-            for text_val in candidates:
-                norm = strip_accents(text_val.lower())
-                if q_unaccent == norm:
-                    best_score = max(best_score, 1.0)
-                elif q_unaccent in norm:
-                    best_score = max(best_score, 0.85)
-                else:
-                    # Token & trigram overlap
-                    c_tokens = set(norm.split())
-                    if q_tokens and q_tokens.issubset(c_tokens):
-                        best_score = max(best_score, 0.78)
-                    else:
-                        # Character 3-gram Jaccard similarity for typo tolerance
-                        s1 = f"  {q_unaccent} "
-                        s2 = f"  {norm} "
-                        g1 = {s1[i : i + 3] for i in range(max(1, len(s1) - 2))}
-                        g2 = {s2[i : i + 3] for i in range(max(1, len(s2) - 2))}
-                        inter = len(g1 & g2)
-                        union = len(g1 | g2)
-                        sim = inter / union if union else 0.0
-                        if sim >= 0.22:
-                            best_score = max(best_score, round(sim, 3))
+            if search_type in ("all", "title"):
+                title_candidates = [m.title] + [str(t) for t in (m.alt_titles or [])]
+                best_score = max(best_score, _fuzzy_text_score(q_unaccent, q_tokens, title_candidates))
+            if search_type in ("all", "creator"):
+                creator_candidates = creators_by_manga.get(m.pool_manga_id, [])
+                if creator_candidates:
+                    best_score = max(best_score, _fuzzy_text_score(q_unaccent, q_tokens, creator_candidates))
 
             if best_score > 0:
                 scored.append((best_score, m))
 
         scored.sort(key=lambda x: (x[0], int(x[1].view_count), float(x[1].average_rating)), reverse=True)
+        top_entries = scored[:limit]
+        tags_map = await _load_tags_by_manga_ids(db, [m.pool_manga_id for _sc, m in top_entries])
         return {
             "query": q_clean,
+            "search_type": search_type,
+            "total": len(scored),
             "items": [
                 {
-                    **_serialize_manga_summary(m),
+                    **_serialize_manga_summary(m, tags=tags_map.get(m.pool_manga_id, [])),
                     "match_score": sc,
                 }
-                for sc, m in scored[:limit]
+                for sc, m in top_entries
             ],
         }
 
@@ -243,7 +317,7 @@ class MangaDiscoveryService:
                     "creator_id": c.creator_id,
                     "slug": c.slug,
                     "name": c.name,
-                    "biography": c.biography,
+                    "biography": pick_localized_text(c.biography, "") or None,
                     "links": c.links,
                 }
                 for c in sliced
@@ -303,20 +377,25 @@ class MangaDiscoveryService:
                 stmt = stmt.order_by(desc(Manga.latest_chapter_published_at))
 
             m_rows = (await db.execute(stmt)).scalars().all()
-            for m in m_rows[(page - 1) * page_size : page * page_size]:
-                item = _serialize_manga_summary(m)
+            total_filtered_works = len(m_rows)
+            sliced_works = m_rows[(page - 1) * page_size : page * page_size]
+            tags_map = await _load_tags_by_manga_ids(db, [m.pool_manga_id for m in sliced_works])
+            for m in sliced_works:
+                item = _serialize_manga_summary(m, tags=tags_map.get(m.pool_manga_id, []))
                 item["creator_roles"] = sorted(set(roles_by_manga.get(m.pool_manga_id, [])))
                 works.append(item)
+        else:
+            total_filtered_works = 0
 
         return {
             "creator_id": creator.creator_id,
             "slug": creator.slug,
             "name": creator.name,
             "mangadex_id": str(creator.mangadex_id) if creator.mangadex_id else None,
-            "biography": creator.biography,
+            "biography": pick_localized_text(creator.biography, "") or None,
             "links": creator.links,
             "works": works,
-            "total_works": len(works),
+            "total_works": total_filtered_works,
         }
 
     async def get_manga_detail(
@@ -331,7 +410,7 @@ class MangaDiscoveryService:
         ).scalar_one_or_none()
         if manga is None or (
             manga.visibility_status == MangaVisibilityStatus.hidden
-            and (caller is None or caller.role != UserRole.admin)
+            and (caller is None or caller.role not in (UserRole.admin, UserRole.moderator))
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -355,7 +434,7 @@ class MangaDiscoveryService:
                 "slug": c.slug,
                 "name": c.name,
                 "role": role.value,
-                "biography": c.biography,
+                "biography": pick_localized_text(c.biography, "") or None,
                 "links": c.links,
             }
             for c, role in cr_rows
@@ -373,7 +452,9 @@ class MangaDiscoveryService:
             .scalars()
             .all()
         )
-        tags_out = [{"slug": t.slug, "group": t.tag_group.value, "name": t.name} for t in tg_rows]
+        tags_out = [
+            {"slug": t.slug, "group": t.tag_group.value, "name": pick_localized_text(t.name, t.slug)} for t in tg_rows
+        ]
 
         # Cover Arts
         ca_rows = (
@@ -549,6 +630,7 @@ class MangaDiscoveryService:
                     "manga_id": manga.pool_manga_id,
                     "slug": manga.slug,
                     "title": manga.title,
+                    "cover_url": storage_service.build_media_url(manga.cover_bucket, manga.cover_object_key),
                     "is_hidden": manga.visibility_status == MangaVisibilityStatus.hidden,
                     "last_read_chapter_id": ch.pool_chapter_id,
                     "last_read_chapter_number": ch.chapter_number,

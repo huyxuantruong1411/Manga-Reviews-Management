@@ -44,7 +44,7 @@ fun SearchScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var searchType by remember { mutableStateOf("title") } // "title" or "creator"
+    var searchType by remember { mutableStateOf("all") } // "all", "title", or "creator"
     var isSearching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
     var autocompleteSuggestions by remember { mutableStateOf<List<AutocompleteItem>>(emptyList()) }
@@ -112,7 +112,11 @@ fun SearchScreen(
                         onValueChange = { query = it },
                         placeholder = {
                             Text(
-                                text = if (searchType == "title") "Search by title (unaccented)..." else "Search by author or artist...",
+                                text = when (searchType) {
+                                    "title" -> "Search by title (unaccented)..."
+                                    "creator" -> "Search by author or artist..."
+                                    else -> "Search title, author, or artist..."
+                                },
                                 color = TextMuted,
                                 fontSize = 13.sp
                             )
@@ -149,12 +153,12 @@ fun SearchScreen(
                     }
                 }
 
-                // Title vs Creator Toggle
+                // All / Title / Creator Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("title" to "TITLE MODE", "creator" to "CREATOR (AUTHOR/ARTIST)").forEach { (key, label) ->
+                    listOf("all" to "ALL", "title" to "TITLE", "creator" to "CREATOR").forEach { (key, label) ->
                         val isSelected = searchType == key
                         Box(
                             modifier = Modifier

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.media_router import router as media_router
 from app.core.redis import close_redis, get_redis
 from app.core.security import get_current_admin
 from app.core.storage import storage_service
@@ -55,6 +56,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(media_router)
 app.include_router(mod6_router)
 app.include_router(mod1_router)
 app.include_router(mod2_router)

@@ -59,12 +59,12 @@ public class CommentModels {
     }
 
     public static class ReportCommentRequest {
-        public String reason;
-        public String details;
+        public String reason_code;
+        public String description;
 
-        public ReportCommentRequest(String reason, String details) {
-            this.reason = reason;
-            this.details = details;
+        public ReportCommentRequest(String reasonCode, String description) {
+            this.reason_code = reasonCode;
+            this.description = description;
         }
     }
 }

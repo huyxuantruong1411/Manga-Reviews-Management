@@ -4,6 +4,14 @@ import com.google.gson.annotations.SerializedName
 
 data class CreatorItem(
     val creator_id: String,
+    val slug: String? = null,
+    val name: String,
+    val role: String? = null,
+)
+
+data class TagItem(
+    val slug: String,
+    val group: String? = null,
     val name: String,
 )
 
@@ -22,13 +30,22 @@ data class MangaItem(
     val rating_count: Int = 0,
     val view_count: Long = 0,
     val is_hidden: Boolean = false,
-    val tags: List<String> = emptyList(),
+    val tags: List<TagItem> = emptyList(),
+    val creators: List<CreatorItem> = emptyList(),
     val authors: List<CreatorItem> = emptyList(),
     val artists: List<CreatorItem> = emptyList(),
     val updated_at: String = "",
+    val my_reading_status: String? = null,
+    val my_rating: Int? = null,
     val user_reading_status: String? = null,
     val user_rating: Int? = null,
-)
+) {
+    val effectiveReadingStatus: String?
+        get() = my_reading_status ?: user_reading_status
+
+    val effectiveRating: Int?
+        get() = my_rating ?: user_rating
+}
 
 data class MangaListResponse(
     val total: Int,
@@ -67,7 +84,8 @@ data class ReadingStatusRequest(
 )
 
 data class ReportMangaRequest(
-    val reason: String,
-    val details: String? = null,
+    val reason_code: String,
+    val description: String? = null,
+    val chapter_id: String? = null,
 )
 

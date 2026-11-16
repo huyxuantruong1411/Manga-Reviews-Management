@@ -117,13 +117,13 @@ fun StatsScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricBox(
-                    label = "DWELL TIME",
-                    value = "${String.format("%.1f", data.total_dwell_minutes)}m",
+                    label = "LAST 7 DAYS",
+                    value = "${data.reading_frequency.last_7_days} CH",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBox(
-                    label = "CURRENT STREAK",
-                    value = "${data.reading_streak_days} DAYS",
+                    label = "AVG SCORE GIVEN",
+                    value = data.average_score_given?.let { String.format("%.1f ★", it) } ?: "-",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -145,10 +145,10 @@ fun StatsScreen(
                     color = TextPrimary
                 )
 
-                if (data.preferred_tags.isNotEmpty()) {
+                if (data.top_tags.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(data.preferred_tags) { tag ->
-                            IaaSBadge(text = tag.uppercase(), textColor = AccentAmber)
+                        items(data.top_tags) { tag ->
+                            IaaSBadge(text = "${tag.name.uppercase()} (${tag.manga_count})", textColor = AccentAmber)
                         }
                     }
                 } else {

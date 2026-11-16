@@ -1,7 +1,9 @@
 package com.example.mangareader_android.data.model;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ReadingListModels {
 
@@ -32,37 +34,67 @@ public class ReadingListModels {
     }
 
     public static class MergeListsRequest {
-        public String source_list_id;
-        public String target_list_id;
-        public boolean delete_source_after_merge;
+        public List<String> source_list_ids;
+        public String new_list_name;
+        public String description;
+        public boolean delete_source_lists;
+        public boolean confirm_empty;
 
-        public MergeListsRequest(String sourceListId, String targetListId, boolean deleteSource) {
-            this.source_list_id = sourceListId;
-            this.target_list_id = targetListId;
-            this.delete_source_after_merge = deleteSource;
+        public MergeListsRequest(
+                List<String> sourceListIds,
+                String newListName,
+                String description,
+                boolean deleteSourceLists,
+                boolean confirmEmpty) {
+            this.source_list_ids = sourceListIds;
+            this.new_list_name = newListName;
+            this.description = description;
+            this.delete_source_lists = deleteSourceLists;
+            this.confirm_empty = confirmEmpty;
         }
     }
 
     public static class ReadingHistoryItem {
-        public String history_id;
         public String manga_id;
-        public String manga_title;
-        public String manga_slug;
+        public String slug;
+        public String title;
         public String cover_url;
-        public String chapter_id;
-        public String chapter_number;
-        public int last_read_page;
-        public boolean is_completed;
-        public String updated_at;
+        public boolean is_hidden;
+        public String last_read_chapter_id;
+        public String last_read_chapter_number;
+        public int last_read_page_number = 1;
+        public boolean is_chapter_completed;
+        public String last_read_at;
+        public List<String> read_chapter_ids = new ArrayList<>();
+    }
+
+    public static class ReadingHistoryResponse {
+        public List<ReadingHistoryItem> items = new ArrayList<>();
+        public int page = 1;
+        public int page_size = 20;
+    }
+
+    public static class TopTagStat {
+        public String slug;
+        public String name;
+        public int manga_count;
+    }
+
+    public static class ReadingFrequencyStats {
+        public int last_7_days;
+        public int last_30_days;
     }
 
     public static class ReadingAnalyticsResponse {
         public String user_id;
+        public boolean is_empty;
         public int total_chapters_read;
         public int total_mangas_read;
-        public double total_dwell_minutes;
-        public List<String> preferred_tags = new ArrayList<>();
-        public int reading_streak_days;
+        public List<TopTagStat> top_tags = new ArrayList<>();
+        public ReadingFrequencyStats reading_frequency = new ReadingFrequencyStats();
+        public Map<String, Integer> rating_distribution = new HashMap<>();
+        public Double average_score_given;
+        public int total_ratings_given;
     }
 }
 

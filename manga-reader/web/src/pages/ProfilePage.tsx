@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { User, Lock, Save } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { User, Lock, Save, Camera } from "lucide-react";
 import { api, UserProfile } from "@/api/client";
 import { useToast } from "@/components/ToastProvider";
 
@@ -15,10 +15,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onOpenAuth,
 }) => {
   const { showToast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Declare all hooks unconditionally before any early return
   const [displayName, setDisplayName] = useState(currentUser?.display_name || "");
   const [bio, setBio] = useState(currentUser?.bio || "");
+  const [birthDate, setBirthDate] = useState(currentUser?.birth_date || "");
+  const [showBirthDate, setShowBirthDate] = useState(Boolean(currentUser?.show_birth_date));
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarImgError, setAvatarImgError] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
@@ -34,6 +39,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   useEffect(() => {
     setDisplayName(currentUser?.display_name || "");
     setBio(currentUser?.bio || "");
+    setBirthDate(currentUser?.birth_date || "");
+    setShowBirthDate(Boolean(currentUser?.show_birth_date));
+    setAvatarImgError(false);
   }, [currentUser]);
 
   if (!currentUser) {
@@ -55,12 +63,39 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     );
   }
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ảnh đại diện vượt quá giới hạn 5MB.", "error");
+      return;
+    }
+    setAvatarLoading(true);
+    try {
+      const updated = await api.uploadAvatar(file);
+      onUpdateUser(updated);
+      setAvatarImgError(false);
+      showToast("Đã cập nhật ảnh đại diện.", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Không thể tải ảnh đại diện.";
+      showToast(msg, "error");
+    } finally {
+      setAvatarLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileMsg(null);
     setProfileLoading(true);
     try {
-      const updated = await api.updateProfile({ display_name: displayName, bio });
+      const updated = await api.updateProfile({
+        display_name: displayName,
+        bio,
+        birth_date: birthDate ? birthDate : null,
+        show_birth_date: showBirthDate,
+      });
       onUpdateUser(updated);
       const msg = "Đã cập nhật thông tin hồ sơ thành công.";
       setProfileMsg({ type: "success", text: msg });
@@ -83,7 +118,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     }
     setPassLoading(true);
     try {
-      await api.updatePassword({ old_password: oldPassword, new_password: newPassword });
+      await api.updatePassword({
+        current_password: oldPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      });
       const msg = "Đổi mật khẩu thành công. Các phiên đăng nhập khác đã được thu hồi.";
       setPassMsg({ type: "success", text: msg });
       showToast("Đã cập nhật mật khẩu thành công.", "success");
@@ -101,13 +140,54 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
-      <div className="pb-4 border-b border-zinc-800">
-        <h1 className="text-lg font-bold font-mono text-zinc-100 tracking-tight">
-          CÀI ĐẶT HỒ SƠ & BẢO MẬT
-        </h1>
-        <p className="text-xs text-zinc-400 mt-0.5">
-          Quản lý định danh độc giả, mật khẩu và phiên làm việc
-        </p>
+      <div className="pb-4 border-b border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-bold font-mono text-zinc-100 tracking-tight">
+            CÀI ĐẶT HỒ SƠ & BẢO MẬT
+          </h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Quản lý định danh độc giả, mật khẩu và phiên làm việc
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
+            {currentUser.avatar_url && !avatarImgError ? (
+              <img
+                src={currentUser.avatar_url}
+                alt={currentUser.display_name}
+                onError={() => setAvatarImgError(true)}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-lg font-bold font-mono text-emerald-400">
+                {currentUser.display_name.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleAvatarUpload}
+              className="hidden"
+              aria-label="Chọn ảnh đại diện mới"
+            />
+            <button
+              type="button"
+              disabled={avatarLoading}
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-mono text-zinc-200 inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
+            >
+              <Camera className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{avatarLoading ? "Đang tải ảnh..." : "Đổi Ảnh Đại Diện"}</span>
+            </button>
+            <p className="text-[10px] font-mono text-zinc-500 mt-1">
+              @{currentUser.username} &bull; {currentUser.role.toUpperCase()}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Profile Form */}
@@ -171,6 +251,31 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               placeholder="Giới thiệu đôi nét về bản thân hoặc sở thích truyện..."
               className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-zinc-200 focus:outline-none focus:border-emerald-500 font-sans"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+            <div>
+              <label htmlFor="profile-birth-date" className="block text-zinc-400 mb-1 text-[11px]">
+                NGÀY SINH (TÙY CHỌN)
+              </label>
+              <input
+                id="profile-birth-date"
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-zinc-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer pb-2">
+              <input
+                type="checkbox"
+                checked={showBirthDate}
+                onChange={(e) => setShowBirthDate(e.target.checked)}
+                className="rounded border-zinc-700 text-emerald-500 bg-zinc-950 focus:ring-0"
+              />
+              <span>Hiển thị ngày sinh công khai</span>
+            </label>
           </div>
 
           <div className="flex justify-end">

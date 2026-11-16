@@ -159,9 +159,10 @@ class User(Base):
         JSONB,
         nullable=False,
         default=lambda: {
-            "reading_mode": "vertical",
-            "direction": "ltr",
-            "fit_mode": "width",
+            "reading_mode": "vertical_scroll",
+            "reading_direction": "ltr",
+            "fit_mode": "fit_width",
+            "background_color": "dark",
             "preload_pages": 3,
         },
     )

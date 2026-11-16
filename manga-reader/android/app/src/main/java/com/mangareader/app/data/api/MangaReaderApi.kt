@@ -37,7 +37,7 @@ interface MangaReaderApi {
         @Query("status") status: String? = null,
         @Query("content_rating") contentRating: String? = null,
         @Query("demographic") demographic: String? = null,
-        @Query("included_tags") includedTags: String? = null,
+        @Query("include_tags") includeTags: String? = null,
     ): Response<MangaListResponse>
 
     @GET("api/v1/mangas/search")
@@ -176,7 +176,10 @@ interface MangaReaderApi {
 
     // History & Stats
     @GET("api/v1/users/me/reading-history")
-    suspend fun getReadingHistory(): Response<List<ReadingHistoryItem>>
+    suspend fun getReadingHistory(
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 20,
+    ): Response<ReadingHistoryResponse>
 
     @GET("api/v1/users/{userId}/reading-analytics")
     suspend fun getReadingAnalytics(

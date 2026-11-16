@@ -21,7 +21,9 @@ function getStoredSearchView(): MangaViewVariant {
 export const SearchPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
-  const type = (searchParams.get("type") || "title") as "title" | "creator";
+  const rawType = searchParams.get("type");
+  const type: "all" | "title" | "creator" =
+    rawType === "title" || rawType === "creator" || rawType === "all" ? rawType : "all";
 
   const [inputVal, setInputVal] = useState(query);
   const [results, setResults] = useState<MangaItem[]>([]);
@@ -39,7 +41,7 @@ export const SearchPage: React.FC = () => {
     }
   };
 
-  const executeSearch = async (term: string, searchType: "title" | "creator") => {
+  const executeSearch = async (term: string, searchType: "all" | "title" | "creator") => {
     if (!term.trim()) {
       setResults([]);
       setSearched(false);
@@ -109,10 +111,10 @@ export const SearchPage: React.FC = () => {
               <button
                 type="button"
                 aria-label="Xóa từ khóa"
-                onClick={() => {
-                  setInputVal("");
-                  setSearchParams(type === "title" ? {} : { type });
-                }}
+                  onClick={() => {
+                    setInputVal("");
+                    setSearchParams(type === "all" ? {} : { type });
+                  }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -132,6 +134,7 @@ export const SearchPage: React.FC = () => {
           <div className="flex items-center justify-center gap-2 pt-1">
             {(
               [
+                { id: "all" as const, icon: Search, label: "Tất Cả (Truyện & Tác Giả)" },
                 { id: "title" as const, icon: BookOpen, label: "Tiêu Đề & Alt Titles" },
                 { id: "creator" as const, icon: UserCheck, label: "Tác Giả / Họa Sĩ" },
               ] as const

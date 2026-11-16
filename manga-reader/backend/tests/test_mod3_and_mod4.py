@@ -9,20 +9,29 @@ import pytest
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.main import app
-from app.models import AccountStatus, AdminAuditLog, Manga, User, UserRole
+from app.models import AccountStatus, AdminAuditLog, Manga, Report, User, UserRole
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, or_, select
 
 EXAMPLE_PACKAGE_PATH = Path(__file__).resolve().parent.parent / "contracts" / "manga_reader_example_v2.json"
 
 
 @pytest.fixture(autouse=True)
-async def _clean_mod3_mod4_data() -> None:
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(AdminAuditLog))
-        await db.execute(delete(User).where(User.email.like("%@test-mr4.com")))
-        await db.execute(delete(Manga).where(Manga.pool_manga_id.in_(["pm_1a2b3c4d5e6f", "pm_second_manga"])))
-        await db.commit()
+async def _clean_mod3_mod4_data():
+    async def _cleanup() -> None:
+        async with AsyncSessionLocal() as db:
+            test_uids = select(User.user_id).where(User.email.like("%@test-mr4.com"))
+            await db.execute(delete(AdminAuditLog).where(AdminAuditLog.admin_id.in_(test_uids)))
+            await db.execute(
+                delete(Report).where(or_(Report.reporter_id.in_(test_uids), Report.resolved_by.in_(test_uids)))
+            )
+            await db.execute(delete(User).where(User.email.like("%@test-mr4.com")))
+            await db.execute(delete(Manga).where(Manga.pool_manga_id.in_(["pm_1a2b3c4d5e6f", "pm_second_manga"])))
+            await db.commit()
+
+    await _cleanup()
+    yield
+    await _cleanup()
 
 
 async def _setup_users_and_mangas(client: AsyncClient) -> tuple[dict[str, str], dict[str, str], User]:

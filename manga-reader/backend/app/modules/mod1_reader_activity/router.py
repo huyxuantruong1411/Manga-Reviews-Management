@@ -10,8 +10,13 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin, get_current_user, get_optional_current_user
-from app.models import ReportStatus, ReportTargetType, User
+from app.core.security import (
+    get_current_admin,
+    get_current_moderator_or_admin,
+    get_current_user,
+    get_optional_current_user,
+)
+from app.models import AccountStatus, ReportStatus, ReportTargetType, User, UserRole
 from app.modules.mod1_reader_activity.schemas import (
     LockUserRequest,
     ResolveReportRequest,
@@ -87,13 +92,34 @@ async def get_user_reading_analytics(
     return await reader_activity_service.get_reading_analytics(db, user_id, current_user)
 
 
+@router.get("/admin/users", status_code=status.HTTP_200_OK)
+async def list_admin_users(
+    q: str | None = Query(default=None),
+    user_status: AccountStatus | None = Query(default=None, alias="status"),
+    role: UserRole | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _staff: User = Depends(get_current_moderator_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """List and search user accounts for governance & moderation console."""
+    return await reader_activity_service.list_users(
+        db=db,
+        q=q,
+        user_status=user_status,
+        role=role,
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.get("/admin/reports", status_code=status.HTTP_200_OK)
 async def list_reports(
     target_type: ReportTargetType | None = Query(default=None),
     report_status: ReportStatus | None = Query(default=None, alias="status"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    admin: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_moderator_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """List reports filtered by target_type and status (UC-1.6)."""
@@ -103,7 +129,7 @@ async def list_reports(
 @router.get("/admin/reports/{report_id}", status_code=status.HTTP_200_OK)
 async def get_report_detail(
     report_id: uuid.UUID,
-    admin: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_moderator_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Get report detail, auto-closing if target was already deleted (UC-1.6 & UC-1.7)."""
@@ -114,7 +140,7 @@ async def get_report_detail(
 async def resolve_report(
     report_id: uuid.UUID,
     payload: ResolveReportRequest,
-    admin: User = Depends(get_current_admin),
+    admin: User = Depends(get_current_moderator_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Atomically resolve a report and execute enforcement action in a single ACID transaction (UC-1.7)."""

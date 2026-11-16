@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.sanitization import strip_accents
+from app.core.storage import storage_service
 from app.models import (
     Creator,
     Manga,
@@ -35,6 +36,23 @@ from app.models import (
     UserChapterRead,
     UserReadingStatus,
 )
+
+
+def _serialize_rec_item(m: Manga, **extra: Any) -> dict[str, Any]:
+    """Serialize a recommended manga summary consistently across RecSys models."""
+    return {
+        "pool_manga_id": m.pool_manga_id,
+        "slug": m.slug,
+        "title": m.title,
+        "cover_url": storage_service.build_media_url(m.cover_bucket, m.cover_object_key),
+        "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+        "chapter_count": int(m.chapter_count),
+        "average_rating": float(m.average_rating),
+        "rating_count": int(m.rating_count),
+        "view_count": int(m.view_count),
+        **extra,
+    }
+
 
 STOP_WORDS = {
     "the",
@@ -284,17 +302,7 @@ async def get_content_based_recommendations(
         return {
             "model": "content_based",
             "is_fallback": False,
-            "items": [
-                {
-                    "pool_manga_id": m.pool_manga_id,
-                    "slug": m.slug,
-                    "title": m.title,
-                    "similarity_score": sim,
-                    "average_rating": float(m.average_rating),
-                    "view_count": m.view_count,
-                }
-                for sim, m in scored[:limit]
-            ],
+            "items": [_serialize_rec_item(m, similarity_score=sim) for sim, m in scored[:limit]],
         }
 
     # Cold-start Fallback (Activity Diagram UC-3.9): Top-rated public mangas sharing genre or overall top-rated
@@ -311,17 +319,7 @@ async def get_content_based_recommendations(
         "model": "content_based",
         "is_fallback": True,
         "fallback_reason": "No candidate exceeded minimum cosine similarity threshold (0.15)",
-        "items": [
-            {
-                "pool_manga_id": m.pool_manga_id,
-                "slug": m.slug,
-                "title": m.title,
-                "similarity_score": 0.0,
-                "average_rating": float(m.average_rating),
-                "view_count": m.view_count,
-            }
-            for m in fallback_candidates[:limit]
-        ],
+        "items": [_serialize_rec_item(m, similarity_score=0.0) for m in fallback_candidates[:limit]],
     }
 
 
@@ -396,17 +394,7 @@ async def get_item_based_recommendations(
         "model": "item_based",
         "is_cold_start_fallback": False,
         "interaction_user_count": len(users_for_target),
-        "items": [
-            {
-                "pool_manga_id": m.pool_manga_id,
-                "slug": m.slug,
-                "title": m.title,
-                "similarity_score": sim,
-                "average_rating": float(m.average_rating),
-                "view_count": m.view_count,
-            }
-            for sim, m in scored[:limit]
-        ],
+        "items": [_serialize_rec_item(m, similarity_score=sim) for sim, m in scored[:limit]],
     }
 
 
@@ -442,17 +430,7 @@ async def get_user_based_recommendations(
             "model": "user_based",
             "is_cold_start": True,
             "message": "Hãy đọc hoặc chấm điểm một vài bộ truyện để nhận gợi ý cá nhân hóa chính xác hơn!",
-            "items": [
-                {
-                    "pool_manga_id": m.pool_manga_id,
-                    "slug": m.slug,
-                    "title": m.title,
-                    "predicted_score": float(m.average_rating),
-                    "average_rating": float(m.average_rating),
-                    "view_count": m.view_count,
-                }
-                for m in all_public[:limit]
-            ],
+            "items": [_serialize_rec_item(m, predicted_score=float(m.average_rating)) for m in all_public[:limit]],
         }
 
     # UC-3.8 BR1: Exclude mangas the user already marked as 'completed' or 'dropped'
@@ -510,32 +488,12 @@ async def get_user_based_recommendations(
             "model": "user_based",
             "is_cold_start": False,
             "is_fallback": True,
-            "items": [
-                {
-                    "pool_manga_id": m.pool_manga_id,
-                    "slug": m.slug,
-                    "title": m.title,
-                    "predicted_score": float(m.average_rating),
-                    "average_rating": float(m.average_rating),
-                    "view_count": m.view_count,
-                }
-                for m in fallback[:limit]
-            ],
+            "items": [_serialize_rec_item(m, predicted_score=float(m.average_rating)) for m in fallback[:limit]],
         }
 
     predictions.sort(key=lambda x: (x[0], float(x[1].average_rating), x[1].view_count), reverse=True)
     return {
         "model": "user_based",
         "is_cold_start": False,
-        "items": [
-            {
-                "pool_manga_id": m.pool_manga_id,
-                "slug": m.slug,
-                "title": m.title,
-                "predicted_score": pred,
-                "average_rating": float(m.average_rating),
-                "view_count": m.view_count,
-            }
-            for pred, m in predictions[:limit]
-        ],
+        "items": [_serialize_rec_item(m, predicted_score=pred) for pred, m in predictions[:limit]],
     }

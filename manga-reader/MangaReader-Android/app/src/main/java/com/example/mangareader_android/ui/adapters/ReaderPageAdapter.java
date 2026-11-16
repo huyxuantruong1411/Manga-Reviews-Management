@@ -13,6 +13,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
+import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.model.ChapterModels.ChapterPageItem;
 import com.example.mangareader_android.databinding.ItemReaderPageBinding;
@@ -114,7 +115,7 @@ public class ReaderPageAdapter extends RecyclerView.Adapter<ReaderPageAdapter.Pa
             binding.imgReaderPage.setVisibility(View.VISIBLE);
 
             Glide.with(itemView.getContext())
-                    .load(page.image_url)
+                    .load(MangaReaderApp.resolveMediaUrl(page.image_url))
                     .placeholder(R.color.black)
                     .transition(DrawableTransitionOptions.withCrossFade(150))
                     .listener(new RequestListener<Drawable>() {

@@ -147,7 +147,10 @@ class CommentService:
         manga = await db.get(Manga, manga_id)
         if manga is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bộ truyện.")
-        if manga.visibility_status == MangaVisibilityStatus.hidden and viewer.role != UserRole.admin:
+        if manga.visibility_status == MangaVisibilityStatus.hidden and viewer.role not in (
+            UserRole.admin,
+            UserRole.moderator,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Truyện hiện đang tạm ẩn và không thể bình luận.",
@@ -267,7 +270,7 @@ class CommentService:
         if comment is None or comment.is_deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bình luận.")
 
-        is_admin = viewer.role == UserRole.admin
+        is_admin = viewer.role in (UserRole.admin, UserRole.moderator)
         is_author = comment.user_id == viewer.user_id
 
         if not is_admin and not is_author:
@@ -520,7 +523,7 @@ class CommentService:
         if comment is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bình luận.")
 
-        is_admin = viewer.role == UserRole.admin
+        is_admin = viewer.role in (UserRole.admin, UserRole.moderator)
         is_author = comment.user_id == viewer.user_id
         if not is_admin and not is_author:
             raise HTTPException(

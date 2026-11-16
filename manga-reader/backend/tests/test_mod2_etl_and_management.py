@@ -29,12 +29,18 @@ EXAMPLE_PACKAGE_PATH = Path(__file__).resolve().parent.parent / "contracts" / "m
 
 
 @pytest.fixture(autouse=True)
-async def _clean_mod2_data() -> None:
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(AdminAuditLog))
-        await db.execute(delete(User).where(User.email.like("%@test-mr3.com")))
-        await db.execute(delete(Manga).where(Manga.pool_manga_id.in_(["pm_1a2b3c4d5e6f", "pm_test_sync_lock"])))
-        await db.commit()
+async def _clean_mod2_data():
+    async def _cleanup() -> None:
+        async with AsyncSessionLocal() as db:
+            test_uids = select(User.user_id).where(User.email.like("%@test-mr3.com"))
+            await db.execute(delete(AdminAuditLog).where(AdminAuditLog.admin_id.in_(test_uids)))
+            await db.execute(delete(User).where(User.email.like("%@test-mr3.com")))
+            await db.execute(delete(Manga).where(Manga.pool_manga_id.in_(["pm_1a2b3c4d5e6f", "pm_test_sync_lock"])))
+            await db.commit()
+
+    await _cleanup()
+    yield
+    await _cleanup()
 
 
 async def _get_admin_headers(client: AsyncClient) -> dict[str, str]:

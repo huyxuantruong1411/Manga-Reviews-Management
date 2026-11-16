@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.mangareader.app.MangaReaderApplication
 import com.mangareader.app.data.model.MangaItem
 import com.mangareader.app.ui.theme.*
 
@@ -44,7 +45,7 @@ fun MangaGridCard(
                 .background(DarkSurfaceElevated)
         ) {
             AsyncImage(
-                model = manga.cover_url,
+                model = MangaReaderApplication.resolveMediaUrl(manga.cover_url),
                 contentDescription = manga.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

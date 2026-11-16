@@ -52,6 +52,23 @@ def _parse_optional_uuid(val: str | None) -> uuid.UUID | None:
         return None
 
 
+async def _resolve_unique_slug(
+    db: AsyncSession,
+    model: type[Manga] | type[Creator],
+    id_column: Any,
+    owner_id: str,
+    candidate_slug: str,
+) -> str:
+    """Disambiguate duplicate slugs across distinct pool mangas/creators during ETL."""
+    conflict = (
+        await db.execute(select(id_column).where(model.slug == candidate_slug, id_column != owner_id))
+    ).scalar_one_or_none()
+    if conflict is None:
+        return candidate_slug
+    suffix = owner_id.split("-")[-1][-6:]
+    return f"{candidate_slug[:180]}-{suffix}"
+
+
 class MangaManagementService:
     """Domain service for Module 2 use cases (UC-2.1 -> UC-2.5)."""
 
@@ -323,6 +340,9 @@ class MangaManagementService:
             )
 
         manga = (await db.execute(select(Manga).where(Manga.pool_manga_id == m_dto.pool_manga_id))).scalar_one_or_none()
+        resolved_manga_slug = await _resolve_unique_slug(
+            db, Manga, Manga.pool_manga_id, m_dto.pool_manga_id, m_dto.slug
+        )
 
         pc = m_dto.primary_cover
         links_json = [{"site": lnk.site, "url": lnk.url} for lnk in m_dto.links]
@@ -330,7 +350,7 @@ class MangaManagementService:
         if manga is None:
             manga = Manga(
                 pool_manga_id=m_dto.pool_manga_id,
-                slug=m_dto.slug,
+                slug=resolved_manga_slug,
                 source_manga_id=m_dto.source_manga_id,
                 mangadex_id=_parse_optional_uuid(m_dto.mangadex_id),
                 title=m_dto.title,
@@ -367,7 +387,7 @@ class MangaManagementService:
             )
             db.add(manga)
         else:
-            manga.slug = m_dto.slug
+            manga.slug = resolved_manga_slug
             manga.source_manga_id = m_dto.source_manga_id
             manga.mangadex_id = _parse_optional_uuid(m_dto.mangadex_id)
             manga.title = m_dto.title
@@ -439,10 +459,13 @@ class MangaManagementService:
             creator = (
                 await db.execute(select(Creator).where(Creator.creator_id == cr_dto.creator_id))
             ).scalar_one_or_none()
+            resolved_creator_slug = await _resolve_unique_slug(
+                db, Creator, Creator.creator_id, cr_dto.creator_id, cr_dto.slug
+            )
             if creator is None:
                 creator = Creator(
                     creator_id=cr_dto.creator_id,
-                    slug=cr_dto.slug,
+                    slug=resolved_creator_slug,
                     name=cr_dto.name,
                     mangadex_id=_parse_optional_uuid(cr_dto.mangadex_id),
                     biography=cr_dto.biography,
@@ -450,7 +473,7 @@ class MangaManagementService:
                 )
                 db.add(creator)
             else:
-                creator.slug = cr_dto.slug
+                creator.slug = resolved_creator_slug
                 creator.name = cr_dto.name
                 creator.biography = cr_dto.biography
                 creator.links = cr_dto.links

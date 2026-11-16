@@ -130,7 +130,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="DWELL TIME"
+                    android:text="LAST 7 DAYS"
                     android:textColor="@color/text_muted"
                     android:textSize="10sp"
                     android:textStyle="bold" />
@@ -140,7 +140,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="0.0m"
+                    android:text="0 CH"
                     android:textColor="@color/accent_emerald"
                     android:textSize="22sp"
                     android:textStyle="bold" />
@@ -159,7 +159,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="STREAK"
+                    android:text="AVG SCORE GIVEN"
                     android:textColor="@color/text_muted"
                     android:textSize="10sp"
                     android:textStyle="bold" />
@@ -169,7 +169,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="0 DAYS"
+                    android:text="-"
                     android:textColor="@color/accent_amber"
                     android:textSize="22sp"
                     android:textStyle="bold" />

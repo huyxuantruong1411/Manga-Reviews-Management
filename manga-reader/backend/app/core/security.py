@@ -184,6 +184,18 @@ async def get_current_admin(
     return user
 
 
+async def get_current_moderator_or_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Require an authenticated moderator or admin role."""
+    if user.role not in (UserRole.admin, UserRole.moderator):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Điều phối viên hoặc Quản trị viên mới có quyền thực hiện thao tác này.",
+        )
+    return user
+
+
 def get_client_ip(request: Request) -> str:
     """Extract client IP address from request headers or client socket."""
     forwarded = request.headers.get("x-forwarded-for")

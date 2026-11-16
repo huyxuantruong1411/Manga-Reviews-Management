@@ -59,15 +59,44 @@ class StorageService:
                 self.client.make_bucket(bucket)
 
     def build_media_url(self, bucket: str | None, object_key: str | None) -> str | None:
-        """Build public/CDN URL for a Zero-Copy media pointer (UC-4.3 NFR1)."""
+        """Build public/CDN URL or backend proxy URL for a Zero-Copy media pointer (UC-4.3 NFR1)."""
         if not bucket or not object_key:
             return None
         clean_key = object_key.lstrip("/")
         if settings.MINIO_PUBLIC_BASE_URL:
             base = settings.MINIO_PUBLIC_BASE_URL.rstrip("/")
             return f"{base}/{bucket}/{clean_key}"
-        scheme = "https" if settings.MINIO_SECURE else "http"
-        return f"{scheme}://{settings.MINIO_ENDPOINT}/{bucket}/{clean_key}"
+        return f"/api/v1/media/{bucket}/{clean_key}"
+
+    def is_public_bucket(self, bucket: str) -> bool:
+        """Return True if the bucket is safe for public media proxy reads."""
+        return bucket in {settings.MINIO_BUCKET_LIBRARY, settings.MINIO_BUCKET_AVATARS}
+
+    def read_public_object(self, bucket: str, object_key: str) -> tuple[bytes, str | None] | None:
+        """Fetch raw bytes and declared content type from primary or source MinIO bucket."""
+        clean_key = object_key.lstrip("/")
+        clients = [self.client]
+        if (
+            bucket == settings.MINIO_BUCKET_LIBRARY
+            and settings.SOURCE_MINIO_ENDPOINT
+            and settings.SOURCE_MINIO_ENDPOINT != settings.MINIO_ENDPOINT
+        ):
+            clients.append(self.source_client)
+
+        for cli in clients:
+            resp = None
+            try:
+                resp = cli.get_object(bucket, clean_key)
+                data = resp.read()
+                content_type = resp.headers.get("Content-Type") if resp.headers else None
+                return data, content_type
+            except Exception:
+                continue
+            finally:
+                if resp is not None:
+                    resp.close()
+                    resp.release_conn()
+        return None
 
     def object_exists(self, bucket: str, object_key: str) -> bool:
         """Check if object exists in reader MinIO storage."""

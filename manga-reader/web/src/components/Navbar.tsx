@@ -177,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth, currentUser, onLogou
                 );
               })}
 
-              {currentUser?.role === "admin" && (
+              {(currentUser?.role === "admin" || currentUser?.role === "moderator") && (
                 <Link
                   to="/admin"
                   className={`relative px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
@@ -440,7 +440,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth, currentUser, onLogou
                   <BarChart2 className="w-4 h-4 text-purple-400" />
                   <span>Thống Kê Thói Quen</span>
                 </Link>
-                {currentUser?.role === "admin" && (
+                {(currentUser?.role === "admin" || currentUser?.role === "moderator") && (
                   <Link
                     to="/admin"
                     onClick={() => setMobileMenuOpen(false)}

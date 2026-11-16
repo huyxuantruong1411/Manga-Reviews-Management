@@ -186,12 +186,18 @@ public class ListsFragment extends Fragment implements UiMotionUtils.OnTabResele
 
         String sourceId = currentLists.get(0).list_id;
         String targetId = currentLists.get(1).list_id;
+        String mergedName = currentLists.get(0).name + " + " + currentLists.get(1).name;
 
         UiMotionUtils.dialogBuilder(requireContext())
                 .setTitle("Merge Lists (UC-7.6)")
                 .setMessage("Merge '" + currentLists.get(0).name + "' into '" + currentLists.get(1).name + "' with automatic deduplication?")
                 .setPositiveButton("Merge & Deduplicate", (dialog, which) ->
-                        RetrofitClient.getApi().mergeReadingLists(new MergeListsRequest(sourceId, targetId, true))
+                        RetrofitClient.getApi().mergeReadingLists(new MergeListsRequest(
+                                        java.util.Arrays.asList(sourceId, targetId),
+                                        mergedName,
+                                        "Merged via Android app",
+                                        true,
+                                        true))
                                 .enqueue(new Callback<ReadingListDetail>() {
                                     @Override
                                     public void onResponse(@NonNull Call<ReadingListDetail> call, @NonNull Response<ReadingListDetail> response) {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,7 @@ async def list_mangas(
     page: int = Query(default=1, ge=1),
     sort_by: str = Query(default="latest_update", pattern=r"^(latest_update|views|rating|title_asc)$"),
     include_tags: str | None = Query(default=None),
+    included_tags: str | None = Query(default=None),
     include_mode: str = Query(default="AND", pattern=r"^(AND|OR|and|or)$"),
     exclude_tags: str | None = Query(default=None),
     demographic: PublicationDemographic | None = Query(default=None),
@@ -42,7 +43,7 @@ async def list_mangas(
         caller=caller,
         page=page,
         sort_by=sort_by,
-        include_tags=include_tags,
+        include_tags=include_tags or included_tags,
         include_mode=include_mode,
         exclude_tags=exclude_tags,
         demographic=demographic,
@@ -56,20 +57,22 @@ async def list_mangas(
 @router.get("/mangas/search", status_code=status.HTTP_200_OK)
 async def search_mangas(
     q: str = Query(..., min_length=1),
+    search_type: Literal["title", "creator", "all"] = Query(default="all"),
     limit: int = Query(default=24, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Search mangas by title & alt_titles with accent-insensitive fuzzy matching (UC-3.3)."""
-    return await manga_discovery_service.search_mangas(db, q, limit=limit)
+    """Search mangas by title, alt_titles, and/or creator name with accent-insensitive fuzzy matching (UC-3.3)."""
+    return await manga_discovery_service.search_mangas(db, q, limit=limit, search_type=search_type)
 
 
 @router.get("/mangas/autocomplete", status_code=status.HTTP_200_OK)
 async def autocomplete_mangas(
     q: str = Query(..., min_length=1),
+    search_type: Literal["title", "creator", "all"] = Query(default="all"),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Fast autocomplete returning up to 8 matches (UC-3.3)."""
-    return await manga_discovery_service.search_mangas(db, q, limit=8)
+    return await manga_discovery_service.search_mangas(db, q, limit=8, search_type=search_type)
 
 
 @router.get("/creators", status_code=status.HTTP_200_OK)

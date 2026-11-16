@@ -22,9 +22,11 @@ data class CreateReadingListRequest(
 )
 
 data class MergeListsRequest(
-    val source_list_id: String,
-    val target_list_id: String,
-    val delete_source_after_merge: Boolean = false,
+    val source_list_ids: List<String>,
+    val new_list_name: String,
+    val description: String = "",
+    val delete_source_lists: Boolean = false,
+    val confirm_empty: Boolean = true,
 )
 
 data class BatchAddMangaRequest(
@@ -33,32 +35,67 @@ data class BatchAddMangaRequest(
     val new_list_name: String? = null,
 )
 
+data class ListItemManga(
+    val pool_manga_id: String,
+    val slug: String,
+    val title: String,
+    val status: String = "ongoing",
+    val content_rating: String = "safe",
+    val cover_url: String? = null,
+    val chapter_count: Int = 0,
+    val average_rating: Double = 0.0,
+    val is_hidden: Boolean = false,
+    val tags: List<String> = emptyList(),
+    val added_at: String = "",
+)
+
 data class ListItemsResponse(
     val list_id: String,
     val total: Int,
     val available_tags_in_list: List<String> = emptyList(),
-    val items: List<MangaItem> = emptyList(),
+    val items: List<ListItemManga> = emptyList(),
 )
 
 data class ReadingHistoryItem(
-    val history_id: String,
     val manga_id: String,
-    val manga_title: String,
-    val manga_slug: String,
+    val slug: String = "",
+    val title: String = "",
     val cover_url: String? = null,
-    val chapter_id: String,
-    val chapter_number: String,
-    val last_read_page: Int,
-    val is_completed: Boolean,
-    val updated_at: String,
+    val is_hidden: Boolean = false,
+    val last_read_chapter_id: String? = null,
+    val last_read_chapter_number: String? = null,
+    val last_read_page_number: Int = 1,
+    val is_chapter_completed: Boolean = false,
+    val last_read_at: String = "",
+    val read_chapter_ids: List<String> = emptyList(),
+)
+
+data class ReadingHistoryResponse(
+    val items: List<ReadingHistoryItem> = emptyList(),
+    val page: Int = 1,
+    val page_size: Int = 20,
+)
+
+data class TopTagStat(
+    val slug: String,
+    val name: String,
+    val manga_count: Int = 0,
+)
+
+data class ReadingFrequencyStats(
+    val last_7_days: Int = 0,
+    val last_30_days: Int = 0,
 )
 
 data class ReadingAnalyticsResponse(
     val user_id: String,
-    val total_chapters_read: Int = 0,
+    val is_empty: Boolean = false,
     val total_mangas_read: Int = 0,
-    val total_dwell_minutes: Double = 0.0,
-    val preferred_tags: List<String> = emptyList(),
-    val reading_streak_days: Int = 0,
+    val total_chapters_read: Int = 0,
+    val top_tags: List<TopTagStat> = emptyList(),
+    val reading_frequency: ReadingFrequencyStats = ReadingFrequencyStats(),
+    val rating_distribution: Map<String, Int> = emptyMap(),
+    val average_score_given: Double? = null,
+    val total_ratings_given: Int = 0,
 )
 

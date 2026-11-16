@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.mangareader.app.MangaReaderApplication
 import com.mangareader.app.data.api.RetrofitClient
 import com.mangareader.app.data.model.ChapterPagesResponse
 import com.mangareader.app.data.model.RecordProgressRequest
@@ -36,6 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ReaderScreen(
     chapterId: String,
+    initialPage: Int = 1,
     onNavigateChapter: (String) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -49,9 +51,10 @@ fun ReaderScreen(
     var showOverlay by remember { mutableStateOf(false) }
 
     // Reading settings
-    var readingMode by remember { mutableStateOf("vertical_scroll") } // "vertical_scroll" or "single_page"
-    var currentPageIndex by remember { mutableStateOf(0) }
+    var readingMode by remember { mutableStateOf("vertical_scroll") } // "vertical_scroll", "single_page", or "double_page"
+    var currentPageIndex by remember { mutableStateOf((initialPage - 1).coerceAtLeast(0)) }
     var dwellSeconds by remember { mutableStateOf(0) }
+    var initialJumpDone by remember(chapterId, initialPage) { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
 
@@ -87,7 +90,11 @@ fun ReaderScreen(
             try {
                 val res = RetrofitClient.api.getChapterPages(chapterId)
                 if (res.isSuccessful && res.body() != null) {
-                    chapterData = res.body()!!
+                    val body = res.body()!!
+                    chapterData = body
+                    readingMode = body.reader_settings.reading_mode
+                    val targetIdx = (initialPage - 1).coerceIn(0, (body.pages.size - 1).coerceAtLeast(0))
+                    currentPageIndex = targetIdx
                 } else {
                     errorMessage = res.errorBody()?.string() ?: "Failed to load chapter pages"
                 }
@@ -103,11 +110,24 @@ fun ReaderScreen(
         loadChapter()
     }
 
+    LaunchedEffect(chapterData?.pool_chapter_id, readingMode, initialPage) {
+        val data = chapterData ?: return@LaunchedEffect
+        if (!initialJumpDone && data.pages.isNotEmpty()) {
+            val targetIdx = (initialPage - 1).coerceIn(0, data.pages.size - 1)
+            currentPageIndex = targetIdx
+            if (readingMode == "vertical_scroll" && targetIdx > 0) {
+                listState.scrollToItem(targetIdx)
+            }
+            initialJumpDone = true
+        }
+    }
+
     // Sync progress on scroll in vertical mode
-    LaunchedEffect(listState.firstVisibleItemIndex) {
-        val pageNumber = listState.firstVisibleItemIndex + 1
-        val total = chapterData?.page_count ?: 1
-        val isCompleted = pageNumber >= total
+    LaunchedEffect(listState.firstVisibleItemIndex, chapterData?.pool_chapter_id, readingMode) {
+        val data = chapterData ?: return@LaunchedEffect
+        if (readingMode != "vertical_scroll") return@LaunchedEffect
+        val pageNumber = (listState.firstVisibleItemIndex + 1).coerceIn(1, data.page_count.coerceAtLeast(1))
+        val isCompleted = pageNumber >= data.page_count
         recordProgress(pageNumber, isCompleted)
     }
 
@@ -145,7 +165,7 @@ fun ReaderScreen(
                                 .background(Color.Black)
                         ) {
                             AsyncImage(
-                                model = page.image_url,
+                                model = MangaReaderApplication.resolveMediaUrl(page.image_url),
                                 contentDescription = "Page ${page.page_number}",
                                 contentScale = ContentScale.FillWidth,
                                 modifier = Modifier.fillMaxWidth()
@@ -207,7 +227,7 @@ fun ReaderScreen(
                     val currentPage = pages[currentPageIndex]
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         AsyncImage(
-                            model = currentPage.image_url,
+                            model = MangaReaderApplication.resolveMediaUrl(currentPage.image_url),
                             contentDescription = "Page ${currentPage.page_number}",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize()

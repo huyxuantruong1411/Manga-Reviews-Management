@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { LayoutGroup } from "motion/react";
 import { Clock, Star, Play, RotateCcw } from "lucide-react";
 import { api, UserProfile } from "@/api/client";
+import { CoverImage } from "@/components/CoverImage";
 import { AnimatedTabPanel, AnimatedTabPill } from "@/components/MotionPrimitives";
 
 interface HistoryPageProps {
@@ -11,15 +12,21 @@ interface HistoryPageProps {
 }
 
 interface ReadingHistoryItem {
-  pool_manga_id: string;
-  manga_title?: string;
-  last_read_chapter_id?: string;
-  last_read_chapter_number?: string | number;
+  manga_id: string;
+  slug?: string;
+  title: string;
+  cover_url?: string | null;
+  is_hidden?: boolean;
+  last_read_chapter_id?: string | null;
+  last_read_chapter_number?: string | number | null;
   last_read_page_number?: number;
+  is_chapter_completed?: boolean;
   last_read_at: string;
+  read_chapter_ids?: string[];
 }
 
 interface RatingHistoryItem {
+  pool_manga_id?: string;
   manga_title: string;
   action: string;
   new_score?: number;
@@ -142,40 +149,57 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ currentUser, onOpenAut
               </div>
             ) : (
               <div className="space-y-2">
-                {readingItems.map((item, idx) => (
-                  <div
-                    key={`${item.pool_manga_id}-${idx}`}
-                    className="p-3 rounded bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <Link
-                        to={`/mangas/${item.pool_manga_id}`}
-                        className="font-bold text-zinc-100 hover:text-emerald-400 font-mono block truncate"
-                      >
-                        {item.manga_title || item.pool_manga_id}
-                      </Link>
-                      <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
-                        Đọc đến chương: {item.last_read_chapter_number || "N/A"} &bull; Trang{" "}
-                        {item.last_read_page_number}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-[10px] font-mono text-zinc-400 hidden sm:inline">
-                        {new Date(item.last_read_at).toLocaleDateString("vi-VN")}
-                      </span>
-                      {item.last_read_chapter_id && (
-                        <Link
-                          to={`/read/${item.last_read_chapter_id}`}
-                          className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-bold text-xs flex items-center gap-1 transition-colors"
-                        >
-                          <Play className="w-3 h-3 fill-current" />
-                          <span>Đọc tiếp</span>
+                {readingItems.map((item, idx) => {
+                  const mangaHref = `/mangas/${item.slug || item.manga_id}`;
+                  const resumePage = item.last_read_page_number && item.last_read_page_number > 1 ? `?page=${item.last_read_page_number}` : "";
+                  return (
+                    <div
+                      key={`${item.manga_id}-${idx}`}
+                      className="p-3 rounded bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Link to={mangaHref} className="shrink-0">
+                          <CoverImage
+                            src={item.cover_url}
+                            alt={item.title}
+                            containerClassName="w-11 aspect-[3/4] rounded border border-zinc-800"
+                            className="w-full h-full object-cover"
+                          />
                         </Link>
-                      )}
+                        <div className="min-w-0">
+                          <Link
+                            to={mangaHref}
+                            className="font-bold text-zinc-100 hover:text-emerald-400 font-mono block truncate"
+                          >
+                            {item.title}
+                          </Link>
+                          <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
+                            Đọc đến chương: {item.last_read_chapter_number || "N/A"} &bull; Trang{" "}
+                            {item.last_read_page_number || 1}
+                            {item.read_chapter_ids && item.read_chapter_ids.length > 0 && (
+                              <span className="text-zinc-500"> &bull; Đã đọc {item.read_chapter_ids.length} chương</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[10px] font-mono text-zinc-400 hidden sm:inline">
+                          {new Date(item.last_read_at).toLocaleDateString("vi-VN")}
+                        </span>
+                        {item.last_read_chapter_id && (
+                          <Link
+                            to={`/read/${item.last_read_chapter_id}${resumePage}`}
+                            className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono font-bold text-xs flex items-center gap-1 transition-colors"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Đọc tiếp</span>
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : ratingItems.length === 0 ? (

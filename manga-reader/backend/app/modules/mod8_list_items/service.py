@@ -12,7 +12,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.sanitization import sanitize_plain_text, strip_accents
+from app.core.sanitization import pick_localized_text, sanitize_plain_text, strip_accents
 from app.core.storage import storage_service
 from app.models import (
     Creator,
@@ -313,9 +313,7 @@ class ListItemsService:
         tag_dist = [
             TagDistributionItem(
                 slug=slug,
-                name=(name_json.get("en") or next(iter(name_json.values()), slug))
-                if isinstance(name_json, dict)
-                else str(name_json),
+                name=pick_localized_text(name_json, slug),
                 count=int(cnt),
                 percentage=round((int(cnt) / total_mangas) * 100.0, 1),
             )

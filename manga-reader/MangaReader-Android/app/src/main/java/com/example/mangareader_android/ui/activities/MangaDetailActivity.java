@@ -5,9 +5,11 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -79,7 +81,10 @@ public class MangaDetailActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerViews() {
-        chapterAdapter = new ChapterAdapter(chapter -> openReaderChapter(chapter.poolChapterId));
+        chapterAdapter = new ChapterAdapter(chapter -> {
+            int startPage = chapter.last_read_page_number != null ? Math.max(1, chapter.last_read_page_number) : 1;
+            openReaderChapter(chapter.poolChapterId, startPage);
+        });
         binding.rvDetailChapters.setLayoutManager(new LinearLayoutManager(this));
         binding.rvDetailChapters.setAdapter(chapterAdapter);
 
@@ -123,8 +128,13 @@ public class MangaDetailActivity extends AppCompatActivity {
     }
 
     private void openReaderChapter(String chapterId) {
+        openReaderChapter(chapterId, 1);
+    }
+
+    private void openReaderChapter(String chapterId, int initialPage) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra(ReaderActivity.EXTRA_CHAPTER_ID, chapterId);
+        intent.putExtra(ReaderActivity.EXTRA_INITIAL_PAGE, Math.max(1, initialPage));
         startActivity(intent);
         UiMotionUtils.applyActivityOpenTransition(this);
     }
@@ -235,7 +245,7 @@ public class MangaDetailActivity extends AppCompatActivity {
         binding.tvSynopsisToggle.setText("EXPAND ▾");
 
         Glide.with(this)
-                .load(manga.cover_url)
+                .load(MangaReaderApp.resolveMediaUrl(manga.cover_url))
                 .placeholder(R.drawable.bg_cover_placeholder)
                 .error(R.drawable.bg_cover_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade(180))
@@ -321,16 +331,16 @@ public class MangaDetailActivity extends AppCompatActivity {
             @Override
             public void onResponse(@NonNull Call<ReadPointerResponse> call, @NonNull Response<ReadPointerResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    openReaderChapter(response.body().chapter_id);
+                    openReaderChapter(response.body().chapter_id, Math.max(1, response.body().page_number));
                 } else if (!rawChapters.isEmpty()) {
-                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId);
+                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId, 1);
                 }
             }
 
             @Override
             public void onFailure(@NonNull Call<ReadPointerResponse> call, @NonNull Throwable t) {
                 if (!rawChapters.isEmpty()) {
-                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId);
+                    openReaderChapter(rawChapters.get(rawChapters.size() - 1).poolChapterId, 1);
                 }
             }
         });
@@ -342,7 +352,7 @@ public class MangaDetailActivity extends AppCompatActivity {
             @Override
             public void onResponse(@NonNull Call<ReadPointerResponse> call, @NonNull Response<ReadPointerResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    openReaderChapter(response.body().chapter_id);
+                    openReaderChapter(response.body().chapter_id, Math.max(1, response.body().page_number));
                 } else {
                     handleReadFirst();
                 }
@@ -419,32 +429,45 @@ public class MangaDetailActivity extends AppCompatActivity {
             return;
         }
 
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(44, 24, 44, 16);
+
+        final Spinner spCategory = new Spinner(this);
+        final String[] codes = {"broken_images", "wrong_chapter_order", "inappropriate_content", "copyright", "other"};
+        ArrayAdapter<String> codeAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, codes);
+        spCategory.setAdapter(codeAdapter);
+        container.addView(spCategory);
+
         final EditText etReason = new EditText(this);
-        etReason.setHint("Violation reason (e.g. copyright, broken images)...");
+        etReason.setHint("Optional details...");
         etReason.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-        etReason.setPadding(44, 28, 44, 24);
+        container.addView(etReason);
 
         UiMotionUtils.dialogBuilder(this)
                 .setTitle("Report Manga Content")
-                .setView(etReason)
+                .setView(container)
                 .setPositiveButton("Report", (dialog, which) -> {
-                    String reason = etReason.getText().toString().trim();
-                    if (!reason.isEmpty()) {
-                        RetrofitClient.getApi().reportManga(currentManga.poolMangaId, new ReportMangaRequest(reason, null))
-                                .enqueue(new Callback<Map<String, Object>>() {
-                                    @Override
-                                    public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                                        if (response.isSuccessful()) {
-                                            UiMotionUtils.showInfo(binding.getRoot(), "Report queued for administrator review.");
-                                        }
+                    String reasonCode = codes[Math.max(0, spCategory.getSelectedItemPosition())];
+                    String desc = etReason.getText().toString().trim();
+                    RetrofitClient.getApi().reportManga(
+                                    currentManga.poolMangaId,
+                                    new ReportMangaRequest(reasonCode, desc.isEmpty() ? null : desc))
+                            .enqueue(new Callback<Map<String, Object>>() {
+                                @Override
+                                public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                    if (response.isSuccessful()) {
+                                        UiMotionUtils.showInfo(binding.getRoot(), "Report queued for administrator review.");
+                                    } else {
+                                        UiMotionUtils.showError(binding.getRoot(), "Report failed (" + response.code() + ")", null, null);
                                     }
+                                }
 
-                                    @Override
-                                    public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
-                                        UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
-                                    }
-                                });
-                    }
+                                @Override
+                                public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                    UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
+                                }
+                            });
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -456,32 +479,45 @@ public class MangaDetailActivity extends AppCompatActivity {
             return;
         }
 
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(44, 24, 44, 16);
+
+        final Spinner spCategory = new Spinner(this);
+        final String[] codes = {"unmarked_spoiler", "spam", "harassment", "hate_speech", "other"};
+        ArrayAdapter<String> codeAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, codes);
+        spCategory.setAdapter(codeAdapter);
+        container.addView(spCategory);
+
         final EditText etReason = new EditText(this);
-        etReason.setHint("Reason (harassment, unmasked spoiler)...");
+        etReason.setHint("Optional details...");
         etReason.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-        etReason.setPadding(44, 28, 44, 24);
+        container.addView(etReason);
 
         UiMotionUtils.dialogBuilder(this)
                 .setTitle("Report Comment")
-                .setView(etReason)
+                .setView(container)
                 .setPositiveButton("Submit", (dialog, which) -> {
-                    String reason = etReason.getText().toString().trim();
-                    if (!reason.isEmpty()) {
-                        RetrofitClient.getApi().reportComment(comment.comment_id, new ReportCommentRequest(reason, null))
-                                .enqueue(new Callback<Map<String, Object>>() {
-                                    @Override
-                                    public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
-                                        if (response.isSuccessful()) {
-                                            UiMotionUtils.showInfo(binding.getRoot(), "Comment report submitted.");
-                                        }
+                    String reasonCode = codes[Math.max(0, spCategory.getSelectedItemPosition())];
+                    String desc = etReason.getText().toString().trim();
+                    RetrofitClient.getApi().reportComment(
+                                    comment.comment_id,
+                                    new ReportCommentRequest(reasonCode, desc.isEmpty() ? null : desc))
+                            .enqueue(new Callback<Map<String, Object>>() {
+                                @Override
+                                public void onResponse(@NonNull Call<Map<String, Object>> call, @NonNull Response<Map<String, Object>> response) {
+                                    if (response.isSuccessful()) {
+                                        UiMotionUtils.showInfo(binding.getRoot(), "Comment report submitted.");
+                                    } else {
+                                        UiMotionUtils.showError(binding.getRoot(), "Report failed (" + response.code() + ")", null, null);
                                     }
+                                }
 
-                                    @Override
-                                    public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
-                                        UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
-                                    }
-                                });
-                    }
+                                @Override
+                                public void onFailure(@NonNull Call<Map<String, Object>> call, @NonNull Throwable t) {
+                                    UiMotionUtils.showError(binding.getRoot(), "Network error submitting report", null, null);
+                                }
+                            });
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

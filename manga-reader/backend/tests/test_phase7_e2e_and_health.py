@@ -11,18 +11,24 @@ from app.core.security import hash_password
 from app.main import app
 from app.models import AccountStatus, AdminAuditLog, Manga, User, UserRole
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 EXAMPLE_PACKAGE_PATH = Path(__file__).resolve().parent.parent / "contracts" / "manga_reader_example_v2.json"
 
 
 @pytest.fixture(autouse=True)
-async def _clean_phase7_data() -> None:
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(AdminAuditLog))
-        await db.execute(delete(User).where(User.email.like("%@test-mr7.com")))
-        await db.execute(delete(Manga).where(Manga.pool_manga_id == "pm_1a2b3c4d5e6f"))
-        await db.commit()
+async def _clean_phase7_data():
+    async def _cleanup() -> None:
+        async with AsyncSessionLocal() as db:
+            test_uids = select(User.user_id).where(User.email.like("%@test-mr7.com"))
+            await db.execute(delete(AdminAuditLog).where(AdminAuditLog.admin_id.in_(test_uids)))
+            await db.execute(delete(User).where(User.email.like("%@test-mr7.com")))
+            await db.execute(delete(Manga).where(Manga.pool_manga_id == "pm_1a2b3c4d5e6f"))
+            await db.commit()
+
+    await _cleanup()
+    yield
+    await _cleanup()
 
 
 @pytest.mark.asyncio

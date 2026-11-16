@@ -4,15 +4,32 @@
 
 export interface UserProfile {
   user_id: string;
-  email: string;
+  email?: string;
   username: string;
   display_name: string;
-  role: "reader" | "admin";
+  role: "reader" | "moderator" | "admin";
   status: "active" | "locked" | "pending_verification";
   avatar_url?: string | null;
   bio?: string | null;
+  birth_date?: string | null;
+  show_birth_date?: boolean;
+  lock_reason?: string | null;
+  locked_until?: string | null;
   reader_settings?: Record<string, any>;
   created_at: string;
+}
+
+export interface TagItem {
+  slug: string;
+  group?: string;
+  name: string;
+}
+
+export interface CreatorRef {
+  creator_id: string;
+  slug?: string;
+  name: string;
+  role?: "author" | "artist" | string;
 }
 
 export interface AuthResponse {
@@ -37,10 +54,27 @@ export interface MangaItem {
   rating_count: number;
   view_count: number;
   is_hidden?: boolean;
-  tags?: string[];
+  tags?: Array<TagItem | string>;
+  creators?: CreatorRef[];
   authors?: Array<{ creator_id: string; name: string }>;
   artists?: Array<{ creator_id: string; name: string }>;
+  my_reading_status?: string | null;
+  my_rating?: number | null;
+  user_reading_status?: string | null;
+  user_rating?: number | null;
+  creator_roles?: string[];
   updated_at: string;
+}
+
+export interface CreatorDetail {
+  creator_id: string;
+  slug: string;
+  name: string;
+  mangadex_id?: string | null;
+  biography?: string | null;
+  links?: Record<string, string> | string[] | null;
+  works: MangaItem[];
+  total_works: number;
 }
 
 export interface ChapterItem {
@@ -118,15 +152,45 @@ export interface ReadingListDetail {
 
 export interface ReportItem {
   report_id: string;
-  reporter_id?: string | null;
-  target_type: "user" | "manga" | "comment";
-  target_id: string;
-  reason: string;
-  details?: string | null;
-  status: "pending" | "resolved" | "dismissed";
+  reporter_id: string;
+  target_type: "account" | "manga" | "comment";
+  target_account_id?: string | null;
+  target_manga_id?: string | null;
+  target_comment_id?: string | null;
+  reason_category: string;
+  description?: string | null;
+  status: "pending" | "resolved" | "ignored" | "closed";
   resolution_action?: string | null;
   created_at: string;
-  resolved_at?: string | null;
+}
+
+export interface ReportDetail {
+  report_id: string;
+  reporter_id: string;
+  reporter_total_reports: number;
+  target_type: "account" | "manga" | "comment";
+  target_exists: boolean;
+  target_snapshot?: Record<string, any> | null;
+  reason_category: string;
+  description?: string | null;
+  status: "pending" | "resolved" | "ignored" | "closed";
+  available_actions: string[];
+  resolution_action?: string | null;
+  resolution_note?: string | null;
+  created_at: string;
+}
+
+export interface AdminUserItem {
+  user_id: string;
+  email: string;
+  username: string;
+  display_name: string;
+  avatar_url?: string | null;
+  role: "reader" | "moderator" | "admin";
+  status: "active" | "locked" | "pending_verification";
+  lock_reason?: string | null;
+  locked_until?: string | null;
+  created_at: string;
 }
 
 export interface EtlPackageItem {
@@ -161,6 +225,23 @@ export interface EtlSourcesResponse {
 
 const TOKEN_KEY = "mr_access_token";
 const USER_KEY = "mr_user_profile";
+
+export function pickLocalizedText(value: unknown, fallback = ""): string {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") return value.trim() || fallback;
+  if (typeof value === "object") {
+    const map = value as Record<string, unknown>;
+    for (const lang of ["en", "vi", "ja", "ja-ro"]) {
+      const cand = map[lang];
+      if (typeof cand === "string" && cand.trim()) return cand.trim();
+    }
+    for (const cand of Object.values(map)) {
+      if (typeof cand === "string" && cand.trim()) return cand.trim();
+    }
+    return fallback;
+  }
+  return String(value);
+}
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -258,7 +339,22 @@ export const api = {
   getMe: () => request<UserProfile>("/api/v1/users/me"),
   getUserDetail: (userId: string) => request<UserProfile>(`/api/v1/users/${userId}`),
   updateProfile: (body: any) => request<UserProfile>("/api/v1/users/me/profile", { method: "PATCH", body: JSON.stringify(body) }),
-  updatePassword: (body: any) => request<any>("/api/v1/users/me/password", { method: "PUT", body: JSON.stringify(body) }),
+  updatePassword: (body: { current_password: string; new_password: string; confirm_password: string }) =>
+    request<any>("/api/v1/users/me/password", { method: "PUT", body: JSON.stringify(body) }),
+  uploadAvatar: (file: File, crop?: { left: number; top: number; right: number; bottom: number }) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (crop) {
+      formData.append("crop_left", String(crop.left));
+      formData.append("crop_top", String(crop.top));
+      formData.append("crop_right", String(crop.right));
+      formData.append("crop_bottom", String(crop.bottom));
+    }
+    return request<UserProfile>("/api/v1/users/me/avatar", {
+      method: "PUT",
+      body: formData,
+    });
+  },
 
   // Catalog & Search
   getMangas: (params: Record<string, any>) => {
@@ -268,12 +364,19 @@ export const api = {
     });
     return request<{ total: number; page: number; page_size: number; items: MangaItem[] }>(`/api/v1/mangas?${q.toString()}`);
   },
-  searchMangas: (q: string, type: "title" | "creator" = "title") =>
-    request<{ total: number; items: MangaItem[] }>(`/api/v1/mangas/search?q=${encodeURIComponent(q)}&search_type=${type}`),
-  autocomplete: (q: string) =>
-    request<{ items: Array<{ pool_manga_id: string; title: string; slug: string }> }>(`/api/v1/mangas/autocomplete?q=${encodeURIComponent(q)}`),
-  getMangaDetail: (idOrSlug: string) => request<MangaItem & { user_reading_status?: string; user_rating?: number }>(`/api/v1/mangas/${idOrSlug}`),
-  getCreatorDetail: (id: string) => request<any>(`/api/v1/creators/${id}`),
+  searchMangas: (q: string, type: "title" | "creator" | "all" = "all") =>
+    request<{ total: number; search_type?: string; items: MangaItem[] }>(`/api/v1/mangas/search?q=${encodeURIComponent(q)}&search_type=${type}`),
+  autocomplete: (q: string, type: "title" | "creator" | "all" = "all") =>
+    request<{ items: Array<{ pool_manga_id: string; title: string; slug: string }> }>(`/api/v1/mangas/autocomplete?q=${encodeURIComponent(q)}&search_type=${type}`),
+  getMangaDetail: (idOrSlug: string) => request<MangaItem>(`/api/v1/mangas/${idOrSlug}`),
+  getCreatorDetail: (id: string, params: Record<string, any> = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") q.append(k, String(v));
+    });
+    const qs = q.toString();
+    return request<CreatorDetail>(`/api/v1/creators/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`);
+  },
 
   // Recommendations
   getContentRecommendations: (mangaId: string) =>
@@ -363,16 +466,24 @@ export const api = {
   getReadingAnalytics: (userId: string) => request<any>(`/api/v1/users/${userId}/reading-analytics`),
 
   // Admin Console
+  getAdminUsers: (params: Record<string, any> = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") q.append(k, String(v));
+    });
+    return request<{ total: number; page: number; page_size: number; items: AdminUserItem[] }>(`/api/v1/admin/users?${q.toString()}`);
+  },
   getReports: (params: Record<string, any> = {}) => {
     const q = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") q.append(k, String(v));
     });
-    return request<{ total: number; items: ReportItem[] }>(`/api/v1/admin/reports?${q.toString()}`);
+    return request<{ total: number; page?: number; page_size?: number; items: ReportItem[] }>(`/api/v1/admin/reports?${q.toString()}`);
   },
-  resolveReport: (reportId: string, payload: { action: string; note?: string }) =>
+  getReportDetail: (reportId: string) => request<ReportDetail>(`/api/v1/admin/reports/${reportId}`),
+  resolveReport: (reportId: string, payload: { action: string; note: string }) =>
     request<any>(`/api/v1/admin/reports/${reportId}/resolve`, { method: "POST", body: JSON.stringify(payload) }),
-  lockUser: (userId: string, payload: { reason: string; duration_days?: number; force_override?: boolean }) =>
+  lockUser: (userId: string, payload: { reason: string; locked_until?: string | null }) =>
     request<any>(`/api/v1/admin/users/${userId}/lock`, { method: "POST", body: JSON.stringify(payload) }),
   unlockUser: (userId: string, payload: { reason: string; force_override?: boolean }) =>
     request<any>(`/api/v1/admin/users/${userId}/unlock`, { method: "POST", body: JSON.stringify(payload) }),

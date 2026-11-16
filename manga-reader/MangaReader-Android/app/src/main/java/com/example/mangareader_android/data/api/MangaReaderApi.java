@@ -43,7 +43,7 @@ public interface MangaReaderApi {
             @Query("status") String status,
             @Query("content_rating") String contentRating,
             @Query("demographic") String demographic,
-            @Query("included_tags") String includedTags
+            @Query("include_tags") String includeTags
     );
 
     @GET("api/v1/mangas/search")
@@ -152,7 +152,7 @@ public interface MangaReaderApi {
 
     // History & Stats
     @GET("api/v1/users/me/reading-history")
-    Call<List<ReadingHistoryItem>> getReadingHistory();
+    Call<ReadingHistoryResponse> getReadingHistory(@Query("page") int page, @Query("page_size") int pageSize);
 
     @GET("api/v1/users/{userId}/reading-analytics")
     Call<ReadingAnalyticsResponse> getReadingAnalytics(@Path("userId") String userId);

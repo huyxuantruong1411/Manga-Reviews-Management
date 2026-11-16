@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import (
@@ -16,10 +16,12 @@ from app.core.redis import (
     redis_delete_prefix,
     set_cached_token_version,
 )
+from app.core.sanitization import pick_localized_text
 from app.core.storage import storage_service
 from app.models import (
     AccountStatus,
     AdminAuditLog,
+    Chapter,
     ChapterPage,
     Comment,
     Manga,
@@ -272,7 +274,10 @@ class ReaderActivityService:
                 .limit(10)
             )
             tag_res = (await db.execute(tag_stmt)).all()
-            top_tags = [{"slug": row[0], "name": row[1], "manga_count": int(row[2])} for row in tag_res]
+            top_tags = [
+                {"slug": row[0], "name": pick_localized_text(row[1], row[0]), "manga_count": int(row[2])}
+                for row in tag_res
+            ]
 
         now = datetime.now(timezone.utc)
         last_7 = sum(1 for r in reads_rows if r.last_read_at and r.last_read_at >= now - timedelta(days=7))
@@ -433,6 +438,12 @@ class ReaderActivityService:
                 detail=f"Hành động '{action}' không hợp lệ cho loại báo cáo '{report.target_type.value}'. Cho phép: {allowed_actions}",
             )
 
+        if action in ("delete_manga", "lock_account", "lock_commenter_account") and admin.role != UserRole.admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ Quản trị viên (Admin) mới có quyền xóa vĩnh viễn truyện hoặc khóa tài khoản.",
+            )
+
         now = datetime.now(timezone.utc)
         note = payload.note.strip()
         duplicate_filter = [Report.status == ReportStatus.pending]
@@ -492,8 +503,8 @@ class ReaderActivityService:
                 pages = (
                     await db.execute(
                         select(ChapterPage.bucket, ChapterPage.object_key)
-                        .join(Manga, Manga.pool_manga_id == manga.pool_manga_id)
-                        .where(ChapterPage.chapter_id.is_not(None))
+                        .join(Chapter, Chapter.pool_chapter_id == ChapterPage.chapter_id)
+                        .where(Chapter.manga_id == manga.pool_manga_id)
                     )
                 ).all()
                 for b, k in pages:
@@ -581,6 +592,66 @@ class ReaderActivityService:
             "resolution_action": report.resolution_action,
             "resolution_note": report.resolution_note,
             "resolved_at": report.resolved_at.isoformat() if report.resolved_at else None,
+        }
+
+    async def list_users(
+        self,
+        db: AsyncSession,
+        q: str | None = None,
+        user_status: AccountStatus | None = None,
+        role: UserRole | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        """Search and paginate users for Admin / Moderator governance console."""
+        conditions = []
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            conditions.append(
+                or_(
+                    User.username.ilike(term),
+                    User.display_name.ilike(term),
+                    User.email.ilike(term),
+                )
+            )
+        if user_status is not None:
+            conditions.append(User.status == user_status)
+        if role is not None:
+            conditions.append(User.role == role)
+
+        total = int((await db.execute(select(func.count(User.user_id)).where(*conditions))).scalar_one() or 0)
+        rows = (
+            (
+                await db.execute(
+                    select(User)
+                    .where(*conditions)
+                    .order_by(desc(User.created_at))
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return {
+            "items": [
+                {
+                    "user_id": str(u.user_id),
+                    "email": u.email,
+                    "username": u.username,
+                    "display_name": u.display_name,
+                    "avatar_url": storage_service.build_media_url(u.avatar_bucket, u.avatar_object_key),
+                    "role": u.role.value,
+                    "status": u.status.value,
+                    "lock_reason": u.lock_reason,
+                    "locked_until": u.locked_until.isoformat() if u.locked_until else None,
+                    "created_at": u.created_at.isoformat(),
+                }
+                for u in rows
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         }
 
 

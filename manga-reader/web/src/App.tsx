@@ -14,6 +14,7 @@ import { ListDetailPage } from "./pages/ListDetailPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { StatsPage } from "./pages/StatsPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { CreatorDetailPage } from "./pages/CreatorDetailPage";
 import { AdminPage } from "./pages/AdminPage";
 import { api, type UserProfile, getStoredToken } from "./api/client";
 
@@ -72,6 +73,7 @@ const AppShell: React.FC = () => {
           <Routes location={location}>
             <Route path="/" element={<CatalogPage currentUser={currentUser} />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/creators/:creatorId" element={<CreatorDetailPage />} />
             <Route
               path="/mangas/:idOrSlug"
               element={<MangaDetailPage currentUser={currentUser} onOpenAuth={openAuth} />}
@@ -108,13 +110,13 @@ const AppShell: React.FC = () => {
                     <div className="h-6 w-52 bg-zinc-900 rounded animate-shimmer motion-reduce:after:hidden mx-auto" />
                     <div className="h-4 w-72 bg-zinc-900/70 rounded animate-shimmer motion-reduce:after:hidden mx-auto" />
                   </div>
-                ) : currentUser && currentUser.role === "admin" ? (
-                  <AdminPage />
+                ) : currentUser && (currentUser.role === "admin" || currentUser.role === "moderator") ? (
+                  <AdminPage currentUser={currentUser} />
                 ) : (
                   <div className="p-8 text-center font-mono bg-zinc-900/40 border border-zinc-800 rounded max-w-md mx-auto my-8">
                     <p className="text-red-400 font-bold mb-2">ACCESS RESTRICTED</p>
                     <p className="text-zinc-400 text-xs mb-4">
-                      Administrator credentials required. Please sign in with an admin account.
+                      Cần quyền Quản trị viên (Admin) hoặc Kiểm duyệt viên (Moderator) để truy cập Console.
                     </p>
                     {!currentUser && (
                       <button
@@ -122,7 +124,7 @@ const AppShell: React.FC = () => {
                         onClick={openAuth}
                         className="px-4 py-2 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs transition-colors"
                       >
-                        Đăng nhập Admin
+                        Đăng nhập Quản trị
                       </button>
                     )}
                   </div>

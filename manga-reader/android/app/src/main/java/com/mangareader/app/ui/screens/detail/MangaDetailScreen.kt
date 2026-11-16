@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MangaDetailScreen(
     idOrSlug: String,
-    onChapterClick: (String) -> Unit,
+    onChapterClick: (String, Int) -> Unit,
     onMangaClick: (String) -> Unit,
     onBackClick: () -> Unit,
     onAuthRequired: () -> Unit,
@@ -57,6 +57,7 @@ fun MangaDetailScreen(
     var showRatingDialog by remember { mutableStateOf(false) }
     var ratingScore by remember { mutableStateOf(10) }
     var showReportDialog by remember { mutableStateOf(false) }
+    var reportReasonCode by remember { mutableStateOf("broken_images") }
     var reportReason by remember { mutableStateOf("") }
     var showAddToListDialog by remember { mutableStateOf(false) }
 
@@ -108,13 +109,14 @@ fun MangaDetailScreen(
                 try {
                     val res = RetrofitClient.api.getReadFirst(m.poolMangaId)
                     if (res.isSuccessful && res.body() != null) {
-                        onChapterClick(res.body()!!.chapter_id)
+                        val ptr = res.body()!!
+                        onChapterClick(ptr.chapter_id, ptr.page_number.coerceAtLeast(1))
                     } else if (chapters.isNotEmpty()) {
                         val firstCh = chapters.minByOrNull { it.chapter_numeric } ?: chapters.first()
-                        onChapterClick(firstCh.poolChapterId)
+                        onChapterClick(firstCh.poolChapterId, 1)
                     }
                 } catch (_: Exception) {
-                    if (chapters.isNotEmpty()) onChapterClick(chapters.last().poolChapterId)
+                    if (chapters.isNotEmpty()) onChapterClick(chapters.last().poolChapterId, 1)
                 }
             }
         }
@@ -126,7 +128,8 @@ fun MangaDetailScreen(
                 try {
                     val res = RetrofitClient.api.getContinueReading(m.poolMangaId)
                     if (res.isSuccessful && res.body() != null) {
-                        onChapterClick(res.body()!!.chapter_id)
+                        val ptr = res.body()!!
+                        onChapterClick(ptr.chapter_id, ptr.page_number.coerceAtLeast(1))
                     } else {
                         handleReadFirst()
                     }
@@ -165,15 +168,23 @@ fun MangaDetailScreen(
         val token = MangaReaderApplication.instance.getAccessToken()
         if (token == null) {
             onAuthRequired()
-        } else if (reportReason.isNotBlank()) {
+        } else {
             manga?.let { m ->
                 coroutineScope.launch {
                     try {
-                        val res = RetrofitClient.api.reportManga(m.poolMangaId, ReportMangaRequest(reason = reportReason))
+                        val res = RetrofitClient.api.reportManga(
+                            m.poolMangaId,
+                            ReportMangaRequest(
+                                reason_code = reportReasonCode,
+                                description = reportReason.trim().ifBlank { null }
+                            )
+                        )
                         if (res.isSuccessful) {
                             snackbarMessage = "Report submitted to admin review queue"
                             showReportDialog = false
                             reportReason = ""
+                        } else {
+                            snackbarMessage = res.errorBody()?.string() ?: "Report submission failed"
                         }
                     } catch (e: Exception) {
                         snackbarMessage = e.message
@@ -244,7 +255,7 @@ fun MangaDetailScreen(
                         ) {
                             // Cover Image
                             AsyncImage(
-                                model = m.cover_url,
+                                model = MangaReaderApplication.resolveMediaUrl(m.cover_url),
                                 contentDescription = m.title,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -301,6 +312,17 @@ fun MangaDetailScreen(
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
+
+                                val displayCreators = m.creators.ifEmpty { m.authors + m.artists }
+                                if (displayCreators.isNotEmpty()) {
+                                    Text(
+                                        text = displayCreators.joinToString(", ") { it.name },
+                                        fontSize = 11.sp,
+                                        color = AccentAmber,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
@@ -373,7 +395,7 @@ fun MangaDetailScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     items(m.tags) { tag ->
-                                        IaaSBadge(text = "#$tag", textColor = TextSecondary)
+                                        IaaSBadge(text = "#${tag.name}", textColor = TextSecondary)
                                     }
                                 }
                             }
@@ -462,7 +484,7 @@ fun MangaDetailScreen(
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(DarkSurface)
                                 .border(1.dp, DarkBorder, RoundedCornerShape(4.dp))
-                                .clickable { onChapterClick(ch.poolChapterId) }
+                                .clickable { onChapterClick(ch.poolChapterId, ch.last_read_page_number ?: 1) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -572,11 +594,40 @@ fun MangaDetailScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Provide reason for moderation review (e.g. copyright, broken chapters):", fontSize = 12.sp, color = TextSecondary)
+                    Text("Select category and details for moderation review:", fontSize = 12.sp, color = TextSecondary)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(
+                            listOf(
+                                "broken_images" to "BROKEN IMG",
+                                "wrong_chapter_order" to "ORDER",
+                                "inappropriate_content" to "NSFW",
+                                "copyright" to "DMCA",
+                                "other" to "OTHER"
+                            )
+                        ) { (code, label) ->
+                            val selected = reportReasonCode == code
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (selected) AccentRedSubtle else DarkSurfaceElevated)
+                                    .border(1.dp, if (selected) AccentRed else DarkBorder, RoundedCornerShape(3.dp))
+                                    .clickable { reportReasonCode = code }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) AccentRed else TextSecondary
+                                )
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = reportReason,
                         onValueChange = { reportReason = it },
-                        placeholder = { Text("Reason...", color = TextMuted) },
+                        placeholder = { Text("Optional description...", color = TextMuted) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = AccentRed,
                             unfocusedBorderColor = DarkBorder,

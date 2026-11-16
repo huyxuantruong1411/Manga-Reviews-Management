@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
+import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.model.MangaModels.MangaItem;
 import com.example.mangareader_android.databinding.ItemMangaGridBinding;
@@ -160,7 +161,7 @@ public class MangaAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
 
         Glide.with(context)
-                .load(item.cover_url)
+                .load(MangaReaderApp.resolveMediaUrl(item.cover_url))
                 .placeholder(R.drawable.bg_cover_placeholder)
                 .error(R.drawable.bg_cover_placeholder)
                 .transition(DrawableTransitionOptions.withCrossFade(180))

@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
+import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.R;
 import com.example.mangareader_android.data.model.ReadingListModels.ReadingHistoryItem;
 import com.example.mangareader_android.databinding.ItemHistoryBinding;
@@ -63,17 +64,18 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.HistoryV
         }
 
         void bind(ReadingHistoryItem item) {
-            binding.tvHistoryMangaTitle.setText(item.manga_title);
-            binding.tvHistoryProgress.setText(String.format(Locale.US, "Chapter %s | Page %d", item.chapter_number, item.last_read_page));
+            binding.tvHistoryMangaTitle.setText(item.title);
+            String chapterLabel = item.last_read_chapter_number != null ? item.last_read_chapter_number : "-";
+            binding.tvHistoryProgress.setText(String.format(Locale.US, "Chapter %s | Page %d", chapterLabel, item.last_read_page_number));
 
-            if (item.is_completed) {
+            if (item.is_chapter_completed) {
                 binding.tvHistoryCompletedBadge.setVisibility(View.VISIBLE);
             } else {
                 binding.tvHistoryCompletedBadge.setVisibility(View.GONE);
             }
 
             Glide.with(itemView.getContext())
-                    .load(item.cover_url)
+                    .load(MangaReaderApp.resolveMediaUrl(item.cover_url))
                     .placeholder(R.drawable.bg_cover_placeholder)
                     .error(R.drawable.bg_cover_placeholder)
                     .transition(DrawableTransitionOptions.withCrossFade(180))

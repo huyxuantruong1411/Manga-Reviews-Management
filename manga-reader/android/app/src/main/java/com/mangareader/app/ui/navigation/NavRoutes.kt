@@ -6,8 +6,8 @@ sealed class Screen(val route: String) {
     object MangaDetail : Screen("manga/{idOrSlug}") {
         fun createRoute(idOrSlug: String) = "manga/$idOrSlug"
     }
-    object Reader : Screen("reader/{chapterId}") {
-        fun createRoute(chapterId: String) = "reader/$chapterId"
+    object Reader : Screen("reader/{chapterId}?page={page}") {
+        fun createRoute(chapterId: String, page: Int = 1) = "reader/$chapterId?page=$page"
     }
     object ReadingLists : Screen("lists")
     object History : Screen("history")

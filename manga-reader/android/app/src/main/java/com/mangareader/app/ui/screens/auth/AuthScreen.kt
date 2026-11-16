@@ -71,7 +71,7 @@ fun AuthScreen(
             isLoading = true
             message = null
             try {
-                val res = RetrofitClient.api.login(LoginRequest(loginUsername, loginPassword))
+                val res = RetrofitClient.api.login(LoginRequest(email = loginUsername.trim(), password = loginPassword))
                 if (res.isSuccessful && res.body() != null) {
                     val auth = res.body()!!
                     MangaReaderApplication.instance.saveAuth(

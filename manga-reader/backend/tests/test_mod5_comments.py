@@ -9,20 +9,29 @@ import pytest
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.main import app
-from app.models import AccountStatus, AdminAuditLog, Manga, User, UserRole
+from app.models import AccountStatus, AdminAuditLog, Manga, Report, User, UserRole
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, or_, select
 
 EXAMPLE_PACKAGE_PATH = Path(__file__).resolve().parent.parent / "contracts" / "manga_reader_example_v2.json"
 
 
 @pytest.fixture(autouse=True)
-async def _clean_mod5_data() -> None:
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(AdminAuditLog))
-        await db.execute(delete(User).where(User.email.like("%@test-mr5.com")))
-        await db.execute(delete(Manga).where(Manga.pool_manga_id == "pm_1a2b3c4d5e6f"))
-        await db.commit()
+async def _clean_mod5_data():
+    async def _cleanup() -> None:
+        async with AsyncSessionLocal() as db:
+            test_uids = select(User.user_id).where(User.email.like("%@test-mr5.com"))
+            await db.execute(delete(AdminAuditLog).where(AdminAuditLog.admin_id.in_(test_uids)))
+            await db.execute(
+                delete(Report).where(or_(Report.reporter_id.in_(test_uids), Report.resolved_by.in_(test_uids)))
+            )
+            await db.execute(delete(Manga).where(Manga.pool_manga_id == "pm_1a2b3c4d5e6f"))
+            await db.execute(delete(User).where(User.email.like("%@test-mr5.com")))
+            await db.commit()
+
+    await _cleanup()
+    yield
+    await _cleanup()
 
 
 async def _setup_mod5_fixture(client: AsyncClient) -> tuple[dict[str, str], dict[str, str], dict[str, str], User]:

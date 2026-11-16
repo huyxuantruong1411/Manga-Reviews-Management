@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ChevronLeft,
@@ -24,8 +24,14 @@ type BackgroundTheme = "dark" | "black" | "light" | "sepia";
 
 export const ReaderPage: React.FC<ReaderPageProps> = ({ currentUser }) => {
   const { chapterId } = useParams<{ chapterId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const requestedPageRef = useRef<number>(Math.max(1, Number(searchParams.get("page")) || 1));
+
+  useEffect(() => {
+    requestedPageRef.current = Math.max(1, Number(searchParams.get("page")) || 1);
+  }, [chapterId, searchParams]);
 
   const [data, setData] = useState<ChapterPagesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,14 +83,23 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ currentUser }) => {
     try {
       const res = await api.getChapterPages(chapterId);
       setData(res);
+      let resolvedMode: "vertical_scroll" | "single_page" | "double_page" = "vertical_scroll";
       if (res.reader_settings) {
-        setReadingMode(res.reader_settings.reading_mode || "vertical_scroll");
+        resolvedMode = res.reader_settings.reading_mode || "vertical_scroll";
+        setReadingMode(resolvedMode);
         setFitMode(res.reader_settings.fit_mode || "fit_width");
         setReadingDirection(res.reader_settings.reading_direction || "ltr");
         setBackgroundColor(res.reader_settings.background_color || "black");
       }
-      setCurrentPageIndex(0);
-      setScrollCurrentPage(1);
+      const clampedPage = Math.max(1, Math.min(res.page_count || 1, requestedPageRef.current || 1));
+      setCurrentPageIndex(clampedPage - 1);
+      setScrollCurrentPage(clampedPage);
+      maxPageTurnedRef.current = clampedPage;
+      if (clampedPage > 1 && resolvedMode === "vertical_scroll") {
+        setTimeout(() => {
+          pageRefs.current[clampedPage - 1]?.scrollIntoView({ behavior: "auto", block: "start" });
+        }, 120);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể tải trang truyện của chương này.";
       setError(msg);
@@ -317,7 +332,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ currentUser }) => {
           revealHud();
         }
       }}
-      className={`min-h-screen flex flex-col relative select-none transition-colors duration-200 ${bgClasses[backgroundColor]}`}
+      className={`min-h-screen overflow-x-hidden flex flex-col relative select-none transition-colors duration-200 ${bgClasses[backgroundColor]}`}
     >
       {/* Fixed Reading Progress Indicator Line */}
       <div className="fixed top-0 inset-x-0 h-0.5 bg-zinc-800/50 z-50 pointer-events-none">

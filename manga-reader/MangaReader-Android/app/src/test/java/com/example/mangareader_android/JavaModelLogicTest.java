@@ -1,11 +1,22 @@
 package com.example.mangareader_android;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.example.mangareader_android.data.model.AuthModels.LoginRequest;
+import com.example.mangareader_android.data.model.AuthModels.UpdatePasswordRequest;
 import com.example.mangareader_android.data.model.ChapterModels.ChapterItem;
+import com.example.mangareader_android.data.model.CommentModels.ReportCommentRequest;
+import com.example.mangareader_android.data.model.MangaModels.MangaItem;
+import com.example.mangareader_android.data.model.MangaModels.ReportMangaRequest;
+import com.example.mangareader_android.data.model.ReadingListModels.MergeListsRequest;
+import com.example.mangareader_android.data.model.ReadingListModels.ReadingAnalyticsResponse;
+import com.example.mangareader_android.data.model.ReadingListModels.ReadingHistoryResponse;
+import com.google.gson.Gson;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -56,6 +67,65 @@ public class JavaModelLogicTest {
         String rawTitle = "Đấu Phá Thương Khung";
         String normalized = removeAccents(rawTitle);
         assertTrue(normalized.contains("dau pha"));
+    }
+
+    @Test
+    public void testResolveMediaUrl() {
+        String base = "http://10.0.2.2:18000/";
+        assertNull(MangaReaderApp.resolveMediaUrl(null, base));
+        assertNull(MangaReaderApp.resolveMediaUrl("  ", base));
+        assertEquals(
+                "http://10.0.2.2:18000/api/v1/media/covers/test.jpg",
+                MangaReaderApp.resolveMediaUrl("/api/v1/media/covers/test.jpg", base));
+        assertEquals(
+                "http://10.0.2.2:18000/api/v1/media/pages/1.png",
+                MangaReaderApp.resolveMediaUrl("http://127.0.0.1:18000/api/v1/media/pages/1.png", base));
+        assertEquals(
+                "http://10.0.2.2:9000/manga/p.png",
+                MangaReaderApp.resolveMediaUrl("http://localhost:9000/manga/p.png", base));
+        assertEquals(
+                "https://cdn.example.com/cover.webp",
+                MangaReaderApp.resolveMediaUrl("https://cdn.example.com/cover.webp", base));
+    }
+
+    @Test
+    public void testBackendAlignedJavaDtoContracts() {
+        Gson gson = new Gson();
+        String loginJson = gson.toJson(new LoginRequest("reader1@mangareader.com", "Reader123456"));
+        assertTrue(loginJson.contains("\"email\":\"reader1@mangareader.com\""));
+
+        String pwJson = gson.toJson(new UpdatePasswordRequest("oldpass12", "newpass12"));
+        assertTrue(pwJson.contains("\"confirm_password\":\"newpass12\""));
+
+        String mangaReportJson = gson.toJson(new ReportMangaRequest("broken_images", "Missing page 2"));
+        assertTrue(mangaReportJson.contains("\"reason_code\":\"broken_images\""));
+
+        String commentReportJson = gson.toJson(new ReportCommentRequest("unmarked_spoiler", "Ending"));
+        assertTrue(commentReportJson.contains("\"reason_code\":\"unmarked_spoiler\""));
+
+        String mergeJson = gson.toJson(new MergeListsRequest(Arrays.asList("l1", "l2"), "Merged", "Desc", true, true));
+        assertTrue(mergeJson.contains("\"source_list_ids\""));
+
+        String mangaJson = "{"
+                + "\"pool_manga_id\":\"m1\",\"slug\":\"dandadan\",\"title\":\"Dandadan\","
+                + "\"tags\":[{\"slug\":\"action\",\"group\":\"genre\",\"name\":\"Action\"}],"
+                + "\"creators\":[{\"creator_id\":\"c1\",\"name\":\"Tatsu Yukinobu\",\"role\":\"author\"}],"
+                + "\"my_reading_status\":\"reading\",\"my_rating\":9}";
+        MangaItem parsedManga = gson.fromJson(mangaJson, MangaItem.class);
+        assertEquals("Action", parsedManga.tags.get(0).name);
+        assertEquals("reading", parsedManga.getEffectiveReadingStatus());
+        assertEquals(Integer.valueOf(9), parsedManga.getEffectiveRating());
+
+        String histJson = "{\"items\":[{\"manga_id\":\"m1\",\"title\":\"Dandadan\",\"last_read_chapter_id\":\"ch1\",\"last_read_chapter_number\":\"1\",\"last_read_page_number\":4,\"is_chapter_completed\":false}],\"page\":1,\"page_size\":20}";
+        ReadingHistoryResponse parsedHist = gson.fromJson(histJson, ReadingHistoryResponse.class);
+        assertEquals(1, parsedHist.items.size());
+        assertEquals(4, parsedHist.items.get(0).last_read_page_number);
+
+        String statsJson = "{\"user_id\":\"u1\",\"total_mangas_read\":3,\"total_chapters_read\":18,\"top_tags\":[{\"slug\":\"horror\",\"name\":\"Horror\",\"manga_count\":2}],\"reading_frequency\":{\"last_7_days\":6,\"last_30_days\":18},\"average_score_given\":8.2}";
+        ReadingAnalyticsResponse parsedStats = gson.fromJson(statsJson, ReadingAnalyticsResponse.class);
+        assertEquals(6, parsedStats.reading_frequency.last_7_days);
+        assertEquals("Horror", parsedStats.top_tags.get(0).name);
+        assertEquals(8.2, parsedStats.average_score_given, 0.01);
     }
 
     private String removeAccents(String str) {

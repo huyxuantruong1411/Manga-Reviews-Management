@@ -16,6 +16,9 @@ import {
   Edit2,
   Trash2,
   Eye,
+  EyeOff,
+  Flag,
+  Reply,
   Calendar,
   Layers,
   ChevronRight,
@@ -24,7 +27,7 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { api, MangaItem, ChapterItem, CommentItem, UserProfile } from "@/api/client";
+import { api, pickLocalizedText, MangaItem, ChapterItem, CommentItem, UserProfile } from "@/api/client";
 import { CoverImage } from "@/components/CoverImage";
 import { ModalMotion } from "@/components/MotionPrimitives";
 import { useToast } from "@/components/ToastProvider";
@@ -79,9 +82,14 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSort, setCommentSort] = useState("newest");
 
-  // Edit history modal
+  // Edit history & comment report modals
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [reportCommentTargetId, setReportCommentTargetId] = useState<string | null>(null);
+  const [commentReportReason, setCommentReportReason] = useState<
+    "unmarked_spoiler" | "spam" | "harassment" | "hate_speech" | "other"
+  >("unmarked_spoiler");
+  const [commentReportDesc, setCommentReportDesc] = useState("");
   const [expandSynopsis, setExpandSynopsis] = useState(false);
 
   const fetchData = async () => {
@@ -91,8 +99,8 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
     try {
       const data = await api.getMangaDetail(idOrSlug);
       setManga(data);
-      setCurrentReadingStatus((data as any).user_reading_status || "");
-      setUserScore((data as any).user_rating || null);
+      setCurrentReadingStatus(data.my_reading_status || data.user_reading_status || "");
+      setUserScore(data.my_rating ?? data.user_rating ?? null);
 
       // Fetch chapters
       const chData = await api.getChapters(data.pool_manga_id, {
@@ -161,7 +169,8 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
     }
     try {
       const res = await api.getContinueReading(manga.pool_manga_id);
-      navigate(`/read/${res.chapter_id}`);
+      const pageQuery = res.page_number && res.page_number > 1 ? `?page=${res.page_number}` : "";
+      navigate(`/read/${res.chapter_id}${pageQuery}`);
     } catch (err: any) {
       showToast(err.message || "Không thể tiếp tục đọc.", "error");
     }
@@ -316,6 +325,86 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
     }
   };
 
+  const handleReplyComment = async (parentCommentId: string, content: string, isSpoiler: boolean) => {
+    if (!manga) return;
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    const created = await api.createComment(manga.pool_manga_id, {
+      content,
+      is_spoiler: isSpoiler,
+      parent_comment_id: parentCommentId,
+    });
+    setComments((prev) => [...prev, created]);
+    showToast("Đã gửi phản hồi.", "success");
+  };
+
+  const handleEditComment = async (commentId: string, content: string) => {
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    const updated = await api.editComment(commentId, content);
+    setComments((prev) => prev.map((c) => (c.comment_id === commentId ? updated : c)));
+    showToast("Đã cập nhật bình luận.", "success");
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    try {
+      await api.deleteComment(commentId);
+      setComments((prev) =>
+        prev.map((c) =>
+          c.comment_id === commentId ? { ...c, is_deleted: true, content: "[Bình luận đã bị xóa]" } : c
+        )
+      );
+      showToast("Đã xóa bình luận.", "info");
+    } catch (err: any) {
+      showToast(err.message || "Không thể xóa bình luận.", "error");
+    }
+  };
+
+  const handleToggleSpoiler = async (commentId: string, nextSpoiler: boolean) => {
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    try {
+      const updated = await api.toggleCommentSpoiler(commentId, nextSpoiler);
+      setComments((prev) => prev.map((c) => (c.comment_id === commentId ? updated : c)));
+      showToast(
+        nextSpoiler ? "Đã gắn nhãn Spoiler cho bình luận." : "Đã gỡ nhãn Spoiler.",
+        "success"
+      );
+    } catch (err: any) {
+      showToast(err.message || "Không thể thay đổi trạng thái Spoiler.", "error");
+    }
+  };
+
+  const handleReportCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportCommentTargetId) return;
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    try {
+      await api.reportComment(reportCommentTargetId, {
+        reason_code: commentReportReason,
+        description: commentReportDesc.trim() || undefined,
+      });
+      setReportCommentTargetId(null);
+      setCommentReportDesc("");
+      showToast("Đã gửi báo cáo bình luận tới Ban quản trị.", "success");
+    } catch (err: any) {
+      showToast(err.message || "Không thể báo cáo bình luận.", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div role="status" aria-busy="true" className="space-y-6">
@@ -380,29 +469,52 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
             )}
 
             {/* Creators */}
-            {manga.authors && manga.authors.length > 0 && (
-              <p className="text-xs text-zinc-400 mt-2">
-                Tác giả:{" "}
-                {manga.authors.map((a, i) => (
-                  <span key={a.creator_id} className="text-emerald-400 font-medium">
-                    {a.name}
-                    {i < manga.authors!.length - 1 ? ", " : ""}
-                  </span>
-                ))}
-              </p>
-            )}
+            {(() => {
+              const creatorList =
+                manga.creators && manga.creators.length > 0
+                  ? manga.creators
+                  : [
+                      ...(manga.authors || []).map((a) => ({ ...a, role: "author" })),
+                      ...(manga.artists || []).map((a) => ({ ...a, role: "artist" })),
+                    ];
+              if (creatorList.length === 0) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2 text-xs text-zinc-400">
+                  <span className="shrink-0">Tác giả / Họa sĩ:</span>
+                  {creatorList.map((c) => (
+                    <Link
+                      key={`${c.creator_id}-${c.role || "creator"}`}
+                      to={`/creators/${c.creator_id}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 font-medium transition-colors"
+                    >
+                      <span>{c.name}</span>
+                      {c.role && (
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          ({c.role === "author" ? "Tác giả" : c.role === "artist" ? "Họa sĩ" : c.role})
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Tags */}
             {manga.tags && manga.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {manga.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="px-2 py-0.5 rounded text-[11px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700"
-                  >
-                    #{t}
-                  </span>
-                ))}
+                {manga.tags.map((t) => {
+                  const tagSlug = typeof t === "string" ? t : t.slug;
+                  const tagName = typeof t === "string" ? t : pickLocalizedText(t.name, t.slug);
+                  return (
+                    <Link
+                      key={tagSlug}
+                      to={`/?include_tags=${encodeURIComponent(tagSlug)}`}
+                      className="px-2 py-0.5 rounded text-[11px] font-mono bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-emerald-300 border border-zinc-700 transition-colors"
+                    >
+                      #{tagName}
+                    </Link>
+                  );
+                })}
               </div>
             )}
 
@@ -413,9 +525,9 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
                   expandSynopsis ? "" : "line-clamp-4"
                 }`}
               >
-                {manga.description || "Chưa có mô tả cho bộ truyện này."}
+                {pickLocalizedText(manga.description) || "Chưa có mô tả cho bộ truyện này."}
               </p>
-              {manga.description && manga.description.length > 180 && (
+              {pickLocalizedText(manga.description).length > 180 && (
                 <button
                   type="button"
                   onClick={() => setExpandSynopsis((prev) => !prev)}
@@ -679,17 +791,52 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
           </div>
         </form>
 
-        {/* Comments List */}
+        {/* Comments List (Threaded by parent_comment_id) */}
         <div className="space-y-3">
-          {comments.map((c) => (
-            <CommentCard
-              key={c.comment_id}
-              comment={c}
-              currentUser={currentUser}
-              onReaction={(r) => handleReaction(c.comment_id, r)}
-              onViewHistory={() => handleViewEditHistory(c.comment_id)}
-            />
-          ))}
+          {(() => {
+            if (comments.length === 0) {
+              return (
+                <div className="p-8 rounded bg-zinc-900/50 border border-zinc-800 text-center text-xs font-mono text-zinc-400">
+                  Chưa có bình luận nào. Hãy là người đầu tiên chia sẻ cảm nhận!
+                </div>
+              );
+            }
+            const idSet = new Set(comments.map((item) => item.comment_id));
+            const repliesByParent = new Map<string, CommentItem[]>();
+            const rootComments: CommentItem[] = [];
+            comments.forEach((item) => {
+              if (item.parent_comment_id && idSet.has(item.parent_comment_id)) {
+                const list = repliesByParent.get(item.parent_comment_id) || [];
+                list.push(item);
+                repliesByParent.set(item.parent_comment_id, list);
+              } else {
+                rootComments.push(item);
+              }
+            });
+            return rootComments.map((c) => (
+              <CommentCard
+                key={c.comment_id}
+                comment={c}
+                replies={repliesByParent.get(c.comment_id) || []}
+                repliesByParent={repliesByParent}
+                currentUser={currentUser}
+                onOpenAuth={onOpenAuth}
+                onReaction={handleReaction}
+                onViewHistory={handleViewEditHistory}
+                onReply={handleReplyComment}
+                onEdit={handleEditComment}
+                onDelete={handleDeleteComment}
+                onToggleSpoiler={handleToggleSpoiler}
+                onReport={(cid) => {
+                  if (!currentUser) {
+                    onOpenAuth();
+                    return;
+                  }
+                  setReportCommentTargetId(cid);
+                }}
+              />
+            ));
+          })()}
         </div>
       </section>
 
@@ -960,88 +1107,406 @@ export const MangaDetailPage: React.FC<MangaDetailPageProps> = ({ currentUser, o
           </button>
         </div>
       </ModalMotion>
+
+      {/* Report Comment Modal */}
+      <ModalMotion
+        isOpen={Boolean(reportCommentTargetId)}
+        onClose={() => setReportCommentTargetId(null)}
+        ariaLabel="Báo cáo bình luận"
+        maxWidthClass="max-w-md"
+      >
+        <form
+          onSubmit={handleReportCommentSubmit}
+          className="bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4 shadow-2xl relative"
+        >
+          <button
+            type="button"
+            onClick={() => setReportCommentTargetId(null)}
+            aria-label="Đóng"
+            className="absolute top-3.5 right-3.5 p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
+            <Flag className="w-4 h-4 text-rose-400" />
+            <span>BÁO CÁO BÌNH LUẬN</span>
+          </h3>
+
+          <div className="space-y-3 text-xs font-mono">
+            <div>
+              <label htmlFor="comment-report-reason" className="block text-zinc-400 mb-1">
+                LÝ DO VI PHẠM
+              </label>
+              <select
+                id="comment-report-reason"
+                value={commentReportReason}
+                onChange={(e) => setCommentReportReason(e.target.value as any)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-zinc-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="unmarked_spoiler">Tiết lộ nội dung (Spoiler) không che</option>
+                <option value="spam">Spam / Quảng cáo rác</option>
+                <option value="harassment">Quấy rối / Công kích cá nhân</option>
+                <option value="hate_speech">Ngôn từ thù ghét</option>
+                <option value="other">Lý do khác</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="comment-report-desc" className="block text-zinc-400 mb-1">
+                MÔ TẢ CHI TIẾT (TÙY CHỌN)
+              </label>
+              <textarea
+                id="comment-report-desc"
+                rows={3}
+                maxLength={1000}
+                value={commentReportDesc}
+                onChange={(e) => setCommentReportDesc(e.target.value)}
+                placeholder="Ghi chú thêm cho Kiểm duyệt viên..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-zinc-200 font-sans focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setReportCommentTargetId(null)}
+              className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 text-xs font-mono hover:bg-zinc-700"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono"
+            >
+              Gửi Báo Cáo
+            </button>
+          </div>
+        </form>
+      </ModalMotion>
     </div>
   );
 };
 
-// Sub-component for rendering a single comment
+// Sub-component for rendering a single comment + nested replies
 const CommentCard: React.FC<{
   comment: CommentItem;
+  replies: CommentItem[];
+  repliesByParent: Map<string, CommentItem[]>;
   currentUser: UserProfile | null;
-  onReaction: (r: "like" | "dislike") => void;
-  onViewHistory: () => void;
-}> = ({ comment, currentUser, onReaction, onViewHistory }) => {
+  onOpenAuth: () => void;
+  onReaction: (commentId: string, r: "like" | "dislike") => void;
+  onViewHistory: (commentId: string) => void;
+  onReply: (parentCommentId: string, content: string, isSpoiler: boolean) => Promise<void>;
+  onEdit: (commentId: string, content: string) => Promise<void>;
+  onDelete: (commentId: string) => void;
+  onToggleSpoiler: (commentId: string, isSpoiler: boolean) => void;
+  onReport: (commentId: string) => void;
+  depth?: number;
+}> = ({
+  comment,
+  replies,
+  repliesByParent,
+  currentUser,
+  onOpenAuth,
+  onReaction,
+  onViewHistory,
+  onReply,
+  onEdit,
+  onDelete,
+  onToggleSpoiler,
+  onReport,
+  depth = 0,
+}) => {
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+  const [showReplyBox, setShowReplyBox] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [replySpoiler, setReplySpoiler] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(comment.content);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  const isAuthor = currentUser?.user_id === comment.user_id;
+  const isStaff = currentUser?.role === "admin" || currentUser?.role === "moderator";
+  const canToggleSpoiler = isStaff || (isAuthor && !comment.spoiler_locked_by_admin);
+
+  const submitReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyContent.trim()) return;
+    if (!currentUser) {
+      onOpenAuth();
+      return;
+    }
+    setReplySubmitting(true);
+    try {
+      await onReply(comment.comment_id, replyContent.trim(), replySpoiler);
+      setReplyContent("");
+      setReplySpoiler(false);
+      setShowReplyBox(false);
+    } catch {
+      // handled by parent toast/log if needed
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editContent.trim()) return;
+    setEditSubmitting(true);
+    try {
+      await onEdit(comment.comment_id, editContent.trim());
+      setIsEditing(false);
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   return (
-    <div className="p-4 rounded bg-zinc-900 border border-zinc-800 space-y-2">
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center">
-            {comment.display_name.charAt(0).toUpperCase()}
+    <div className="space-y-2">
+      <div className="p-4 rounded bg-zinc-900 border border-zinc-800 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center overflow-hidden shrink-0">
+              {comment.avatar_url && !avatarError ? (
+                <img
+                  src={comment.avatar_url}
+                  alt={comment.display_name}
+                  onError={() => setAvatarError(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                comment.display_name.charAt(0).toUpperCase()
+              )}
+            </div>
+            <span className="font-semibold text-zinc-200">{comment.display_name}</span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              {new Date(comment.created_at).toLocaleDateString("vi-VN")}
+            </span>
+            {comment.is_edited && (
+              <button
+                type="button"
+                onClick={() => onViewHistory(comment.comment_id)}
+                className="text-[10px] font-mono text-zinc-400 hover:text-emerald-400 underline"
+              >
+                (Đã chỉnh sửa)
+              </button>
+            )}
           </div>
-          <span className="font-semibold text-zinc-200">{comment.display_name}</span>
-          <span className="text-[10px] font-mono text-zinc-400">
-            {new Date(comment.created_at).toLocaleDateString("vi-VN")}
-          </span>
-          {comment.is_edited && (
-            <button
-              type="button"
-              onClick={onViewHistory}
-              className="text-[10px] font-mono text-zinc-400 hover:text-emerald-400 underline"
-            >
-              (Đã chỉnh sửa)
-            </button>
+
+          {comment.is_spoiler && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              SPOILER {comment.spoiler_locked_by_admin ? "[ADMIN_LOCKED]" : ""}
+            </span>
           )}
         </div>
 
-        {comment.is_spoiler && (
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            SPOILER {comment.spoiler_locked_by_admin ? "[ADMIN_LOCKED]" : ""}
-          </span>
+        {/* Content with Spoiler Mask or Inline Edit */}
+        {comment.is_deleted ? (
+          <p className="text-xs text-zinc-400 italic">[Bình luận đã bị xóa]</p>
+        ) : isEditing ? (
+          <form onSubmit={submitEdit} className="space-y-2 pt-1">
+            <textarea
+              rows={2}
+              maxLength={2000}
+              required
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+            />
+            <div className="flex justify-end gap-2 text-[11px] font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditContent(comment.content);
+                }}
+                className="px-2.5 py-1 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={editSubmitting || !editContent.trim()}
+                className="px-2.5 py-1 rounded bg-emerald-500 text-zinc-950 font-bold hover:bg-emerald-400 disabled:opacity-40"
+              >
+                {editSubmitting ? "Đang lưu..." : "Lưu Sửa"}
+              </button>
+            </div>
+          </form>
+        ) : comment.is_spoiler && !spoilerRevealed ? (
+          <button
+            type="button"
+            onClick={() => setSpoilerRevealed(true)}
+            className="w-full p-3 rounded bg-zinc-950 border border-zinc-800/80 text-center cursor-pointer hover:border-amber-500/40 transition-colors"
+          >
+            <span className="text-xs font-mono text-amber-400/90 font-medium">
+              Spoiler - Nhấn để xem nội dung
+            </span>
+          </button>
+        ) : (
+          <p className="text-xs text-zinc-300 leading-relaxed font-sans whitespace-pre-line">
+            {comment.content}
+          </p>
+        )}
+
+        {/* Reaction and action footer */}
+        {!comment.is_deleted && (
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1 text-[11px] font-mono text-zinc-400">
+            <button
+              type="button"
+              onClick={() => onReaction(comment.comment_id, "like")}
+              className={`flex items-center gap-1 hover:text-emerald-400 transition-colors ${
+                comment.user_reaction === "like" ? "text-emerald-400 font-bold" : ""
+              }`}
+            >
+              <ThumbsUp className="w-3 h-3" />
+              <span>{comment.like_count || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onReaction(comment.comment_id, "dislike")}
+              className={`flex items-center gap-1 hover:text-rose-400 transition-colors ${
+                comment.user_reaction === "dislike" ? "text-rose-400 font-bold" : ""
+              }`}
+            >
+              <ThumbsDown className="w-3 h-3" />
+              <span>{comment.dislike_count || 0}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!currentUser) {
+                  onOpenAuth();
+                  return;
+                }
+                setShowReplyBox((v) => !v);
+              }}
+              className="flex items-center gap-1 hover:text-zinc-200 transition-colors"
+            >
+              <Reply className="w-3 h-3" />
+              <span>Trả lời</span>
+            </button>
+
+            {isAuthor && !isEditing && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditContent(comment.content);
+                  setIsEditing(true);
+                }}
+                className="flex items-center gap-1 hover:text-zinc-200 transition-colors"
+              >
+                <Edit2 className="w-3 h-3" />
+                <span>Sửa</span>
+              </button>
+            )}
+
+            {canToggleSpoiler && (
+              <button
+                type="button"
+                onClick={() => onToggleSpoiler(comment.comment_id, !comment.is_spoiler)}
+                className="flex items-center gap-1 hover:text-amber-300 transition-colors"
+              >
+                {comment.is_spoiler ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                <span>{comment.is_spoiler ? "Gỡ Spoiler" : "Gắn Spoiler"}</span>
+              </button>
+            )}
+
+            {(isAuthor || isStaff) && (
+              <button
+                type="button"
+                onClick={() => onDelete(comment.comment_id)}
+                className="flex items-center gap-1 hover:text-rose-400 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Xóa</span>
+              </button>
+            )}
+
+            {!isAuthor && (
+              <button
+                type="button"
+                onClick={() => onReport(comment.comment_id)}
+                className="flex items-center gap-1 hover:text-amber-400 transition-colors ml-auto"
+              >
+                <Flag className="w-3 h-3" />
+                <span>Báo cáo</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Inline Reply Box */}
+        {showReplyBox && (
+          <form onSubmit={submitReply} className="pt-2 border-t border-zinc-800/80 space-y-2">
+            <textarea
+              rows={2}
+              maxLength={2000}
+              required
+              value={replyContent}
+              onChange={(e) => setReplyContent(e.target.value)}
+              placeholder={`Phản hồi ${comment.display_name}...`}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+              <label className="flex items-center gap-1.5 text-zinc-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={replySpoiler}
+                  onChange={(e) => setReplySpoiler(e.target.checked)}
+                  className="rounded border-zinc-700 text-emerald-500 bg-zinc-900"
+                />
+                <span>Spoiler</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReplyBox(false)}
+                  className="px-2.5 py-1 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={replySubmitting || !replyContent.trim()}
+                  className="px-3 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold disabled:opacity-40"
+                >
+                  {replySubmitting ? "Đang gửi..." : "Gửi Phản Hồi"}
+                </button>
+              </div>
+            </div>
+          </form>
         )}
       </div>
 
-      {/* Content with Spoiler Mask */}
-      {comment.is_deleted ? (
-        <p className="text-xs text-zinc-400 italic">[Bình luận đã bị xóa]</p>
-      ) : comment.is_spoiler && !spoilerRevealed ? (
-        <button
-          type="button"
-          onClick={() => setSpoilerRevealed(true)}
-          className="w-full p-3 rounded bg-zinc-950 border border-zinc-800/80 text-center cursor-pointer hover:border-amber-500/40 transition-colors"
-        >
-          <span className="text-xs font-mono text-amber-400/90 font-medium">
-            Spoiler - Nhấn để xem nội dung
-          </span>
-        </button>
-      ) : (
-        <p className="text-xs text-zinc-300 leading-relaxed font-sans">{comment.content}</p>
-      )}
-
-      {/* Reaction and action footer */}
-      {!comment.is_deleted && (
-        <div className="flex items-center gap-4 pt-1 text-[11px] font-mono text-zinc-400">
-          <button
-            type="button"
-            onClick={() => onReaction("like")}
-            className={`flex items-center gap-1 hover:text-emerald-400 transition-colors ${
-              comment.user_reaction === "like" ? "text-emerald-400 font-bold" : ""
-            }`}
-          >
-            <ThumbsUp className="w-3 h-3" />
-            <span>{comment.like_count || 0}</span>
-          </button>
-
-          <button
-            onClick={() => onReaction("dislike")}
-            className={`flex items-center gap-1 hover:text-rose-400 transition-colors ${
-              comment.user_reaction === "dislike" ? "text-rose-400 font-bold" : ""
-            }`}
-          >
-            <ThumbsDown className="w-3 h-3" />
-            <span>{comment.dislike_count || 0}</span>
-          </button>
+      {/* Child Replies */}
+      {replies.length > 0 && (
+        <div className={`${depth < 3 ? "pl-3 sm:pl-5 border-l border-zinc-800" : ""} space-y-2`}>
+          {replies.map((reply) => (
+            <CommentCard
+              key={reply.comment_id}
+              comment={reply}
+              replies={repliesByParent.get(reply.comment_id) || []}
+              repliesByParent={repliesByParent}
+              currentUser={currentUser}
+              onOpenAuth={onOpenAuth}
+              onReaction={onReaction}
+              onViewHistory={onViewHistory}
+              onReply={onReply}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onToggleSpoiler={onToggleSpoiler}
+              onReport={onReport}
+              depth={depth + 1}
+            />
+          ))}
         </div>
       )}
     </div>

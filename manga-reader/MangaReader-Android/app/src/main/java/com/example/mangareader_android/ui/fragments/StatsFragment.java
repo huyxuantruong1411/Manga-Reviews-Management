@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment;
 import com.example.mangareader_android.MangaReaderApp;
 import com.example.mangareader_android.data.api.RetrofitClient;
 import com.example.mangareader_android.data.model.ReadingListModels.ReadingAnalyticsResponse;
+import com.example.mangareader_android.data.model.ReadingListModels.TopTagStat;
 import com.example.mangareader_android.databinding.FragmentStatsBinding;
 import com.example.mangareader_android.util.UiMotionUtils;
 import java.util.Locale;
@@ -66,17 +67,26 @@ public class StatsFragment extends Fragment implements UiMotionUtils.OnTabResele
                             binding.tvStatChaptersRead.setText(String.valueOf(val)));
                     animateIntMetric(stats.total_mangas_read, val ->
                             binding.tvStatTitlesRead.setText(String.valueOf(val)));
-                    animateFloatMetric((float) stats.total_dwell_minutes, val ->
-                            binding.tvStatDwellMinutes.setText(String.format(Locale.US, "%.1fm", val)));
-                    animateIntMetric(stats.reading_streak_days, val ->
-                            binding.tvStatStreak.setText(String.format(Locale.US, "%d DAYS", val)));
+                    int last7Days = stats.reading_frequency != null ? stats.reading_frequency.last_7_days : 0;
+                    animateIntMetric(last7Days, val ->
+                            binding.tvStatDwellMinutes.setText(String.format(Locale.US, "%d CH", val)));
+                    if (stats.average_score_given != null) {
+                        animateFloatMetric(stats.average_score_given.floatValue(), val ->
+                                binding.tvStatStreak.setText(String.format(Locale.US, "★ %.1f", val)));
+                    } else {
+                        binding.tvStatStreak.setText("-");
+                    }
 
-                    if (stats.preferred_tags != null && !stats.preferred_tags.isEmpty()) {
+                    if (stats.top_tags != null && !stats.top_tags.isEmpty()) {
                         StringBuilder sb = new StringBuilder();
-                        for (String tag : stats.preferred_tags) {
-                            sb.append("#").append(tag.toUpperCase(Locale.US)).append("   ");
+                        for (TopTagStat tag : stats.top_tags) {
+                            String label = tag.name != null ? tag.name : tag.slug;
+                            sb.append("#").append(label.toUpperCase(Locale.US))
+                                    .append(" (").append(tag.manga_count).append(")   ");
                         }
                         binding.tvPreferredTags.setText(sb.toString().trim());
+                    } else {
+                        binding.tvPreferredTags.setText("Read more chapters to build your genre profile.");
                     }
                 } else {
                     UiMotionUtils.showError(
