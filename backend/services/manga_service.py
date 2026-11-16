@@ -1059,7 +1059,11 @@ class MangaService:
 
         # Handle cover file upload
         if new_cover_file:
-            minio_cover_key = existing.get("minio_cover_key") or f"covers/{manga_id}.jpg"
+            existing_cover_key = existing.get("minio_cover_key")
+            if not existing_cover_key or str(existing_cover_key).startswith("cover-arts/"):
+                minio_cover_key = f"covers/{manga_id}.jpg"
+            else:
+                minio_cover_key = existing_cover_key
             minio_service.upload_cover(minio_cover_key, new_cover_file)
             update_dict["minio_cover_key"] = minio_cover_key
             await self.log_action(

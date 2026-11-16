@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from bson import ObjectId
 
 from backend.database.connection import get_db
+from backend.services.content_deletion_service import source_object_is_shared
 from backend.services.manga_service import serialize_doc
 from backend.services.mangadex_service import mangadex_service
 from backend.services.minio_service import minio_service
@@ -152,14 +153,17 @@ class CoverArtService:
 
     async def delete_covers_for_manga(self, manga_id: str) -> bool:
         """
-        Deletes all cover art files in MinIO and metadata documents in MongoDB.
+        Deletes all cover art files in MinIO (unless shared as a primary/pool cover)
+        and metadata documents in MongoDB.
         """
         db = get_db()
         cursor = db.cover_arts.find({"manga_id": manga_id})
-        async for doc in cursor:
-            if doc.get("minio_key"):
-                minio_service.delete_cover(doc["minio_key"])
+        docs = [doc async for doc in cursor]
         await db.cover_arts.delete_many({"manga_id": manga_id})
+        for doc in docs:
+            key = doc.get("minio_key")
+            if key and not await source_object_is_shared(db, key):
+                minio_service.delete_cover(key)
         return True
 
 

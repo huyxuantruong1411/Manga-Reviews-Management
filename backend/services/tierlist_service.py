@@ -827,6 +827,11 @@ class TierlistService:
         async for c_doc in cursor:
             k = c_doc.get("minio_key")
             if k:
+                if default_key and k == default_key and options:
+                    options[0].cover_art_id = str(c_doc["_id"])
+                    options[0].volume = c_doc.get("volume")
+                    options[0].locale = c_doc.get("locale")
+                    continue
                 options.append(
                     MangaCoverOption(
                         cover_art_id=str(c_doc["_id"]),
