@@ -50,13 +50,16 @@ def test_mgtile_container_rejects_invalid_header():
 def test_optimize_png_bytes_to_webp_lossless_pixel_exact():
     from backend.utils.mgtile_container import optimize_png_bytes_to_webp_lossless
 
-    # Create a compressible RGB image (256x256 with gradients and flat regions)
+    # Create a 256x256 RGB illustration-like image (gradient bands + subtle dithering)
+    # where VP8L spatial/color transforms reliably outperform even high-level PNG deflate.
+    rng = np.random.default_rng(42)
     x = np.linspace(0, 255, 256, dtype=np.uint8)
     grid_x, grid_y = np.meshgrid(x, x)
-    rgb = np.stack([grid_x, grid_y, (grid_x ^ grid_y)], axis=-1)
+    base = np.stack([grid_x, 255 - grid_y, ((grid_x.astype(np.uint16) + grid_y) // 2).astype(np.uint8)], axis=-1)
+    rgb = np.clip((base // 16) * 16 + rng.integers(0, 4, size=(256, 256, 3), dtype=np.uint8), 0, 255).astype(np.uint8)
     raw_png = _make_png_bytes(rgb, mode="RGB")
 
-    optimized, changed = optimize_png_bytes_to_webp_lossless(raw_png, method=2)
+    optimized, changed = optimize_png_bytes_to_webp_lossless(raw_png, method=4)
     assert changed is True
     assert len(optimized) < len(raw_png)
     assert optimized[:4] == b"RIFF" and optimized[8:12] == b"WEBP"
@@ -64,6 +67,15 @@ def test_optimize_png_bytes_to_webp_lossless_pixel_exact():
     with Image.open(io.BytesIO(optimized)) as dec_img:
         dec_arr = np.asarray(dec_img.convert("RGB"))
     assert np.array_equal(rgb, dec_arr)
+
+    # Size-guard: if threshold exceeds achievable savings, original PNG is kept untouched
+    untouched, threshold_changed = optimize_png_bytes_to_webp_lossless(
+        raw_png,
+        method=2,
+        min_savings_ratio=0.99,
+    )
+    assert threshold_changed is False
+    assert untouched == raw_png
 
 
 def test_optimize_png_bytes_skips_jpeg_without_reencoding():
