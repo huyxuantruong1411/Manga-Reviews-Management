@@ -86,6 +86,18 @@ docker compose -f infra/elk/docker-compose.elk.yml --env-file infra/elk/.env up 
 ```
 Kibana dashboard will be available at `http://localhost:5601` or via `/audit-logs?tab=kibana`. See [`docs/logging.md`](./logging.md).
 
+### 5. External Source Connector & ngrok Gateway (Optional)
+Expose published Data Lake Pool packages (`manga-reader-package:2.0`) over the isolated connector gateway on port `8001`:
+```powershell
+# Automated launcher (Connector :8001 + ngrok HTTPS tunnel)
+.\scripts\start_connector_ngrok.ps1 -InitSecrets
+```
+Or start the connector ASGI server manually:
+```bash
+uv run --project backend uvicorn backend.connector_app:app --host 127.0.0.1 --port 8001
+```
+See [`docs/contracts/external-source-connector.md`](./contracts/external-source-connector.md) for API key, HMAC webhook, and ngrok tunnel details.
+
 ---
 
 ## 4. Test Suites & Verification
@@ -152,5 +164,5 @@ pnpm --dir frontend test:a11y
 
 - **Redis Offline**: If Redis is offline, the API operates in fallback mode (direct DB reads). Background OCR enqueue calls (`POST /tasks/ocr`) will return HTTP 503.
 - **Elasticsearch Offline**: If Elasticsearch is offline, the backend falls back to MongoDB for audit log queries and streams local NDJSON files (`logs/manga-*.ndjson`) for application logs without raising errors.
-- **Port Conflicts**: Ensure ports `8000` (FastAPI), `5173` (Vite), `9000/9001` (MinIO API/Console), `6379` (Redis), `9200` (Elasticsearch), `5601` (Kibana), and `27017` (MongoDB) are available.
+- **Port Conflicts**: Ensure ports `8000` (FastAPI), `8001` (External Source Connector), `5173` (Vite), `9000/9001` (MinIO API/Console), `6379` (Redis), `9200` (Elasticsearch), `5601` (Kibana), and `27017` (MongoDB) are available.
 - **MangaDex Rate Limits (429)**: The backend automatically falls back to headless Playwright browser emulation when MangaDex enforces Cloudflare rate limiting.

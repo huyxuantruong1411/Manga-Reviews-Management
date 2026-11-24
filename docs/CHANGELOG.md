@@ -1,7 +1,7 @@
 # 📜 Changelog — Manga Reviews Management & AI Vision Lexis System
 
 > **Phiên bản tài liệu**: 1.0.0  
-> **Cập nhật lần cuối**: 14/10/2026  
+> **Cập nhật lần cuối**: 25/11/2026  
 > **Tổng số commit**: 179 (single contributor: **Huy1411**)  
 > **Giai đoạn**: 24/05/2026 → 14/10/2026 (~5 tháng phát triển liên tục)  
 > **Nhánh chính**: `main` (trước đó: `master`)
@@ -27,6 +27,9 @@
 ## Bảng tổng hợp Changelog (Change Log Summary Table)
 
 | Phiên bản (Version) | Ngày cập nhật | Hạng mục / Tính năng | Loại thay đổi | Mô tả chi tiết công việc | Người thực hiện | Trạng thái |
+|---|---|---|---|---|---|---|
+| **v0.15.0** | 25/11/2026 | Remove Embedded Manga Reader Subsystem | 🔧 Changed | Gỡ bỏ hoàn toàn phân hệ đọc truyện nhúng `manga-reader/` (backend FastAPI/PostgreSQL, Web SPA, Android Kotlin/Java, Docker stack `mr_*`) khỏi repository; hệ thống đọc truyện tách độc lập và tiêu thụ dữ liệu qua External Source Connector. Dọn `.gitignore` và cập nhật tài liệu hệ thống. | Huy1411 | ✅ Đã hoàn thành |
+| **v0.15.0** | 25/11/2026 | External Source Connector & ngrok Gateway | 🆕 Added | Bổ sung ASGI gateway độc lập (`backend/connector_app.py`, cổng `8001`) cùng `/api/connector/v1/*` phục vụ gói `manga-reader-package:2.0`, proxy media Zero-Copy từ MinIO, CDC webhooks (HMAC-SHA256) & pull feed, `ConnectorExposureMiddleware`, UI `ConnectorGatewayModal` trên `/datalake-pool`, và script `scripts/start_connector_ngrok.ps1`. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.14.0** | 13/11/2026 | Analytics Speed Optimization ($facet, Redis & Indexes) | ⚡ Perf | Hợp nhất pipeline MongoDB `$facet` + `asyncio.gather()` trong `AnalyticsService`, cache-aside Redis (`analytics:*`, TTL 180s) + invalidation hooks trên toàn bộ mutation, đánh compound ESR index (`m_20261113_analytics_indexes.py`), tối ưu Frontend `AnalyticsPage` (`requestAnimationFrame`, `AbortController`, client cache 60s, `React.memo`, tắt Recharts SVG animation nặng) kèm suite `test_analytics_performance.py`. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.14.0** | 13/11/2026 | UX/UI Motion Overhaul (Main Web, Reader Web & Android) | 🎨 Style | Nâng cấp hệ thống animation chuyển layout/tab/dialog (`MotionPrimitives`, custom confirm dialogs thay native confirm), hoàn thiện switcher grid/list + Reader HUD mượt mà đồng bộ trên Web SPA, `manga-reader/web` và `MangaReader-Android`. | Huy1411 | ✅ Đã hoàn thành |
 | **v0.13.5** | 04/11/2026 | Manga Reader System v2.0 (Web, Java Android & Data Lake ETL) | 🚀 Release | Tái cấu trúc `manga-reader/backend`, bổ sung Web SPA (`manga-reader/web`), native Java Android app (`MangaReader-Android`), Data Lake Pool -> Manga Reader ETL connector (UC-2.3), CDC webhook & seed demo accounts. | Huy1411 | ✅ Đã hoàn thành |

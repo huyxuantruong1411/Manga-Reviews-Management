@@ -16,6 +16,7 @@
 - An asynchronous task worker (ARQ + Redis) for background OCR and a Redis caching layer.
 - A **Multi-Source Ingestion & Chapter Slot Architecture**: Unified downloading and reading from MangaDex and MangaFire with source-scoped identity, logical slot coverage, and safe metadata merging with user field locks.
 - A **Translation Studio & Reader Translation Subsystem** (UI/orchestration present; real inference unavailable): In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
+- A **Manga Data Lake Pool & External Source Connector**: Curated packages (`manga-reader-package:2.0`) served via isolated ASGI gateway ([`backend/connector_app.py`](../backend/connector_app.py), port `8001`, `/api/connector/v1/*`) with HMAC-SHA256 CDC webhooks for external reader apps (embedded `manga-reader/` removed).
 
 ---
 
@@ -47,6 +48,7 @@ Always refer to project manifests and lockfiles rather than assumptions:
 - **Frontend SPA**: [`frontend/src/main.tsx`](../frontend/src/main.tsx) & [`frontend/src/App.tsx`](../frontend/src/App.tsx)
   - Run command: `pnpm --dir frontend dev` (proxies `/api` to `http://localhost:8000`).
   - Global providers: `AlertProvider`, `DownloadProvider`, `TooltipProvider` (shadcn).
+- **External Source Connector API**: [`backend/connector_app.py`](../backend/connector_app.py) (`uv run --project backend uvicorn backend.connector_app:app --host 127.0.0.1 --port 8001`)
 
 ---
 
@@ -132,4 +134,5 @@ When reasoning about the codebase, take note of these verified facts:
 - To inspect coding and contribution rules $\rightarrow$ [`AGENTS.md`](../AGENTS.md)
 - To review security and data boundaries $\rightarrow$ [`SECURITY.md`](../SECURITY.md)
 - To inspect logging, secret redaction, and ELK observability $\rightarrow$ [`docs/logging.md`](./logging.md)
+- To configure the External Source Connector & ngrok gateway $\rightarrow$ [`docs/contracts/external-source-connector.md`](./contracts/external-source-connector.md)
 - To trace project evolution and version history $\rightarrow$ [`docs/CHANGELOG.md`](./CHANGELOG.md)

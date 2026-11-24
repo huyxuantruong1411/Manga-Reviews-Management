@@ -43,6 +43,7 @@ flowchart TD
 - **Translation Worker** ([`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py)): ARQ worker for `arq:translation` queue, claims page slots with fencing tokens, and manages isolated subprocess lifecycle.
 - **Subprocess Translator Runtime** ([`services/translator-runtime/`](../services/translator-runtime/)): Isolated execution plane exchanging JSONL envelopes to avoid loading heavy ML dependencies inside FastAPI.
 - **Cache Layer** ([`backend/core/redis.py`](../backend/core/redis.py)): Thread-safe Redis connection pool with automatic fallback to database reads if Redis is offline.
+- **External Source Connector Gateway** ([`backend/connector_app.py`](../backend/connector_app.py) & [`backend/routers/connector.py`](../backend/routers/connector.py)): Isolated ASGI surface exposing published `manga_datalake_pool` packages (`manga-reader-package:2.0`), Zero-Copy MinIO media streams, and HMAC-SHA256 CDC events to external downstream readers (details in [`docs/contracts/external-source-connector.md`](./contracts/external-source-connector.md) and [`docs/contracts/reader-contract-v2.md`](./contracts/reader-contract-v2.md)).
 
 ---
 
