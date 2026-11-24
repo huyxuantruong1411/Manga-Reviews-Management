@@ -372,8 +372,12 @@ async def init_pool_db_indexes():
     logger.info("Initializing pool database indexes...")
     try:
         from backend.database.migrations.m_20261024_datalake_pool_indexes import upgrade as upgrade_pool_indexes
+        from backend.database.migrations.m_20261120_connector_cdc_indexes import (
+            upgrade as upgrade_connector_cdc_indexes,
+        )
 
         await upgrade_pool_indexes()
+        await upgrade_connector_cdc_indexes()
         logger.info("Pool database indexes initialized successfully.")
     except Exception as e:
         logger.error(f"Error initializing pool database indexes: {e}")

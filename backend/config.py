@@ -73,6 +73,22 @@ class Settings(BaseSettings):
     datasource_captcha_sidecar_url: Optional[str] = Field(default=None)
     datasource_session_dir: str = Field(default="backend/data/datasource-sessions")
 
+    # External Source Connector (ETL v2.0 + Zero-Copy Media Proxy + CDC Webhooks / ngrok)
+    connector_enabled: bool = Field(default=True)
+    connector_source_system: str = Field(default="manga-datalake-pool")
+    connector_host: str = Field(default="127.0.0.1")
+    connector_port: int = Field(default=8001)
+    connector_api_key: str = Field(default="")
+    connector_webhook_secret: str = Field(default="")
+    connector_allow_unauthenticated_local: bool = Field(default=False)
+    connector_enforce_tunnel_path_guard: bool = Field(default=True)
+    connector_public_base_url: Optional[str] = Field(default=None)
+    connector_ngrok_api_url: str = Field(default="http://127.0.0.1:4040/api/tunnels")
+    connector_allowed_origins: str = Field(default="")
+    connector_webhook_timeout_s: float = Field(default=10.0)
+    connector_webhook_max_retries: int = Field(default=3)
+    connector_webhook_allow_private_urls: bool = Field(default=True)
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
         env_file_encoding="utf-8",

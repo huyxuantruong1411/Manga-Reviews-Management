@@ -52,6 +52,37 @@ def slugify(text: str) -> str:
     return text or "manga"
 
 
+def _compute_chapter_manifest_sha256(
+    chapter_number: str,
+    language: str,
+    title: str,
+    volume: Optional[str],
+    pages: List[Dict[str, Any]],
+) -> str:
+    """Deterministic SHA-256 hash over chapter metadata and ordered page identities."""
+    page_sig = [
+        f"{p.get('page_number')}:{p.get('page_uid')}:{p.get('object_key')}:{p.get('file_size', 0)}:{p.get('sha256') or p.get('md5_hash') or ''}"
+        for p in pages
+        if p.get("included", True) is not False
+    ]
+    raw = "|".join([str(chapter_number), str(language), str(title or ""), str(volume or ""), *page_sig])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _compute_manga_manifest_sha256(
+    pool_manga_id: str,
+    chapters: List[Dict[str, Any]],
+) -> str:
+    """Deterministic SHA-256 hash over pooled manga chapter revisions and manifests."""
+    chapter_sigs = sorted(
+        f"{c.get('pool_chapter_id')}:{c.get('pages_revision', 1)}:{c.get('manifest_sha256', '')}"
+        for c in chapters
+        if c.get("included", True) is not False
+    )
+    raw = "|".join([pool_manga_id, *chapter_sigs])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 class DatalakePoolService:
     def _get_source_db(self):
         return get_db()
@@ -606,10 +637,26 @@ class DatalakePoolService:
 
                 # Determine pool_manga_id and revision
                 existing_manga = await pool_db.pool_mangas.find_one({"source_manga_id": s_id})
+                existing_pool_chapters: List[Dict[str, Any]] = []
+                prev_ch_by_source_id: Dict[str, Dict[str, Any]] = {}
+                prev_ch_by_num_lang: Dict[tuple[str, str], Dict[str, Any]] = {}
                 if existing_manga:
                     pool_manga_id = existing_manga["pool_manga_id"]
                     pool_revision = existing_manga.get("lineage", {}).get("pool_revision", 1) + 1
                     slug = existing_manga.get("slug") or slugify(title)
+                    prev_cursor = pool_db.pool_chapters.find({"pool_manga_id": pool_manga_id})
+                    if hasattr(prev_cursor, "to_list"):
+                        existing_pool_chapters = await prev_cursor.to_list(length=5000)
+                    else:
+                        existing_pool_chapters = [doc async for doc in prev_cursor]
+                    for prev_ch in existing_pool_chapters:
+                        if not isinstance(prev_ch, dict):
+                            continue
+                        src_cid = str(prev_ch.get("source_chapter_id") or "")
+                        if src_cid:
+                            prev_ch_by_source_id[src_cid] = prev_ch
+                        num_lang = (str(prev_ch.get("chapter_number") or ""), str(prev_ch.get("language") or "en"))
+                        prev_ch_by_num_lang.setdefault(num_lang, prev_ch)
                 else:
                     pool_manga_id = f"pm_{uuid.uuid4().hex[:12]}"
                     pool_revision = 1
@@ -664,24 +711,37 @@ class DatalakePoolService:
                         continue
 
                     ch_id_str = str(ch["_id"])
+                    ch_num_str = str(ch.get("chapter_number", "1"))
                     ch_lang = ch.get("language", "en")
+                    ch_title = ch.get("title", "")
+                    ch_vol = ch.get("volume")
                     languages_set.add(ch_lang)
                     total_pages_count += len(mapped_pages)
                     total_size_bytes += ch_size
 
-                    # Hash chapter content
-                    ch_content_str = f"{ch.get('chapter_number')}:{ch_lang}:{len(mapped_pages)}:{ch_size}"
-                    ch_sha256 = hashlib.sha256(ch_content_str.encode("utf-8")).hexdigest()
+                    # Deterministic content hash & stable pool_chapter_id preservation across re-syncs
+                    ch_sha256 = _compute_chapter_manifest_sha256(ch_num_str, ch_lang, ch_title, ch_vol, mapped_pages)
+                    prev_ch = prev_ch_by_source_id.get(ch_id_str) or prev_ch_by_num_lang.get((ch_num_str, ch_lang))
+                    if prev_ch and prev_ch.get("pool_chapter_id"):
+                        stable_chapter_id = str(prev_ch["pool_chapter_id"])
+                        prev_rev = max(1, int(prev_ch.get("pages_revision") or 1))
+                        prev_hash = str(prev_ch.get("manifest_sha256") or "")
+                        pages_rev = prev_rev if prev_hash == ch_sha256 else prev_rev + 1
+                        ch_created_at = prev_ch.get("created_at") or now
+                    else:
+                        stable_chapter_id = f"pch_{uuid.uuid4().hex[:12]}"
+                        pages_rev = 1
+                        ch_created_at = now
 
                     pool_chapter = PoolChapterInDB(
-                        pool_chapter_id=f"pch_{uuid.uuid4().hex[:12]}",
+                        pool_chapter_id=stable_chapter_id,
                         pool_manga_id=pool_manga_id,
                         source_manga_id=s_id,
                         source_chapter_id=ch_id_str,
-                        chapter_number=str(ch.get("chapter_number", "1")),
+                        chapter_number=ch_num_str,
                         chapter_numeric=float(ch.get("chapter_numeric", 0.0)),
-                        volume=ch.get("volume"),
-                        title=ch.get("title", ""),
+                        volume=ch_vol,
+                        title=ch_title,
                         language=ch_lang,
                         scanlation_group=ch.get("scanlation_group"),
                         uploader=ch.get("uploader"),
@@ -691,10 +751,10 @@ class DatalakePoolService:
                         pages=mapped_pages,
                         page_count=len(mapped_pages),
                         total_size_bytes=ch_size,
-                        pages_revision=1,
+                        pages_revision=pages_rev,
                         manifest_sha256=ch_sha256,
                         included=True,
-                        created_at=now,
+                        created_at=ch_created_at,
                         updated_at=now,
                     ).model_dump(by_alias=True, exclude={"id"})
 
@@ -712,9 +772,8 @@ class DatalakePoolService:
                     error_count += 1
                     continue
 
-                # Compute manifest sha256 for manga package
-                manifest_payload = f"{pool_manga_id}:{len(pool_chapters_to_insert)}:{total_pages_count}:{total_size_bytes}:{now.isoformat()}"
-                manifest_sha256 = hashlib.sha256(manifest_payload.encode("utf-8")).hexdigest()
+                # Compute deterministic manifest sha256 for manga package
+                manifest_sha256 = _compute_manga_manifest_sha256(pool_manga_id, pool_chapters_to_insert)
 
                 stats = PoolMangaStats(
                     total_chapters=len(pool_chapters_to_insert),
@@ -787,6 +846,19 @@ class DatalakePoolService:
                         "timestamp": now,
                     }
                 )
+
+                # Emit CDC events for downstream Reader subscribers (failure-isolated)
+                try:
+                    from backend.services.connector_service import connector_service
+
+                    await connector_service.emit_pool_sync_events(
+                        pool_manga_doc=pool_manga_doc,
+                        new_chapters=pool_chapters_to_insert,
+                        previous_chapters=existing_pool_chapters,
+                        is_new_manga=existing_manga is None,
+                    )
+                except Exception as cdc_exc:
+                    logger.debug(f"Skipping CDC sync event emission: {cdc_exc}")
 
                 results.append(
                     PublishItemResult(
@@ -954,6 +1026,13 @@ class DatalakePoolService:
             }
         )
 
+        try:
+            from backend.services.connector_service import connector_service
+
+            await connector_service.emit_manga_metadata_updated(pool_manga_id)
+        except Exception as cdc_exc:
+            logger.debug(f"Skipping CDC metadata event: {cdc_exc}")
+
         return await self.get_pool_manga_detail(pool_manga_id)
 
     async def remove_manga_from_pool(self, pool_manga_id: str) -> bool:
@@ -962,6 +1041,8 @@ class DatalakePoolService:
         NEVER deletes MinIO files and NEVER alters source review DB.
         """
         pool_db = self._get_pool_db()
+        existing = await pool_db.pool_mangas.find_one({"pool_manga_id": pool_manga_id})
+        pool_rev = int((existing or {}).get("lineage", {}).get("pool_revision", 1))
         res = await pool_db.pool_mangas.delete_one({"pool_manga_id": pool_manga_id})
         await pool_db.pool_chapters.delete_many({"pool_manga_id": pool_manga_id})
 
@@ -974,6 +1055,13 @@ class DatalakePoolService:
                 "timestamp": datetime.now(timezone.utc),
             }
         )
+        if res.deleted_count > 0:
+            try:
+                from backend.services.connector_service import connector_service
+
+                await connector_service.emit_manga_removed(pool_manga_id, pool_revision=pool_rev + 1)
+            except Exception as cdc_exc:
+                logger.debug(f"Skipping CDC remove event: {cdc_exc}")
         return res.deleted_count > 0
 
     async def get_pool_manga_chapters(self, pool_manga_id: str, language: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1027,7 +1115,16 @@ class DatalakePoolService:
             {"pool_chapter_id": pool_chapter_id},
             {"$set": clean_update},
         )
-        return await self.get_pool_chapter_detail(pool_chapter_id, include_presigned_urls=False)
+        updated = await self.get_pool_chapter_detail(pool_chapter_id, include_presigned_urls=False)
+        if updated and updated.get("pool_manga_id"):
+            await self._recalculate_pool_manga_stats(str(updated["pool_manga_id"]))
+            try:
+                from backend.services.connector_service import connector_service
+
+                await connector_service.emit_chapter_updated(str(updated["pool_manga_id"]), pool_chapter_id)
+            except Exception as cdc_exc:
+                logger.debug(f"Skipping CDC chapter update event: {cdc_exc}")
+        return updated
 
     async def batch_update_pool_chapters(self, request: PoolBatchChapterUpdateRequest) -> int:
         """Batch update chapters in pool DB."""
@@ -1065,6 +1162,12 @@ class DatalakePoolService:
         res = await pool_db.pool_chapters.delete_one({"pool_chapter_id": pool_chapter_id})
         if res.deleted_count > 0:
             await self._recalculate_pool_manga_stats(pool_manga_id)
+            try:
+                from backend.services.connector_service import connector_service
+
+                await connector_service.emit_chapter_deleted(pool_manga_id, pool_chapter_id)
+            except Exception as cdc_exc:
+                logger.debug(f"Skipping CDC chapter delete event: {cdc_exc}")
             return True
         return False
 
@@ -1090,6 +1193,13 @@ class DatalakePoolService:
             total_size += p.get("file_size", 0)
 
         now = datetime.now(timezone.utc)
+        new_ch_hash = _compute_chapter_manifest_sha256(
+            str(ch.get("chapter_number") or ""),
+            str(ch.get("language") or "en"),
+            str(ch.get("title") or ""),
+            ch.get("volume"),
+            remaining_pages,
+        )
         await pool_db.pool_chapters.update_one(
             {"pool_chapter_id": pool_chapter_id},
             {
@@ -1098,12 +1208,19 @@ class DatalakePoolService:
                     "page_count": len(remaining_pages),
                     "total_size_bytes": total_size,
                     "pages_revision": ch.get("pages_revision", 1) + 1,
+                    "manifest_sha256": new_ch_hash,
                     "updated_at": now,
                 }
             },
         )
 
         await self._recalculate_pool_manga_stats(ch["pool_manga_id"])
+        try:
+            from backend.services.connector_service import connector_service
+
+            await connector_service.emit_chapter_updated(str(ch["pool_manga_id"]), pool_chapter_id)
+        except Exception as cdc_exc:
+            logger.debug(f"Skipping CDC chapter page edit event: {cdc_exc}")
         return await self.get_pool_chapter_detail(pool_chapter_id, include_presigned_urls=False)
 
     async def scan_pool_duplicates(
@@ -1273,14 +1390,14 @@ class DatalakePoolService:
         pool_db = self._get_pool_db()
         chapters = await pool_db.pool_chapters.find({"pool_manga_id": pool_manga_id}).to_list(length=1000)
 
-        tot_ch = len(chapters)
-        tot_pg = sum(ch.get("page_count", 0) for ch in chapters)
-        tot_sz = sum(ch.get("total_size_bytes", 0) for ch in chapters)
-        langs = sorted(list({ch.get("language", "en") for ch in chapters if ch.get("language")}))
+        included_chapters = [ch for ch in chapters if ch.get("included", True) is not False]
+        tot_ch = len(included_chapters)
+        tot_pg = sum(ch.get("page_count", 0) for ch in included_chapters)
+        tot_sz = sum(ch.get("total_size_bytes", 0) for ch in included_chapters)
+        langs = sorted(list({ch.get("language", "en") for ch in included_chapters if ch.get("language")}))
 
         now = datetime.now(timezone.utc)
-        manifest_payload = f"{pool_manga_id}:{tot_ch}:{tot_pg}:{tot_sz}:{now.isoformat()}"
-        manifest_sha256 = hashlib.sha256(manifest_payload.encode("utf-8")).hexdigest()
+        manifest_sha256 = _compute_manga_manifest_sha256(pool_manga_id, included_chapters)
 
         await pool_db.pool_mangas.update_one(
             {"pool_manga_id": pool_manga_id},

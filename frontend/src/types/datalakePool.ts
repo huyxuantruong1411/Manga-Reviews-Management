@@ -232,3 +232,84 @@ export interface PoolIntegrityReport {
 	missing_keys: string[];
 	checked_at: string;
 }
+
+export interface NgrokTunnelInfo {
+	name: string;
+	proto: string;
+	public_url: string;
+	addr: string;
+}
+
+export interface ConnectorPoolSummary {
+	ready_mangas: number;
+	ready_chapters: number;
+	ready_pages: number;
+	total_size_bytes: number;
+}
+
+export interface ConnectorStatusResponse {
+	connector_enabled: boolean;
+	source_system: string;
+	contract_name: string;
+	contract_version: string;
+	schema_id: string;
+	dedicated_port: number;
+	api_key_configured: boolean;
+	webhook_secret_configured: boolean;
+	tunnel_path_guard_enabled: boolean;
+	allow_unauthenticated_local: boolean;
+	configured_public_base_url?: string | null;
+	active_public_base_url?: string | null;
+	ngrok_active: boolean;
+	ngrok_tunnels: NgrokTunnelInfo[];
+	pool_stats: ConnectorPoolSummary;
+	active_subscriptions_count: number;
+	total_events_count: number;
+	failed_deliveries_count: number;
+	endpoints: Record<string, string>;
+}
+
+export interface CdcSubscriptionItem {
+	provider_subscription_key: string;
+	pool_manga_id: string;
+	consumer_id: string;
+	callback_url: string;
+	events: string[];
+	status: "ACTIVE" | "PAUSED" | "CANCELLED" | "FAILED";
+	signing_algorithm: string;
+	signature_header: string;
+	has_custom_secret: boolean;
+	subscribed_at: string;
+	unsubscribed_at?: string | null;
+	last_event_at?: string | null;
+	updated_at: string;
+}
+
+export interface CdcEventItem {
+	eventId: string;
+	eventType: string;
+	occurredAt: string;
+	contractName: string;
+	contractVersion: string;
+	poolMangaId: string;
+	poolChapterId?: string | null;
+	poolRevision: number;
+	payloadSha256: string;
+	payload: Record<string, unknown>;
+}
+
+export interface CdcDeliveryItem {
+	delivery_id: string;
+	event_id: string;
+	event_type: string;
+	subscription_key: string;
+	pool_manga_id: string;
+	callback_url: string;
+	status: "PENDING" | "DELIVERED" | "FAILED";
+	attempt_count: number;
+	response_status?: number | null;
+	last_error?: string | null;
+	created_at: string;
+	delivered_at?: string | null;
+	updated_at: string;
+}

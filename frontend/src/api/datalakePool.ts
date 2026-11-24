@@ -1,4 +1,8 @@
 import type {
+	CdcDeliveryItem,
+	CdcEventItem,
+	CdcSubscriptionItem,
+	ConnectorStatusResponse,
 	PoolCandidateItem,
 	PoolChapterItem,
 	PoolCreatorDetailResponse,
@@ -232,5 +236,77 @@ export const getContractTemplate = async (): Promise<
 	Record<string, unknown>
 > => {
 	const res = await client.get("/api/datalake-pool/contract/template");
+	return res.data;
+};
+
+export const getConnectorAdminStatus =
+	async (): Promise<ConnectorStatusResponse> => {
+		const res = await client.get("/api/datalake-pool/connector/status");
+		return res.data;
+	};
+
+export const listConnectorAdminSubscriptions = async (params?: {
+	pool_manga_id?: string;
+	status?: string;
+	limit?: number;
+}): Promise<{ items: CdcSubscriptionItem[]; total: number }> => {
+	const res = await client.get("/api/datalake-pool/connector/subscriptions", {
+		params,
+	});
+	return res.data;
+};
+
+export const revokeConnectorAdminSubscription = async (
+	subscriptionKey: string,
+): Promise<CdcSubscriptionItem> => {
+	const res = await client.delete(
+		`/api/datalake-pool/connector/subscriptions/${encodeURIComponent(subscriptionKey)}`,
+	);
+	return res.data;
+};
+
+export const testConnectorAdminSubscription = async (
+	subscriptionKey: string,
+): Promise<CdcDeliveryItem> => {
+	const res = await client.post(
+		`/api/datalake-pool/connector/subscriptions/${encodeURIComponent(subscriptionKey)}/test`,
+	);
+	return res.data;
+};
+
+export const listConnectorAdminEvents = async (params?: {
+	pool_manga_id?: string;
+	event_type?: string;
+	limit?: number;
+}): Promise<{
+	items: CdcEventItem[];
+	total: number;
+	has_more: boolean;
+	next_after_event_id?: string | null;
+}> => {
+	const res = await client.get("/api/datalake-pool/connector/events", {
+		params,
+	});
+	return res.data;
+};
+
+export const listConnectorAdminDeliveries = async (params?: {
+	subscription_key?: string;
+	pool_manga_id?: string;
+	status?: string;
+	limit?: number;
+}): Promise<{ items: CdcDeliveryItem[]; total: number }> => {
+	const res = await client.get("/api/datalake-pool/connector/deliveries", {
+		params,
+	});
+	return res.data;
+};
+
+export const retryConnectorAdminDelivery = async (
+	deliveryId: string,
+): Promise<CdcDeliveryItem> => {
+	const res = await client.post(
+		`/api/datalake-pool/connector/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+	);
 	return res.data;
 };

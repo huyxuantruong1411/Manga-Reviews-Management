@@ -3,7 +3,7 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **223**
+Total Endpoints Discovered: **245**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
@@ -31,33 +31,55 @@ Total Endpoints Discovered: **223**
 | `GET` | `/api/chapters/{chapter_id}` | `get_chapter` | Chapters & Reader | [`chapters.py:121`](../../backend/routers/chapters.py#L121) | Yes |
 | `PATCH` | `/api/chapters/{chapter_id}` | `update_single_chapter_metadata` | Chapters & Reader | [`chapters.py:155`](../../backend/routers/chapters.py#L155) | Yes |
 | `POST` | `/api/chapters/{chapter_id}/delete-pages` | `delete_chapter_pages` | Chapters & Reader | [`chapters.py:202`](../../backend/routers/chapters.py#L202) | Yes |
+| `GET` | `/api/connector/v1/catalog` | `list_connector_catalog` | External Source Connector | [`connector.py:50`](../../backend/routers/connector.py#L50) | Yes |
+| `GET` | `/api/connector/v1/cdc/deliveries` | `list_cdc_deliveries` | External Source Connector | [`connector.py:292`](../../backend/routers/connector.py#L292) | Yes |
+| `POST` | `/api/connector/v1/cdc/deliveries/{delivery_id}/retry` | `retry_cdc_delivery` | External Source Connector | [`connector.py:308`](../../backend/routers/connector.py#L308) | Yes |
+| `GET` | `/api/connector/v1/cdc/events` | `poll_cdc_events` | External Source Connector | [`connector.py:274`](../../backend/routers/connector.py#L274) | Yes |
+| `GET` | `/api/connector/v1/cdc/subscriptions` | `list_cdc_subscriptions` | External Source Connector | [`connector.py:222`](../../backend/routers/connector.py#L222) | Yes |
+| `POST` | `/api/connector/v1/cdc/subscriptions` | `create_cdc_subscription` | External Source Connector | [`connector.py:205`](../../backend/routers/connector.py#L205) | Yes |
+| `DELETE` | `/api/connector/v1/cdc/subscriptions/{subscription_key}` | `cancel_cdc_subscription` | External Source Connector | [`connector.py:250`](../../backend/routers/connector.py#L250) | Yes |
+| `GET` | `/api/connector/v1/cdc/subscriptions/{subscription_key}` | `get_cdc_subscription` | External Source Connector | [`connector.py:238`](../../backend/routers/connector.py#L238) | Yes |
+| `POST` | `/api/connector/v1/cdc/subscriptions/{subscription_key}/test` | `test_cdc_subscription` | External Source Connector | [`connector.py:262`](../../backend/routers/connector.py#L262) | Yes |
+| `GET` | `/api/connector/v1/contract/schema` | `get_connector_contract_schema` | External Source Connector | [`connector.py:44`](../../backend/routers/connector.py#L44) | Yes |
+| `GET` | `/api/connector/v1/info` | `get_connector_info` | External Source Connector | [`connector.py:38`](../../backend/routers/connector.py#L38) | Yes |
+| `GET` | `/api/connector/v1/media/{bucket}/{object_key:path}` | `download_connector_media` | External Source Connector | [`connector.py:143`](../../backend/routers/connector.py#L143) | Yes |
+| `HEAD` | `/api/connector/v1/media/{bucket}/{object_key:path}` | `head_connector_media` | External Source Connector | [`connector.py:173`](../../backend/routers/connector.py#L173) | Yes |
+| `GET` | `/api/connector/v1/packages/{pool_manga_id}` | `fetch_connector_package` | External Source Connector | [`connector.py:74`](../../backend/routers/connector.py#L74) | Yes |
+| `GET` | `/api/connector/v1/packages/{pool_manga_id}/chapters/{pool_chapter_id}` | `fetch_connector_chapter` | External Source Connector | [`connector.py:118`](../../backend/routers/connector.py#L118) | Yes |
 | `GET` | `/api/creators/suggestions` | `get_suggestions` | Creators | [`creators.py:12`](../../backend/routers/creators.py#L12) | Yes |
 | `GET` | `/api/creators/{creator_id}/{slug}` | `get_creator_with_slug` | Creators | [`creators.py:36`](../../backend/routers/creators.py#L36) | Yes |
 | `GET` | `/api/creators/{creator_name}/tierlists` | `list_creator_tierlists` | Creator Tierlists | [`tierlists.py:104`](../../backend/routers/tierlists.py#L104) | Yes |
 | `POST` | `/api/creators/{creator_name}/tierlists` | `create_creator_tierlist` | Creator Tierlists | [`tierlists.py:118`](../../backend/routers/tierlists.py#L118) | Yes |
 | `GET` | `/api/creators/{creator_name}/tierlists/compare` | `compare_creator_tierlists` | Creator Tierlists | [`tierlists.py:83`](../../backend/routers/tierlists.py#L83) | Yes |
 | `GET` | `/api/creators/{identifier}` | `get_creator` | Creators | [`creators.py:22`](../../backend/routers/creators.py#L22) | Yes |
-| `GET` | `/api/datalake-pool/candidates` | `list_candidates` | Data Lake & Storage Pool | [`datalake_pool.py:70`](../../backend/routers/datalake_pool.py#L70) | Yes |
-| `DELETE` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `delete_pool_chapter` | Data Lake & Storage Pool | [`datalake_pool.py:206`](../../backend/routers/datalake_pool.py#L206) | Yes |
-| `GET` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `get_pool_chapter_detail` | Data Lake & Storage Pool | [`datalake_pool.py:186`](../../backend/routers/datalake_pool.py#L186) | Yes |
-| `PATCH` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `update_pool_chapter_metadata` | Data Lake & Storage Pool | [`datalake_pool.py:195`](../../backend/routers/datalake_pool.py#L195) | Yes |
-| `POST` | `/api/datalake-pool/chapters/{pool_chapter_id}/delete-pages` | `delete_pool_chapter_pages` | Data Lake & Storage Pool | [`datalake_pool.py:215`](../../backend/routers/datalake_pool.py#L215) | Yes |
-| `GET` | `/api/datalake-pool/contract/template` | `get_contract_template` | Data Lake & Storage Pool | [`datalake_pool.py:29`](../../backend/routers/datalake_pool.py#L29) | Yes |
-| `GET` | `/api/datalake-pool/creators` | `list_pool_creators` | Data Lake & Storage Pool | [`datalake_pool.py:45`](../../backend/routers/datalake_pool.py#L45) | Yes |
-| `GET` | `/api/datalake-pool/creators/{creator_id}` | `get_pool_creator_detail` | Data Lake & Storage Pool | [`datalake_pool.py:61`](../../backend/routers/datalake_pool.py#L61) | Yes |
-| `GET` | `/api/datalake-pool/mangas` | `list_pool_mangas` | Data Lake & Storage Pool | [`datalake_pool.py:97`](../../backend/routers/datalake_pool.py#L97) | Yes |
-| `DELETE` | `/api/datalake-pool/mangas/{pool_manga_id}` | `remove_manga_from_pool` | Data Lake & Storage Pool | [`datalake_pool.py:161`](../../backend/routers/datalake_pool.py#L161) | Yes |
-| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}` | `get_pool_manga_detail` | Data Lake & Storage Pool | [`datalake_pool.py:123`](../../backend/routers/datalake_pool.py#L123) | Yes |
-| `PATCH` | `/api/datalake-pool/mangas/{pool_manga_id}` | `update_pool_manga` | Data Lake & Storage Pool | [`datalake_pool.py:132`](../../backend/routers/datalake_pool.py#L132) | Yes |
-| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/chapters` | `get_pool_manga_chapters` | Data Lake & Storage Pool | [`datalake_pool.py:173`](../../backend/routers/datalake_pool.py#L173) | Yes |
-| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/chapters/batch-metadata` | `batch_update_pool_chapters` | Data Lake & Storage Pool | [`datalake_pool.py:179`](../../backend/routers/datalake_pool.py#L179) | Yes |
-| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/duplicates` | `scan_pool_duplicates` | Data Lake & Storage Pool | [`datalake_pool.py:227`](../../backend/routers/datalake_pool.py#L227) | Yes |
-| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/duplicates/cleanup` | `cleanup_pool_duplicates` | Data Lake & Storage Pool | [`datalake_pool.py:233`](../../backend/routers/datalake_pool.py#L233) | Yes |
-| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/etl-manifest` | `export_etl_manifest` | Data Lake & Storage Pool | [`datalake_pool.py:248`](../../backend/routers/datalake_pool.py#L248) | Yes |
-| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/sync` | `sync_pool_manga` | Data Lake & Storage Pool | [`datalake_pool.py:144`](../../backend/routers/datalake_pool.py#L144) | Yes |
-| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/verify` | `verify_pool_manga_integrity` | Data Lake & Storage Pool | [`datalake_pool.py:242`](../../backend/routers/datalake_pool.py#L242) | Yes |
-| `POST` | `/api/datalake-pool/publish` | `publish_to_pool` | Data Lake & Storage Pool | [`datalake_pool.py:88`](../../backend/routers/datalake_pool.py#L88) | Yes |
-| `GET` | `/api/datalake-pool/stats` | `get_pool_stats` | Data Lake & Storage Pool | [`datalake_pool.py:39`](../../backend/routers/datalake_pool.py#L39) | Yes |
+| `GET` | `/api/datalake-pool/candidates` | `list_candidates` | Data Lake & Storage Pool | [`datalake_pool.py:79`](../../backend/routers/datalake_pool.py#L79) | Yes |
+| `DELETE` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `delete_pool_chapter` | Data Lake & Storage Pool | [`datalake_pool.py:215`](../../backend/routers/datalake_pool.py#L215) | Yes |
+| `GET` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `get_pool_chapter_detail` | Data Lake & Storage Pool | [`datalake_pool.py:195`](../../backend/routers/datalake_pool.py#L195) | Yes |
+| `PATCH` | `/api/datalake-pool/chapters/{pool_chapter_id}` | `update_pool_chapter_metadata` | Data Lake & Storage Pool | [`datalake_pool.py:204`](../../backend/routers/datalake_pool.py#L204) | Yes |
+| `POST` | `/api/datalake-pool/chapters/{pool_chapter_id}/delete-pages` | `delete_pool_chapter_pages` | Data Lake & Storage Pool | [`datalake_pool.py:224`](../../backend/routers/datalake_pool.py#L224) | Yes |
+| `GET` | `/api/datalake-pool/connector/deliveries` | `list_connector_admin_deliveries` | Data Lake & Storage Pool | [`datalake_pool.py:323`](../../backend/routers/datalake_pool.py#L323) | Yes |
+| `POST` | `/api/datalake-pool/connector/deliveries/{delivery_id}/retry` | `retry_connector_admin_delivery` | Data Lake & Storage Pool | [`datalake_pool.py:339`](../../backend/routers/datalake_pool.py#L339) | Yes |
+| `GET` | `/api/datalake-pool/connector/events` | `list_connector_admin_events` | Data Lake & Storage Pool | [`datalake_pool.py:309`](../../backend/routers/datalake_pool.py#L309) | Yes |
+| `GET` | `/api/datalake-pool/connector/status` | `get_connector_admin_status` | Data Lake & Storage Pool | [`datalake_pool.py:271`](../../backend/routers/datalake_pool.py#L271) | Yes |
+| `GET` | `/api/datalake-pool/connector/subscriptions` | `list_connector_admin_subscriptions` | Data Lake & Storage Pool | [`datalake_pool.py:277`](../../backend/routers/datalake_pool.py#L277) | Yes |
+| `DELETE` | `/api/datalake-pool/connector/subscriptions/{subscription_key}` | `revoke_connector_admin_subscription` | Data Lake & Storage Pool | [`datalake_pool.py:291`](../../backend/routers/datalake_pool.py#L291) | Yes |
+| `POST` | `/api/datalake-pool/connector/subscriptions/{subscription_key}/test` | `test_connector_admin_subscription` | Data Lake & Storage Pool | [`datalake_pool.py:300`](../../backend/routers/datalake_pool.py#L300) | Yes |
+| `GET` | `/api/datalake-pool/contract/template` | `get_contract_template` | Data Lake & Storage Pool | [`datalake_pool.py:38`](../../backend/routers/datalake_pool.py#L38) | Yes |
+| `GET` | `/api/datalake-pool/creators` | `list_pool_creators` | Data Lake & Storage Pool | [`datalake_pool.py:54`](../../backend/routers/datalake_pool.py#L54) | Yes |
+| `GET` | `/api/datalake-pool/creators/{creator_id}` | `get_pool_creator_detail` | Data Lake & Storage Pool | [`datalake_pool.py:70`](../../backend/routers/datalake_pool.py#L70) | Yes |
+| `GET` | `/api/datalake-pool/mangas` | `list_pool_mangas` | Data Lake & Storage Pool | [`datalake_pool.py:106`](../../backend/routers/datalake_pool.py#L106) | Yes |
+| `DELETE` | `/api/datalake-pool/mangas/{pool_manga_id}` | `remove_manga_from_pool` | Data Lake & Storage Pool | [`datalake_pool.py:170`](../../backend/routers/datalake_pool.py#L170) | Yes |
+| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}` | `get_pool_manga_detail` | Data Lake & Storage Pool | [`datalake_pool.py:132`](../../backend/routers/datalake_pool.py#L132) | Yes |
+| `PATCH` | `/api/datalake-pool/mangas/{pool_manga_id}` | `update_pool_manga` | Data Lake & Storage Pool | [`datalake_pool.py:141`](../../backend/routers/datalake_pool.py#L141) | Yes |
+| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/chapters` | `get_pool_manga_chapters` | Data Lake & Storage Pool | [`datalake_pool.py:182`](../../backend/routers/datalake_pool.py#L182) | Yes |
+| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/chapters/batch-metadata` | `batch_update_pool_chapters` | Data Lake & Storage Pool | [`datalake_pool.py:188`](../../backend/routers/datalake_pool.py#L188) | Yes |
+| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/duplicates` | `scan_pool_duplicates` | Data Lake & Storage Pool | [`datalake_pool.py:236`](../../backend/routers/datalake_pool.py#L236) | Yes |
+| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/duplicates/cleanup` | `cleanup_pool_duplicates` | Data Lake & Storage Pool | [`datalake_pool.py:242`](../../backend/routers/datalake_pool.py#L242) | Yes |
+| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/etl-manifest` | `export_etl_manifest` | Data Lake & Storage Pool | [`datalake_pool.py:257`](../../backend/routers/datalake_pool.py#L257) | Yes |
+| `POST` | `/api/datalake-pool/mangas/{pool_manga_id}/sync` | `sync_pool_manga` | Data Lake & Storage Pool | [`datalake_pool.py:153`](../../backend/routers/datalake_pool.py#L153) | Yes |
+| `GET` | `/api/datalake-pool/mangas/{pool_manga_id}/verify` | `verify_pool_manga_integrity` | Data Lake & Storage Pool | [`datalake_pool.py:251`](../../backend/routers/datalake_pool.py#L251) | Yes |
+| `POST` | `/api/datalake-pool/publish` | `publish_to_pool` | Data Lake & Storage Pool | [`datalake_pool.py:97`](../../backend/routers/datalake_pool.py#L97) | Yes |
+| `GET` | `/api/datalake-pool/stats` | `get_pool_stats` | Data Lake & Storage Pool | [`datalake_pool.py:48`](../../backend/routers/datalake_pool.py#L48) | Yes |
 | `GET` | `/api/datasources` | `list_datasources` | Datasources | [`datasources.py:30`](../../backend/routers/datasources.py#L30) | Yes |
 | `POST` | `/api/datasources/resolve` | `resolve_source_work` | Datasources | [`datasources.py:39`](../../backend/routers/datasources.py#L39) | Yes |
 | `GET` | `/api/datasources/{provider_name}/releases/{work_id}` | `list_source_releases` | Datasources | [`datasources.py:75`](../../backend/routers/datasources.py#L75) | Yes |
@@ -227,6 +249,6 @@ Total Endpoints Discovered: **223**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:132`](../../backend/main.py#L132) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:151`](../../backend/main.py#L151) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |

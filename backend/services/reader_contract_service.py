@@ -123,6 +123,30 @@ def _is_included(doc: Dict[str, Any]) -> bool:
     return doc.get("included", True) is not False
 
 
+def _ensure_utc(value: Any) -> Optional[datetime]:
+    """Normalize naive or aware datetimes / ISO strings to UTC-aware datetime (RFC 3339)."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    return None
+
+
 def _media_ref(doc: Dict[str, Any]) -> Optional[ReaderMediaRef]:
     if not isinstance(doc, dict) or not doc.get("object_key"):
         return None
@@ -313,16 +337,21 @@ def _build_chapter(raw: Dict[str, Any], pool_manga_id: str) -> Optional[ReaderCh
         title=str(raw.get("title") or ""),
         language=_lang(raw.get("language")) or "en",
         scanlation_group=raw.get("scanlation_group") or None,
-        publish_at=raw.get("publish_at"),
+        publish_at=_ensure_utc(raw.get("publish_at")),
         source=str(raw.get("source") or "mangadex"),
         source_id=raw.get("source_id"),
         page_count=len(pages),
         total_size_bytes=sum(p.media.file_size for p in pages),
         pages_revision=_positive_int(raw.get("pages_revision")),
         manifest_sha256=str(raw.get("manifest_sha256") or ""),
-        updated_at=raw.get("updated_at"),
+        updated_at=_ensure_utc(raw.get("updated_at")),
         pages=pages,
     )
+
+
+def build_reader_chapter(raw: Dict[str, Any], pool_manga_id: str) -> Optional[ReaderChapter]:
+    """Public helper to transform a single pool chapter document into a strict ReaderChapter v2."""
+    return _build_chapter(raw, pool_manga_id)
 
 
 def build_reader_package(
@@ -334,7 +363,7 @@ def build_reader_package(
     pool_manga_id = str(pool_manga["pool_manga_id"])
 
     chapters = [c for c in (_build_chapter(raw, pool_manga_id) for raw in pool_chapters or []) if c]
-    chapters.sort(key=lambda c: (c.chapter_numeric, c.language, c.chapter_number))
+    chapters.sort(key=lambda c: (c.chapter_numeric, c.language, c.pool_chapter_id))
 
     stats = ReaderMangaStats(
         chapter_count=len(chapters),
@@ -347,8 +376,8 @@ def build_reader_package(
         pool_revision=_positive_int(raw_lineage.get("pool_revision")),
         source_metadata_revision=_positive_int(raw_lineage.get("source_metadata_revision")),
         manifest_sha256=str(raw_lineage.get("manifest_sha256") or ""),
-        published_at=raw_lineage.get("published_at"),
-        updated_at=raw_lineage.get("updated_at"),
+        published_at=_ensure_utc(raw_lineage.get("published_at")),
+        updated_at=_ensure_utc(raw_lineage.get("updated_at")),
     )
     title = str(pool_manga.get("title") or "Untitled")
     manga = ReaderManga(
@@ -377,10 +406,30 @@ def build_reader_package(
         lineage=lineage,
     )
     return ReaderPackage(
-        exported_at=exported_at or datetime.now(timezone.utc),
+        exported_at=_ensure_utc(exported_at) or datetime.now(timezone.utc),
         manga=manga,
         chapters=chapters,
     )
+
+
+def build_reader_package_dict(
+    pool_manga: Dict[str, Any],
+    pool_chapters: Iterable[Dict[str, Any]],
+    *,
+    include_chapters: bool = True,
+    exported_at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Serialize a validated contract v2 package dict.
+
+    When ``include_chapters=False`` (metadata-only sync / ADR-012), the root ``chapters``
+    property is omitted rather than emitted as an empty list so downstream consumers never
+    misinterpret a metadata update as a request to delete all existing chapters.
+    """
+    pkg = build_reader_package(pool_manga, pool_chapters, exported_at=exported_at)
+    data = pkg.model_dump(mode="json")
+    if not include_chapters:
+        data.pop("chapters", None)
+    return data
 
 
 def _example_package() -> ReaderPackage:

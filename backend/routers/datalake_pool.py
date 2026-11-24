@@ -3,6 +3,14 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
+from backend.models.connector import (
+    CdcDeliveryListResponse,
+    CdcDeliveryRecord,
+    CdcEventFeedResponse,
+    CdcSubscriptionListResponse,
+    CdcSubscriptionResponse,
+    ConnectorStatusResponse,
+)
 from backend.models.datalake_pool import (
     PoolBatchChapterUpdateRequest,
     PoolChapterUpdateRequest,
@@ -17,6 +25,7 @@ from backend.models.datalake_pool import (
     PublishToPoolRequest,
     PublishToPoolResponse,
 )
+from backend.services.connector_service import connector_service
 from backend.services.datalake_pool_service import datalake_pool_service
 from backend.services.reader_contract_service import build_reader_contract_template
 
@@ -251,3 +260,85 @@ async def export_etl_manifest(pool_manga_id: str):
     if not manifest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pooled manga not found")
     return manifest
+
+
+# ----------------------------------------------------------------------
+# Local Admin Management for External Source Connector & CDC (Loopback UI)
+# ----------------------------------------------------------------------
+
+
+@router.get("/connector/status", response_model=ConnectorStatusResponse)
+async def get_connector_admin_status():
+    """Retrieve live External Source Connector status, active ngrok tunnels, and CDC metrics."""
+    return await connector_service.get_admin_connector_status()
+
+
+@router.get("/connector/subscriptions", response_model=CdcSubscriptionListResponse)
+async def list_connector_admin_subscriptions(
+    pool_manga_id: Optional[str] = Query(None),
+    sub_status: Optional[str] = Query(None, alias="status"),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """List downstream CDC webhook subscriptions (local admin view)."""
+    return await connector_service.list_subscriptions(
+        pool_manga_id=pool_manga_id,
+        status=sub_status,
+        limit=limit,
+    )
+
+
+@router.delete("/connector/subscriptions/{subscription_key}", response_model=CdcSubscriptionResponse)
+async def revoke_connector_admin_subscription(subscription_key: str):
+    """Revoke/cancel a downstream CDC webhook subscription from the local admin UI."""
+    sub = await connector_service.cancel_subscription(subscription_key)
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CDC subscription not found")
+    return sub
+
+
+@router.post("/connector/subscriptions/{subscription_key}/test", response_model=CdcDeliveryRecord)
+async def test_connector_admin_subscription(subscription_key: str):
+    """Send a signed SUBSCRIPTION_PING webhook from the local admin UI."""
+    rec = await connector_service.send_test_ping(subscription_key)
+    if not rec:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CDC subscription not found")
+    return rec
+
+
+@router.get("/connector/events", response_model=CdcEventFeedResponse)
+async def list_connector_admin_events(
+    pool_manga_id: Optional[str] = Query(None),
+    event_type: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Inspect recently emitted CDC events in the outbox."""
+    return await connector_service.list_cdc_events(
+        pool_manga_id=pool_manga_id,
+        event_type=event_type,
+        limit=limit,
+    )
+
+
+@router.get("/connector/deliveries", response_model=CdcDeliveryListResponse)
+async def list_connector_admin_deliveries(
+    subscription_key: Optional[str] = Query(None),
+    pool_manga_id: Optional[str] = Query(None),
+    delivery_status: Optional[str] = Query(None, alias="status"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Inspect outbound CDC webhook delivery logs."""
+    return await connector_service.list_deliveries(
+        subscription_key=subscription_key,
+        pool_manga_id=pool_manga_id,
+        status=delivery_status,
+        limit=limit,
+    )
+
+
+@router.post("/connector/deliveries/{delivery_id}/retry", response_model=CdcDeliveryRecord)
+async def retry_connector_admin_delivery(delivery_id: str):
+    """Retry a failed CDC webhook delivery from the local admin UI."""
+    rec = await connector_service.retry_delivery(delivery_id)
+    if not rec:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CDC delivery record not found")
+    return rec

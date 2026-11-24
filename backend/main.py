@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
+from backend.core.connector_security import ConnectorExposureMiddleware
 from backend.core.logging_config import setup_logging
 from backend.core.request_logging import RequestLoggingMiddleware
 from backend.database.connection import close_mongo_connection, connect_to_mongo
@@ -14,6 +15,7 @@ from backend.routers import (
     analytics,
     audit_logs,
     chapters,
+    connector,
     cover_arts,
     creators,
     datalake_pool,
@@ -84,13 +86,17 @@ app = FastAPI(
 )
 
 # CORS setup
-# Allow local React frontend (usually port 5173 or 3000)
+# Allow local React frontend (usually port 5173 or 3000) + configured connector consumer origins
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
 ]
+for _extra_origin in (settings.connector_allowed_origins or "").split(","):
+    _clean_origin = _extra_origin.strip()
+    if _clean_origin and _clean_origin not in origins:
+        origins.append(_clean_origin)
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,9 +104,21 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"],
+    expose_headers=[
+        "ETag",
+        "X-Request-ID",
+        "X-Contract-Name",
+        "X-Contract-Version",
+        "X-Payload-SHA256",
+        "X-Manifest-SHA256",
+        "X-Pool-Revision",
+        "X-Pages-Revision",
+        "X-Content-SHA256",
+        "X-Media-Bucket",
+    ],
 )
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ConnectorExposureMiddleware)
 
 # Include Routers
 app.include_router(manga.router)
@@ -120,6 +138,7 @@ app.include_router(sync_manager.router)
 app.include_router(audit_logs.router)
 app.include_router(chapters.router)
 app.include_router(datalake_pool.router)
+app.include_router(connector.router)
 app.include_router(vision.router)
 app.include_router(tasks.router)
 app.include_router(translation.router)

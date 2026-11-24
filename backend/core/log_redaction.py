@@ -26,14 +26,15 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"([?&](?:key|api_key|token|client_secret|secret)=)[^&\s\"']+", re.IGNORECASE),
         rf"\1{_REDACTED}",
     ),
-    # Authorization headers
+    # Authorization & Connector API Key headers
     (re.compile(r"(Authorization:\s*(?:Bearer|Basic)\s+)[^\s\"']+", re.IGNORECASE), rf"\1{_REDACTED}"),
+    (re.compile(r"(X-Connector-API-Key:\s*)[^\s\"']+", re.IGNORECASE), rf"\1{_REDACTED}"),
     # Google Gemini / AI Studio key pattern (AIza + 30-45 alphanumeric chars)
     (re.compile(r"AIza[0-9A-Za-z_\-]{30,45}"), _REDACTED),
     # JSON key-value: "password": "...", "secret": "...", "secret_key": "..."
     (
         re.compile(
-            r'("(?:password|secret|secret_key|client_secret|api_key|gemini_api_key)"'
+            r'("(?:password|secret|secret_key|client_secret|api_key|gemini_api_key|webhook_secret|connector_api_key|connector_webhook_secret)"'
             r"\s*:\s*)"
             r'"[^"]*"',
             re.IGNORECASE,
@@ -43,7 +44,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Plain text key-value: password: ... or password=... (avoiding already redacted)
     (
         re.compile(
-            r'(\b(?:password|secret|secret_key|client_secret|api_key)\s*[:=]\s*)(?!"?\[REDACTED\]"?)[^\s,"\'}]+',
+            r'(\b(?:password|secret|secret_key|client_secret|api_key|webhook_secret|connector_api_key|connector_webhook_secret)\s*[:=]\s*)(?!"?\[REDACTED\]"?)[^\s,"\'}]+',
             re.IGNORECASE,
         ),
         rf"\1{_REDACTED}",

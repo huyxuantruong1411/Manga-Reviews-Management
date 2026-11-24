@@ -9,6 +9,7 @@ import {
 	Layers,
 	Loader2,
 	PackageCheck,
+	Plug,
 	Plus,
 	Search,
 	Settings2,
@@ -34,6 +35,7 @@ import {
 	removeMangaFromPool,
 	syncPoolManga,
 } from "../api/datalakePool";
+import { ConnectorGatewayModal } from "../components/datalake/ConnectorGatewayModal";
 import { ContractTemplateModal } from "../components/datalake/ContractTemplateModal";
 import { PoolMangaWorkspaceModal } from "../components/datalake/PoolMangaWorkspaceModal";
 import { Badge } from "../components/ui/badge";
@@ -102,6 +104,7 @@ export const DataLakePoolPage: React.FC = () => {
 		null,
 	);
 	const [showTemplateModal, setShowTemplateModal] = useState(false);
+	const [showConnectorModal, setShowConnectorModal] = useState(false);
 
 	// Load Stats
 	const loadStats = async () => {
@@ -305,6 +308,15 @@ export const DataLakePoolPage: React.FC = () => {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">
+					<Button
+						variant="outline"
+						onClick={() => setShowConnectorModal(true)}
+						className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 cursor-pointer"
+					>
+						<Plug size={16} className="mr-2" />
+						<span>ETL Connector / ngrok</span>
+					</Button>
+
 					<Button
 						variant="outline"
 						onClick={() => setShowTemplateModal(true)}
@@ -1284,6 +1296,12 @@ export const DataLakePoolPage: React.FC = () => {
 			<ContractTemplateModal
 				isOpen={showTemplateModal}
 				onClose={() => setShowTemplateModal(false)}
+			/>
+
+			{/* External Source Connector & ngrok Gateway Modal */}
+			<ConnectorGatewayModal
+				isOpen={showConnectorModal}
+				onClose={() => setShowConnectorModal(false)}
 			/>
 		</div>
 	);
