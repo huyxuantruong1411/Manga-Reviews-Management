@@ -35,3 +35,7 @@ This file records how the three supplied reference documents were used. The inte
 At implementation time, the agent must re-check the official package documentation and lock exact versions. The reference's suggested `dbt-core >=1.8,<2.0` plus `dbt-duckdb >=1.9` should be treated as a candidate range, not a permanent guarantee. Current `dbt-duckdb` release notes may require a newer dbt-core within the same major line.
 
 Likewise, Perspective's React binding and Vite/WASM instructions have changed over time. Verify its current official React and bundling guides, then test dev and production builds before locking versions.
+
+## Post-implementation integration adjustment (2026-11-28)
+
+- **Integrated Tab Instead of Standalone `analytics/ui/`**: Following implementation review, Perspective WASM (`@perspective-dev/*` `5.10.0`) was integrated directly into the main SPA as a lazy-loaded dedicated tab ([`frontend/src/components/analytics/MedallionOlapLabTab.tsx`](../../../frontend/src/components/analytics/MedallionOlapLabTab.tsx) mounted at `/analytics?tab=olap-lab`) rather than maintaining a separate `analytics/ui/` dev server on port `5180`. Classic analytics tabs remain isolated and zero Perspective JS/WASM assets download until the OLAP tab is selected. The obsolete `analytics/ui/` directory and backend static mount `/analytics-lab` were removed (`App.tsx` redirects `/analytics-lab` -> `/analytics?tab=olap-lab`).

@@ -1,7 +1,7 @@
 # System Architecture & Technical Flow
 
 > **Source Reference**: [`docs/ai-context.md`](./ai-context.md)  
-> **Source Commit Verified**: `c4a6dfb29309b0b0afd5343aa7c5327d31b252ad`
+> **Source Commit Verified**: `72c8f0c` (`main`)
 
 ---
 

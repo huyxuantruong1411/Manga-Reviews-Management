@@ -1,7 +1,7 @@
 # AI Context & Project Orientation
 
 > **Target Audience**: AI Coding Assistants (Claude, GPT, Gemini, Cursor, Copilot) & External Contributors.  
-> **Source Commit Verified**: `c4a6dfb29309b0b0afd5343aa7c5327d31b252ad`  
+> **Source Commit Verified**: `72c8f0c` (`main`)  
 > **Primary Rule**: Code, manifests, and test fixtures are the authoritative ground truth. This document is an orientation guide.
 
 ---
@@ -30,26 +30,19 @@ Always refer to project manifests and lockfiles rather than assumptions:
 | **Backend** | [`backend/pyproject.toml`](../backend/pyproject.toml) | Python `>=3.10` (CI: 3.12), FastAPI `>=0.100.0`, Motor `>=3.2.0`, Pydantic `>=2.0.0`, Uvicorn | Async REST API, DB abstraction, background coordination |
 | **Vision & NLP** | [`backend/pyproject.toml`](../backend/pyproject.toml) | OpenCV (headless), RapidOCR-ONNX, spaCy (`en_core_web_sm`), wordninja, manga-ocr | Panel segmentation, text detection, lemmatization |
 | **Caching & Queue** | [`backend/pyproject.toml`](../backend/pyproject.toml) | Redis-py `>=5.0.0`, ARQ `>=0.26.0` | In-memory key-value cache, async background OCR queue |
-| **Frontend** | [`frontend/package.json`](../frontend/package.json) | React `^19.2.6`, Vite `^8.0.12`, TypeScript `~6.0.2`, Tailwind CSS `^4.3.0`, shadcn/ui (`radix-nova`), TipTap `^3.23.5` | Single-Page Application (SPA) reader, review editor, search UI |
+| **Frontend** | [`frontend/package.json`](../frontend/package.json) | React `^19.2.6`, Vite `^8.0.12`, TypeScript `~6.0.2`, Tailwind CSS `^4.3.0`, shadcn/ui (`radix-nova`), TipTap `^3.23.5`, `@perspective-dev/*` `5.10.0` | SPA reader, review editor, search UI, OLAP tab |
+| **Medallion OLAP** | [`analytics/pyproject.toml`](../analytics/pyproject.toml) | DuckDB `>=1.2`, `dbt-duckdb`, PyArrow, PyYAML, PyMongo | Offline Bronze Parquet, Silver/Gold models, Arrow IPC |
 | **Datastores** | External / [`backend/docker-compose.yml`](../backend/docker-compose.yml) | MongoDB 6.0+ (standalone), MinIO S3 (pages/covers), Redis 7+ Alpine | Persistent metadata, S3 media storage, transient caching/jobs |
 
 ---
 
 ## 3. System Entry Points
 
-- **Backend API**: [`backend/main.py`](../backend/main.py)
-  - Run command: `uv run --project backend uvicorn backend.main:app --reload --port 8000`
-  - Lifespan initializes: MongoDB client, MinIO bucket, Redis cache pool, ARQ task pool, and database indexes.
-- **ARQ Task Worker (Vision OCR)**: [`backend/tasks/worker.py`](../backend/tasks/worker.py)
-  - Run command: `uv run --project backend arq backend.tasks.worker.WorkerSettings`
-  - Consumes queue jobs: `process_manga_panel_ocr` (defined in [`backend/tasks/ocr.py`](../backend/tasks/ocr.py)).
-- **ARQ Translation Worker**: [`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py)
-  - Run command: `uv run --project backend arq backend.tasks.translation_worker.WorkerSettings`
-  - Consumes queue `arq:translation`: page slot lease claiming, invokes isolated subprocess runner.
-- **Frontend SPA**: [`frontend/src/main.tsx`](../frontend/src/main.tsx) & [`frontend/src/App.tsx`](../frontend/src/App.tsx)
-  - Run command: `pnpm --dir frontend dev` (proxies `/api` to `http://localhost:8000`).
-  - Global providers: `AlertProvider`, `DownloadProvider`, `TooltipProvider` (shadcn).
-- **External Source Connector API**: [`backend/connector_app.py`](../backend/connector_app.py) (`uv run --project backend uvicorn backend.connector_app:app --host 127.0.0.1 --port 8001`)
+- **Backend API**: [`backend/main.py`](../backend/main.py) (`uv run --project backend uvicorn backend.main:app --reload --port 8000`) — MongoDB, MinIO, Redis cache, ARQ, `/api/analytics-lab/*` Arrow delivery.
+- **ARQ Workers**: [`backend/tasks/worker.py`](../backend/tasks/worker.py) (`ocr`), [`backend/tasks/translation_worker.py`](../backend/tasks/translation_worker.py) (`arq:translation` -> subprocess runner).
+- **Frontend SPA**: [`frontend/src/main.tsx`](../frontend/src/main.tsx) & [`frontend/src/App.tsx`](../frontend/src/App.tsx) (`pnpm --dir frontend dev`, proxies `/api` to `:8000`).
+- **Medallion OLAP Pipeline**: [`analytics/scripts/run_pipeline.py`](../analytics/scripts/run_pipeline.py) (`uv run --project analytics python -m analytics.scripts.run_pipeline --allow-existing-uri`) -> `.local/analytics/releases/`.
+- **External Source Connector API**: [`backend/connector_app.py`](../backend/connector_app.py) (`uv run --project backend uvicorn backend.connector_app:app --host 127.0.0.1 --port 8001`).
 
 ---
 

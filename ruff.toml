@@ -3,6 +3,14 @@ target-version = "py312"
 line-length = 120
 extend-exclude = [
     ".venv",
+    "analytics/.venv",
+    "analytics/.pytest_cache",
+    "analytics/.ruff_cache",
+    "analytics/dbt_project/target",
+    "analytics/dbt_project/logs",
+    "analytics/dbt_project/dbt_packages",
+    ".local",
+    ".pytest_cache",
     "venv",
     "backend/scratch",
     "backend/minio_data",
@@ -26,7 +34,7 @@ ignore = [
 ]
 
 [lint.isort]
-known-first-party = ["backend"]
+known-first-party = ["backend", "analytics"]
 
 [format]
 quote-style = "double"

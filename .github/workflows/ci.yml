@@ -38,6 +38,7 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - 'analytics/**'
               - 'services/translator-runtime/**'
               - 'ruff.toml'
               - 'pyrightconfig.json'

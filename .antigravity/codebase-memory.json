@@ -1,6 +1,6 @@
 {
-  "last_synced_commit": "297932a4158041dd6d62319bd0c048d33abc6288",
-  "last_synced_at": "2026-10-02T10:38:20.872108+00:00",
+  "last_synced_commit": "72c8f0c346cbf4d5a42b37209f65e4391abf05b0",
+  "last_synced_at": "2026-11-27T19:59:34.282646+00:00",
   "architectural_decisions": [
     {
       "id": "ADR-001",
@@ -46,6 +46,19 @@
     }
   ],
   "recent_modifications": [
+    {
+      "commit": "72c8f0c346cbf4d5a42b37209f65e4391abf05b0",
+      "short_hash": "72c8f0c",
+      "subject": "docs(readme): sync root, backend, and frontend READMEs with current system state",
+      "author": "Huy1411",
+      "timestamp": "2026-11-28T02:59:30+07:00",
+      "files_count": 3,
+      "files": [
+        "README.md",
+        "backend/README.md",
+        "frontend/README.md"
+      ]
+    },
     {
       "commit": "297932a4158041dd6d62319bd0c048d33abc6288",
       "short_hash": "297932a",

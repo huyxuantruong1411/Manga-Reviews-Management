@@ -43,7 +43,7 @@ flowchart TD
 
 | Job ID | Conditions | Key Steps | Purpose |
 |---|---|---|---|
-| `changes` | Unconditional | `dorny/paths-filter@v3` | Classifies backend, frontend, API contract, and pipeline diffs into boolean outputs. |
+| `changes` | Unconditional | `dorny/paths-filter@v3` | Classifies backend (`backend/**`, `analytics/**`, `services/translator-runtime/**`), frontend, API contract, and pipeline diffs. |
 | `secrets` | Unconditional | `gitleaks/gitleaks-action@v2` | Scans commit range for credential and secret leakage. |
 | `docs` | After `secrets` | `python scripts/check_docs.py`<br>`python scripts/generate_api_routes.py --check` | Prevents documentation broken links and API route reference drift. |
 | `backend-quality` | `backend_required == 'true'` | `uv sync --only-group lint`<br>`python scripts/ci/check_python.py` | Locked Ruff lint and format check across all tracked Python files. |

@@ -1,7 +1,7 @@
 # Development Setup & Verification Guide
 
 > **Source Reference**: [`docs/ai-context.md`](./ai-context.md)  
-> **Source Commit Verified**: `c4a6dfb29309b0b0afd5343aa7c5327d31b252ad`
+> **Source Commit Verified**: `72c8f0c` (`main`)
 
 ---
 
@@ -38,6 +38,9 @@ docker compose --env-file backend/.env -f backend/docker-compose.yml up -d minio
 ```bash
 # Backend dependencies (managed via uv)
 uv sync --project backend
+
+# Optional Medallion OLAP Analytics dependencies (DuckDB / dbt / PyArrow)
+uv sync --project analytics
 
 # Frontend dependencies (managed via pnpm)
 pnpm --dir frontend install
