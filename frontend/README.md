@@ -4,9 +4,9 @@
 
 ## Quick Overview
 
-- **Core Framework**: React 19, TypeScript, Vite
+- **Core Framework**: React 19, TypeScript 6, Vite 8
 - **UI & Styling**: Tailwind CSS v4, shadcn/ui (`radix-nova`), Lucide Icons
-- **Rich Editor**: TipTap WYSIWYG with slash commands, image resizing, and AI assistant
+- **Analytics & Rich Editor**: Recharts + Perspective WASM (`@perspective-dev/*` in `/analytics?tab=olap-lab`), TipTap WYSIWYG with Gemini AI assistant
 - **Path Alias**: `@/*` maps to `src/*`
 
 ## Common Commands
@@ -16,13 +16,12 @@ Run from the repository root:
 # Start frontend dev server
 pnpm --dir frontend dev
 
-# Typecheck and build bundle
-pnpm --dir frontend tsc -b
-pnpm --dir frontend build
+# Lint/format, typecheck, and build bundle
+pnpm --dir frontend run check
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run build
 
-# Run accessibility audit (axe-core)
+# Run Playwright E2E and axe-core accessibility audit
+pnpm --dir frontend run test:e2e
 pnpm --dir frontend test:a11y
-
-# Capture responsive visual screenshots (Playwright)
-python scripts/visual_responsive_check.py --routes / manga/1 panel-words-detector
 ```

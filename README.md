@@ -5,21 +5,21 @@
 </p>
 
 <p align="center">
-  <strong>An advanced, self-hosted Manga Library, Interactive Review Editor, MangaDex Reader, and Computer Vision & Dialogue Search Platform.</strong>
+  <strong>A self-hosted Manga Library, Multi-Source Reader, Interactive Review Studio, Vision Dialogue Search, and Medallion OLAP Analytics Platform.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/TailwindCSS-4.3+-38B2AC?style=flat-square&logo=tailwind-css" alt="TailwindCSS" />
   <img src="https://img.shields.io/badge/shadcn%2Fui-Radix_Nova-000000?style=flat-square" alt="shadcn/ui" />
+  <img src="https://img.shields.io/badge/DuckDB-dbt_%26_Arrow-FFF000?style=flat-square&logo=duckdb&logoColor=black" alt="DuckDB & Arrow" />
+  <img src="https://img.shields.io/badge/Perspective-WASM_OLAP-1E293B?style=flat-square" alt="Perspective WASM" />
   <img src="https://img.shields.io/badge/MongoDB-6.0+-47A248?style=flat-square&logo=mongodb" alt="MongoDB" />
   <img src="https://img.shields.io/badge/MinIO-S3_Storage-C72C48?style=flat-square&logo=minio" alt="MinIO" />
   <img src="https://img.shields.io/badge/Redis-7.0+_Cache-DC382D?style=flat-square&logo=redis" alt="Redis" />
-  <img src="https://img.shields.io/badge/OpenCV-Computer_Vision-5C3EE8?style=flat-square&logo=opencv" alt="OpenCV" />
-  <img src="https://img.shields.io/badge/RapidOCR-PP--OCRv4-FF6F00?style=flat-square" alt="RapidOCR" />
-  <img src="https://img.shields.io/badge/spaCy-NLP_Lemmatization-09A3D5?style=flat-square&logo=spacy" alt="spaCy" />
+  <img src="https://img.shields.io/badge/OpenCV_%2B_RapidOCR-Vision_V3-FF6F00?style=flat-square&logo=opencv" alt="Vision V3" />
 </p>
 
 > 🤖 **AI Coding Assistant & Contributor Quick Links**:
@@ -35,7 +35,7 @@
 
 ## 🌟 Overview
 
-**Manga Reviews Management** is a self-hosted manga platform combining **local S3 storage (MinIO)**, **MangaDex sync**, a **reader with side-by-side AI translation preview**, a **rich review editor**, a **Redis/ARQ task queue**, and an innovative **Panel Words Detector** that indexes comic dialogue via Computer Vision and NLP.
+**Manga Reviews Management** is a self-hosted manga platform combining **local S3 storage (MinIO)**, **multi-source chapter ingestion** (MangaDex, MangaFire, Comix), a **progressive reader**, a **rich review editor**, **Computer Vision dialogue indexing**, a **Data Lake Pool + Connector API**, and an offline **Medallion DuckDB/dbt/Arrow OLAP workbench**.
 
 ---
 
@@ -54,48 +54,31 @@ See the [operational runbook](docs/translation/operational-runbook.md) for readi
 - **Typography Workspace**: Font upload and rendering controls are present; reliable glyph coverage and overflow validation remain under development.
 - **Sequential ZIP Chapter Export**: Export translated chapters with zero-padded filenames and structured `manifest.json`.
 
-### 2. 🔍 System-Wide Panel Words Detector (Manga Lexis & Vision)
-- **Automatic Panel Segmentation**: Uses OpenCV contour hierarchy analysis to isolate individual comic panels from raw pages.
-- **PP-OCRv4 Text Detection**: RapidOCR ONNX pipeline extracts stylized manga dialogue across complex comic bubble geometries.
-- **NLP Dialogue Normalization & Lemmatization**: Uses `spaCy` (`en_core_web_sm`) and `wordninja` to de-hyphenate broken dialogue words, convert uppercase comic lettering to natural case, and extract vocabulary lemmas and POS tags.
-- **Library-Wide Search Engine**: Instantly search words, dialogue quotes, or grammatical roots across **all manga and chapters** in your system.
-- **Rich Origin Metadata**: Displays manga poster thumbnail, chapter/volume/page/panel coords, golden-amber highlight, and clickable vocabulary tokens.
-- **Dynamic In-RAM JPEG Cropping**: Streams cropped panel artwork directly from MinIO page bytes without storing duplicate cropped images on disk.
-- **Interactive Dictionary Popover**: Click any dialogue token to view phonetic IPA pronunciation, audio playback, and definitions.
-- **One-Click Jump to Reader**: Direct shortcut into the full reader at the exact page.
+### 2. 🔍 Panel Words Detector (Manga Lexis & Vision V3)
+- **Segmentation & OCR**: OpenCV contours, RapidOCR (`PP-OCRv4`), and `MangaOCRService` cleanup extract dialogue across complex bubbles.
+- **NLP Lemmatization**: `spaCy` (`en_core_web_sm`) and `wordninja` normalize comic lettering for library-wide word/lemma search.
+- **In-RAM Panel Streaming & Dictionary**: Dynamic JPEG panel cropping from MinIO bytes with interactive word popover and jump-to-reader shortcuts.
 
-### 3. 📖 Immersive Manga Reader (`/manga/:id/read/:chapterId`)
-- **Reading Modes**: Long Strip (webtoon vertical), Single Page, Double Page Left-to-Right, Double Page Right-to-Left (traditional manga).
-- **Fit Controls**: Fit to Width, Fit to Height, Original Scale.
-- **Smooth Zoom System**: 30% to 300% zoom scaling with keyboard shortcuts (`+`, `-`, `0`).
-- **Reading Progress & Hotkeys**: Auto-saves last read chapter/page to MongoDB; full keyboard navigation (`Arrow keys`, `Space`, `F` for fullscreen).
+### 3. 📖 Immersive Reader (`/manga/:id/read/:chapterId`) & Export
+- **Progressive Streaming**: Long Strip, Single Page, Double Page (LTR/RTL), smooth zoom (`30%–300%`), keyboard navigation, and preload queue.
+- **Storage & Multi-Format Export**: Export chapters to PDF, CBZ, ZIP, or folder with SSE progress; lossless MinIO `.mgtile` optimization tools.
 
-### 4. ⚡ High-Performance Caching & Async Task Worker
-- **Redis Caching Pool**: Sub-millisecond response times for manga details and reviews list with auto-fallback to MongoDB when Redis is unavailable.
-- **ARQ Task Worker**: Standalone background workers decoupled from the HTTP server process for OCR and Translation pipelines.
-- **Task Management API**: Query task status and cancel long-running jobs via standard REST endpoints.
+### 4. 📊 Analytics Hub & Medallion OLAP Lab (`/analytics`)
+- **Classic BI & AI Export (5 Tabs)**: Redis-cached MongoDB `$facet` aggregations (`Thư viện`, `Reviews`, `Tác giả`, `Tags`) and structured AI review corpus export.
+- **Medallion OLAP Tab (`/analytics?tab=olap-lab`)**: Offline [`analytics/`](analytics/RUNBOOK.md) pipeline (MongoDB read-only -> Bronze Parquet -> DuckDB/dbt 21 Silver & 9 Gold marts -> Apache Arrow IPC) served read-only via `/api/analytics-lab/*` into client-side **Perspective WASM** (raw prose excluded).
 
-### 5. 📥 High-Throughput Download & Storage Manager
-- **Anti-Freeze Concurrency Engine**: Asynchronous chapter downloader decoupled from main HTTP server threads, preventing API lockups during bulk downloads.
-- **MinIO Object Storage**: High-speed S3-compatible local bucket (`manga-library`) with deduplication checks (MD5 hash).
-- **Smart Folder Parsing**: Intelligently parses folder naming conventions (`Vol. 1 Ch. 2`, `Chapter 1 - Title [Group]`, `Oneshot`).
-- **Multi-Format Chapter Export**: Export downloaded chapters into PDF, CBZ, ZIP, or uncompressed image folders with real-time SSE progress streaming and native OS file explorer reveal.
-- **Storage Management UI**: Pagination controls, natural numeric sorting, duplicate detection, and cascading panel metadata cleanup.
+### 5. 📥 Multi-Source Ingestion, Data Lake Pool & Connector
+- **Multi-Source Downloader**: Unified MangaDex, MangaFire, and Comix chapter plans with logical `chapter_slots` and metadata merge field locks.
+- **Data Lake Pool & Connector Gateway**: Curated `manga-reader-package:2.0` packages served via isolated ASGI gateway (`backend/connector_app.py`, port `8001`, HMAC-SHA256 CDC webhooks).
 
-### 6. ✍️ Rich Media Review Editor & Gemini AI
-- **TipTap WYSIWYG Editor**: Slash commands (`/`), resizable images, audio recordings, video player, file attachments.
-- **Formatting Tools & Live Metrics**: One-click clear formatting button and shortcut (`Ctrl+\`), sticky reading time & word count status header, and smooth canvas width adjustments.
-- **Interactive Manga Reference Mentions**: Type `@manga` to embed live manga cards with hover tooltips.
-- **Gemini AI Integration**: AI-assisted grammar refinement, tone adjustment, automatic summary generation, and chapter scene analysis.
+### 6. ✍️ Rich Review Studio, Tierlists & Gemini AI
+- **TipTap WYSIWYG Editor**: Slash commands, resizable media, `@manga` mentions, and Gemini Flash review rewriting/ideas assistance.
+- **Creator Profiles & Tierlists**: Author/artist detail pages (`/author/:id/:slug`) with drag-and-drop Creator Tier List Maker and snapshots.
+- **External Reviews Hub**: Scrape and compare MAL reviews/metadata alongside personal scores.
 
-### 7. 🔄 MangaDex Sync & Automation
-- **APIv5 Integration**: Direct metadata synchronization (titles, alternative titles, authors, artists, publication status, original language).
-- **Cover Art Gallery**: Batch downloader for high-res official MangaDex cover art with presigned URLs.
-- **MangaDex Official Tags**: 70+ categorized genre and theme tags.
-
-### 8. 📊 Observability, Audit Logs & ELK Stack
-- **Audit & ECS Logs**: Business audit trails and ECS-structured logs with automated secret redaction and request tracing.
-- **ELK Stack & Native UI**: Standalone Docker ELK stack, embedded Kibana dashboards, and native ECS viewer with local NDJSON fallback. See [`docs/logging.md`](docs/logging.md).
+### 7. ⚡ Caching, Async Workers & ELK Observability
+- **Redis & ARQ**: Sub-millisecond caching with MongoDB fallback plus decoupled ARQ workers (`ocr`, `translation`).
+- **Audit Logs & ELK**: Redacted ECS NDJSON logs (`logs/manga-*.ndjson`), Elasticsearch search, and embedded Kibana in `/audit-logs` (see [`docs/logging.md`](docs/logging.md)).
 
 ---
 
@@ -103,29 +86,17 @@ See the [operational runbook](docs/translation/operational-runbook.md) for readi
 
 ```mermaid
 flowchart TD
-    Client["Frontend (React 19 + TypeScript + Tailwind v4 + shadcn/ui)"]
-    API["Backend (FastAPI + Python 3.12)"]
-    Mongo[("MongoDB 6.0+<br/>Metadata & Panels")]
-    MinIO[("MinIO S3<br/>Covers, Pages & Translations")]
-    Redis[("Redis 7.0+<br/>Cache & Task Queues")]
-    WorkerOCR["ARQ OCR Worker<br/>(Panel Scanning)"]
-    WorkerTrans["ARQ Translation Worker<br/>(Chapter Pipelines)"]
-    Runtime["Isolated Runtime Subprocess<br/>(services/translator-runtime)"]
-    DexAPI["MangaDex APIv5"]
-
-    Client -->|"REST, SSE & S3"| API
-    API -->|"Read/Write"| Mongo
-    API -->|"Presigned URLs"| MinIO
-    API -->|"Cache Read/Write"| Redis
-    API -->|"Enqueue Jobs"| Redis
-    Redis -->|"Claim OCR"| WorkerOCR
-    Redis -->|"Claim Translation"| WorkerTrans
-    WorkerOCR -->|"Store Panels"| Mongo
-    WorkerTrans -->|"Spawn Runner"| Runtime
-    Runtime -->|"Rendered Artifacts"| WorkerTrans
-    WorkerTrans -->|"Upload Artifacts"| MinIO
-    WorkerTrans -->|"Update Bindings"| Mongo
-    API -->|"Metadata"| DexAPI
+    Client["Frontend (React 19 + TypeScript + Perspective WASM)"] -->|REST & SSE| API["Backend API (FastAPI :8000)"]
+    Client -->|"Arrow IPC Streams"| API
+    API -->|Metadata & Panels| Mongo[("MongoDB 6.0+")]
+    API -->|"Media & Exports"| MinIO[("MinIO S3")]
+    API -->|"Cache & Queues"| Redis[("Redis 7.0+")]
+    Redis --> Workers["ARQ Workers (OCR & Translation)"]
+    Workers --> Runtime["Translator Runtime (services/translator-runtime)"]
+    Mongo -->|"Read-Only Extract"| Lake["Medallion Lakehouse (analytics/ · DuckDB + dbt)"]
+    Lake -->|"Gold .arrow Releases"| API
+    API -->|"Data Lake Sync"| Connector["Connector Gateway (:8001)"]
+    API -->|ECS Logs| ELK["ELK Stack (Elasticsearch + Kibana)"]
 ```
 
 ---
@@ -134,14 +105,14 @@ flowchart TD
 
 | Layer | Technologies |
 |---|---|
-| **Backend** | Python 3.12, FastAPI, Motor (Async MongoDB), Pydantic v2, Uvicorn |
-| **Translation Engine** | Isolated Subprocess CLI Runner (`services/translator-runtime`), Pillow (Pure Canvas), Custom TTF Glyph Validator |
-| **Vision & NLP** | OpenCV (`opencv-python-headless`), RapidOCR (PP-OCRv4 ONNX), spaCy (`en_core_web_sm`), Wordninja, MangaOCR |
-| **Caching & Queues** | Redis (Alpine), ARQ (Async Redis Queue workers for OCR and Translation) |
-| **Frontend** | React 19, TypeScript, Tailwind CSS v4, shadcn/ui (`radix-nova`), Vite, TipTap Editor, Lucide Icons, Axios |
-| **Database & S3** | MongoDB 6.0+ (standalone), MinIO Object Storage (S3-compatible `manga-library`) |
-| **AI / LLM** | Google Generative AI (Gemini 1.5 Flash / Pro) |
-| **Testing & QA** | Pytest, Biome (TS/TSX Linter), `@axe-core/cli` (A11y), Playwright (Visual Responsive Runner) |
+| **Backend** | Python 3.12 (`uv`), FastAPI, Motor (Async MongoDB), Pydantic v2, Uvicorn |
+| **Medallion OLAP** | DuckDB, `dbt-duckdb`, PyArrow IPC, Parquet, Perspective WASM (`@perspective-dev/*`) |
+| **Vision, NLP & AI** | OpenCV, RapidOCR (`PP-OCRv4`), spaCy, Wordninja, MangaOCR, Gemini API |
+| **Translation Plane** | Isolated Subprocess Runner (`services/translator-runtime`), Pillow, TTF Validator |
+| **Caching & Queues** | Redis Alpine, ARQ (Async Redis Queue workers) |
+| **Frontend** | React 19, TypeScript 6, Tailwind CSS v4, shadcn/ui (`radix-nova`), Vite 8, TipTap |
+| **Datastores & Logs** | MongoDB 6.0+, MinIO S3 (`manga-library`), Elasticsearch, Kibana, ECS Logging |
+| **Testing & QA** | Pytest, Ruff, Biome, `@axe-core/cli`, Playwright |
 
 ---
 
@@ -212,21 +183,20 @@ uv run --project backend arq backend.tasks.translation_worker.WorkerSettings
 
 ---
 
-### 4. Frontend Setup
+### 4. Frontend & Medallion Analytics Setup
 
-1. Install dependencies:
+1. Install & start Vite dev server (`http://localhost:5173`):
 
 ```bash
 pnpm --dir frontend install
-```
-
-2. Start Vite development server:
-
-```bash
 pnpm --dir frontend dev
 ```
 
-The application will be running at `http://localhost:5173`.
+2. *(Optional)* Build offline DuckDB/dbt/Arrow marts for the **Medallion OLAP Lab** tab (`/analytics?tab=olap-lab`, see [`analytics/RUNBOOK.md`](analytics/RUNBOOK.md)):
+
+```bash
+uv run --project analytics python -m analytics.scripts.run_pipeline --allow-existing-uri
+```
 
 ---
 
