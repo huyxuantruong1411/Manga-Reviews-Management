@@ -1,0 +1,10 @@
+manga_medallion:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('ANALYTICS_DUCKDB_PATH', '../../.local/analytics/warehouse/dev.duckdb') }}"
+      threads: "{{ env_var('ANALYTICS_THREADS', '2') | int }}"
+      settings:
+        memory_limit: "{{ env_var('ANALYTICS_MEMORY_LIMIT', '4GB') }}"
+        preserve_insertion_order: false

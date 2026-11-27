@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     connector_webhook_max_retries: int = Field(default=3)
     connector_webhook_allow_private_urls: bool = Field(default=True)
 
+    # Manga Deep Analytics Lab (Medallion OLAP Arrow Serving)
+    analytics_home: str = Field(default=".local/analytics")
+    analytics_lab_allowed_origins: str = Field(default="")
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
         env_file_encoding="utf-8",

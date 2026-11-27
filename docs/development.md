@@ -132,7 +132,13 @@ uv run --project backend python -m pytest services/translator-runtime/tests/
 
 # Structured Logging, Redaction, ES Sync & Observability APIs
 uv run --project backend python -m pytest backend/tests/test_log_*.py backend/tests/test_logging_config.py backend/tests/test_request_logging.py backend/tests/test_elk_scripts.py backend/tests/test_system_logs_api.py backend/tests/test_audit_es_sync.py
+
+# Medallion OLAP Analytics (Arrow delivery router + offline pipeline tests)
+uv run --project backend python -m pytest backend/tests/test_analytics_lab.py
+uv run --project analytics python -m pytest analytics/tests/
 ```
+
+To refresh offline Medallion Parquet/DuckDB/Arrow snapshots locally, see [`analytics/RUNBOOK.md`](../analytics/RUNBOOK.md) (renders inside `/analytics?tab=olap-lab`).
 
 ### B. Frontend TypeScript, Linting & Production Build
 ```bash

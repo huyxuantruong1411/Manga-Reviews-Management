@@ -1,0 +1,35 @@
+name: 'manga_medallion'
+version: '1.0.0'
+config-version: 2
+
+profile: 'manga_medallion'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  bronze_root: ".local/analytics/lake/bronze"
+  silver_staging_root: ".local/analytics/staging/silver_private"
+  as_of_date: "2026-11-28"
+  release_id: "dev"
+  metric_definition_version: "1.0.0"
+
+models:
+  manga_medallion:
+    bronze:
+      +schema: bronze
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table

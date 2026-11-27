@@ -17,6 +17,7 @@
 - A **Multi-Source Ingestion & Chapter Slot Architecture**: Unified downloading and reading from MangaDex and MangaFire with source-scoped identity, logical slot coverage, and safe metadata merging with user field locks.
 - A **Translation Studio & Reader Translation Subsystem** (UI/orchestration present; real inference unavailable): In-reader automated translation with compare split slider, dedicated studio workspace (`/translation`), pure-canvas re-rendering (Pillow No-LLM), font glyph coverage validator, and isolated execution plane via subprocess envelope.
 - A **Manga Data Lake Pool & External Source Connector**: Curated packages (`manga-reader-package:2.0`) served via isolated ASGI gateway ([`backend/connector_app.py`](../backend/connector_app.py), port `8001`, `/api/connector/v1/*`) with HMAC-SHA256 CDC webhooks for external reader apps (embedded `manga-reader/` removed).
+- A **Medallion OLAP Analytics Pipeline** ([`analytics/`](../analytics/)): Offline Bronze Parquet, DuckDB/dbt Silver & 9 Gold Arrow IPC marts served via `/api/analytics-lab/*` to a lazy-loaded Perspective WASM tab at `/analytics?tab=olap-lab`.
 
 ---
 

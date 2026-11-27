@@ -272,3 +272,13 @@ The platform incorporates an Elastic Common Schema (ECS) logging pipeline and EL
 - **ELK Topology**: Standalone Docker Compose environment in [`infra/elk/`](../infra/elk/) containing Elasticsearch (ILM retention), Logstash, Kibana (embedded iframe), and Filebeat.
 - **Resilience**: Zero-outage graceful fallback to MongoDB for audit logs and local NDJSON streaming for application logs if Elasticsearch is offline.
 
+---
+
+## 7. Medallion OLAP Lakehouse Pipeline
+
+The deep analytics pipeline ([`analytics/`](../analytics/)) runs out-of-band from OLTP requests and powers the dedicated **Medallion OLAP Lab** tab inside [`frontend/src/pages/AnalyticsPage.tsx`](../frontend/src/pages/AnalyticsPage.tsx):
+
+- **Bronze Extraction**: Read-only snapshot extraction from MongoDB (`manga_library`) into daily Partitioned Parquet (`dt=YYYY-MM-DD`) plus safe review aspect/lexical feature extraction without exposing raw prose to browser exports.
+- **Silver & Gold Transformations**: DuckDB + `dbt-duckdb` builds 21 Silver normalized models and 9 curated Gold insight marts (`gld_*`) with statistical shrinkage and minimum-support guardrails (details in [`analytics/RUNBOOK.md`](../analytics/RUNBOOK.md)).
+- **Arrow IPC Delivery & Privacy Guard**: [`analytics/scripts/export_arrow.py`](../analytics/scripts/export_arrow.py) strips banned raw-text columns and publishes immutable releases under `.local/analytics/releases/<release_id>/`; [`backend/routers/analytics_lab.py`](../backend/routers/analytics_lab.py) serves allow-listed `.arrow` streams directly into client-side Perspective WASM (`@perspective-dev/*`).
+

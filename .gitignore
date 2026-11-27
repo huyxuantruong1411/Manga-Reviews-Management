@@ -84,3 +84,12 @@ tools/goodbyedpi/bin/
 *.sys
 *.exe
 *.dll
+
+# Manga Analytics private local artifacts & reference archives
+.pytest_cache/
+.local/analytics/
+analytics/.venv/
+analytics/dbt_project/target/
+analytics/dbt_project/logs/
+analytics/dbt_project/dbt_packages/
+reference/

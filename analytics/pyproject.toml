@@ -1,0 +1,33 @@
+[project]
+name = "manga-deep-analytics"
+version = "0.1.0"
+description = "Isolated Medallion OLAP lakehouse (MongoDB Bronze -> DuckDB/dbt Silver -> Gold -> Arrow IPC)"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "dbt-core>=1.9.0,<1.10.0",
+    "dbt-duckdb>=1.9.0,<1.10.0",
+    "duckdb>=1.1.0,<1.5.0",
+    "pyarrow>=18.0.0",
+    "pymongo>=4.6.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.9.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.pyrefly]
+python-interpreter-path = ".venv/Scripts/python.exe"
+search-path = [".."]
+project-excludes = ["**/.venv/**", "**/dbt_project/target/**"]

@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: gld_taste_calibration
+    description: "Shrunk and raw personal rating lift across tags, demographics, languages, content ratings, and pub statuses."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: reliability_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['insufficient_data', 'low', 'medium', 'high']
+
+  - name: gld_tag_synergy
+    description: "Unordered tag pair co-occurrence, support, confidence, lift, smoothed PMI, and shrunk pair rating."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: reliability_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['insufficient_data', 'low', 'medium', 'high']
+
+  - name: gld_series_completion_friction
+    description: "Completion, drop/on-hold, and right-censored active shares by external metadata chapter-count bucket."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: is_metadata_chapter_count
+        tests:
+          - accepted_values:
+              values: [true]
+
+  - name: gld_creator_consistency
+    description: "Canonical creator x role rating consistency, dispersion, and shrinkage mean."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: role
+        tests:
+          - accepted_values:
+              values: ['author', 'artist']
+
+  - name: gld_review_aspect_profile
+    description: "Observable bilingual aspect mention rates by rating band and review cohort (mention-only, no sentiment/psychology)."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: sentiment_enabled
+        tests:
+          - accepted_values:
+              values: [false]
+
+  - name: gld_backlog_velocity
+    description: "Acquisition cohort completion curves (immature cells masked NULL), backlog age percentiles, and audit coverage."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+
+  - name: gld_metadata_health
+    description: "Metadata field presence, provenance, locks, staleness, and unresolved identity counts."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+
+  - name: gld_external_consensus_gap
+    description: "Personal rating vs separate MAL/AniList aggregate scores and individual crawled external reviews."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+
+  - name: gld_ocr_lexical_atlas
+    description: "Scanned-page OCR coverage, token occurrences, unique lemmas, and POS shares per compatible pipeline dimension."
+    columns:
+      - name: mart_row_key
+        tests: [unique, not_null]
+      - name: is_full_manga_text
+        tests:
+          - accepted_values:
+              values: [false]

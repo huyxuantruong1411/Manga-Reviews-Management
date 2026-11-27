@@ -1,0 +1,190 @@
+version: 2
+
+models:
+  - name: slv_manga_snapshot_history
+    description: "Daily snapshot history per manga_id x snapshot_date."
+    columns:
+      - name: manga_id
+        tests: [not_null]
+      - name: snapshot_date
+        tests: [not_null]
+      - name: rating_is_valid
+        tests:
+          - accepted_values:
+              values: [true]
+
+  - name: slv_manga_current
+    description: "Latest active manga state per manga_id. Personal rating and read_status live here."
+    columns:
+      - name: manga_id
+        tests: [unique, not_null]
+      - name: read_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['unread', 'reading', 'completed', 'dropped', 'on_hold', 'plan_to_read', 're_reading']
+      - name: rating_is_valid
+        tests:
+          - accepted_values:
+              values: [true]
+
+  - name: slv_tag_current
+    description: "Normalized tag lookup dimension per tag_id."
+    columns:
+      - name: tag_id
+        tests: [unique, not_null]
+      - name: tag_label
+        tests: [not_null]
+
+  - name: slv_creator_current
+    description: "Canonical creator lookup dimension keyed by creator_id UUID."
+    columns:
+      - name: creator_id
+        tests: [unique, not_null]
+      - name: creator_name
+        tests: [not_null]
+
+  - name: slv_review_current
+    description: "Active non-deleted personal reviews per review_id (without raw prose)."
+    columns:
+      - name: review_id
+        tests: [unique, not_null]
+      - name: manga_id
+        tests: [not_null]
+
+  - name: slv_review_text_private
+    description: "Private TipTap plain-text statistical features per review_id (never exported to Gold/Arrow)."
+    columns:
+      - name: review_id
+        tests: [unique, not_null]
+      - name: word_count
+        tests: [not_null]
+
+  - name: slv_review_aspect_mentions
+    description: "Controlled bilingual aspect mention spans per review_id x aspect x mention_seq."
+    columns:
+      - name: review_id
+        tests: [not_null]
+      - name: aspect
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['art', 'character', 'plot', 'pacing', 'worldbuilding', 'theme', 'dialogue', 'ending', 'emotion', 'adaptation']
+
+  - name: slv_external_review_current
+    description: "Deduplicated crawled external reviews per (source, source_work_id, source_review_id)."
+    columns:
+      - name: external_review_doc_id
+        tests: [unique, not_null]
+      - name: rating_is_valid
+        tests:
+          - accepted_values:
+              values: [true]
+
+  - name: slv_manga_tag_bridge
+    description: "Deduplicated bridge at grain manga_id x tag_id preserving missing_dimension rows."
+    columns:
+      - name: manga_id
+        tests: [not_null]
+      - name: tag_id
+        tests: [not_null]
+      - name: tag_resolution_status
+        tests:
+          - accepted_values:
+              values: ['resolved', 'missing_dimension']
+
+  - name: slv_manga_creator_bridge
+    description: "Resolved bridge at grain manga_id x creator_id x role preserving identity method and confidence."
+    columns:
+      - name: manga_id
+        tests: [not_null]
+      - name: creator_id
+        tests: [not_null]
+      - name: role
+        tests: [not_null]
+      - name: identity_confidence
+        tests:
+          - accepted_values:
+              values: ['high', 'medium', 'low']
+
+  - name: slv_chapter_release
+    description: "Physical chapter release grain per chapter_id."
+    columns:
+      - name: chapter_id
+        tests: [unique, not_null]
+      - name: manga_id
+        tests: [not_null]
+
+  - name: slv_chapter_slot
+    description: "Logical chapter slot grain per slot_id."
+    columns:
+      - name: slot_id
+        tests: [unique, not_null]
+
+  - name: slv_chapter_page
+    description: "Embedded chapter page grain keyed by page_uid (or chapter_id:page_number fallback)."
+    columns:
+      - name: page_key
+        tests: [unique, not_null]
+
+  - name: slv_manga_chapter_coverage
+    description: "Manga-level physical release, logical slot, and downloaded page inventory counts."
+    columns:
+      - name: manga_id
+        tests: [unique, not_null]
+
+  - name: slv_panel_current
+    description: "OCR panel metadata joined with panel_scan_pages pipeline_version (no raw text)."
+    columns:
+      - name: panel_id
+        tests: [unique, not_null]
+
+  - name: slv_panel_token_occurrence
+    description: "Exploded vocabulary[] tokens per panel_id x vocab_seq retaining frequency."
+    columns:
+      - name: panel_id
+        tests: [not_null]
+      - name: lemma
+        tests: [not_null]
+      - name: language
+        tests: [not_null]
+
+  - name: slv_panel_lemma_membership
+    description: "Distinct normalized lemma membership per panel_id x lemma."
+    columns:
+      - name: panel_id
+        tests: [not_null]
+      - name: lemma
+        tests: [not_null]
+
+  - name: slv_ocr_page_coverage
+    description: "Eligible chapter page OCR coverage with page_hash_matches validation."
+    columns:
+      - name: page_key
+        tests: [unique, not_null]
+
+  - name: slv_manga_status_events
+    description: "Deduplicated verified manga create/update_status audit events with conflict checks."
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: manga_id
+        tests: [not_null]
+
+  - name: slv_reading_progress_snapshot
+    description: "Current-position snapshot per manga_id (explicitly non-session)."
+    columns:
+      - name: manga_id
+        tests: [unique, not_null]
+      - name: is_snapshot_only
+        tests:
+          - accepted_values:
+              values: [true]
+
+  - name: slv_tierlist_item_current
+    description: "Current tierlist items at grain tierlist_id x manga_id."
+    columns:
+      - name: tierlist_id
+        tests: [not_null]
+      - name: manga_id
+        tests: [not_null]

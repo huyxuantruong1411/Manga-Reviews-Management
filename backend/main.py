@@ -13,6 +13,7 @@ from backend.database.indexes import init_db_indexes
 from backend.routers import (
     ai,
     analytics,
+    analytics_lab,
     audit_logs,
     chapters,
     connector,
@@ -97,6 +98,10 @@ for _extra_origin in (settings.connector_allowed_origins or "").split(","):
     _clean_origin = _extra_origin.strip()
     if _clean_origin and _clean_origin not in origins:
         origins.append(_clean_origin)
+for _lab_origin in (settings.analytics_lab_allowed_origins or "").split(","):
+    _clean_lab_origin = _lab_origin.strip()
+    if _clean_lab_origin and _clean_lab_origin not in origins:
+        origins.append(_clean_lab_origin)
 
 app.add_middleware(
     CORSMiddleware,
@@ -127,6 +132,7 @@ app.include_router(tags.router)
 app.include_router(mangadex.router)
 app.include_router(downloads.router)
 app.include_router(analytics.router)
+app.include_router(analytics_lab.router)
 app.include_router(tierlists.router)
 app.include_router(creators.router)
 app.include_router(external_reviews.router)

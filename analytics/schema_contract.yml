@@ -1,0 +1,361 @@
+contract_version: "1.0"
+discovered_at: "2026-11-28T01:37:39Z"
+live_profile_complete: true
+
+source:
+  engine: mongodb
+  uri_env_var: ANALYTICS_MONGODB_URI
+  fallback_uri_env_var: MONGODB_URI
+  primary_database_env_var: DATABASE_NAME
+  primary_database_default: manga_library
+  pool_database_env_var: POOL_DATABASE_NAME
+  pool_database_default: manga_datalake_pool
+  default_read_preference: primary
+  access_mode: read_only_by_code_and_read_role_when_enabled
+  consistency: best_effort_collection_snapshot
+  snapshot_partition: "dt=YYYY-MM-DD"
+  rating_scale:
+    personal_min: 0
+    personal_max: 10
+    personal_step: 0.5
+    observed_personal_min: 1.0
+    observed_personal_max: 10.0
+    verified_live: true
+    external_review_min: 1
+    external_review_max: 10
+    external_review_step: 1
+    observed_external_review_min: 3
+    observed_external_review_max: 10
+    external_review_verified_live: true
+    provider_aggregate_scales:
+      mal_score: "0-10_double"
+      anilist_mean_score: "0-100_int"
+
+capabilities:
+  has_personal_rating: true
+  has_read_status: true
+  has_personal_review_text: true
+  has_external_reviews: true
+  has_external_aggregate_score: true
+  has_tags: true
+  has_canonical_creators: true
+  has_chapter_inventory: true
+  has_chapter_slots: true
+  has_reading_progress_snapshot: true
+  has_audit_events: true
+  has_ocr_panels: true
+  has_ocr_page_scan_state: true
+  has_vision_v3: true
+  has_tierlists: true
+  has_pool_cdc: true
+
+data_availability:
+  personal_library_core: ready       # 2864 mangas, 574 rated, 79 tags, 3035 creators
+  personal_reviews: ready            # 603 active reviews across 481 mangas
+  audit_status_events: partial       # 10659 audit logs; 1002/2864 (34.99%) mangas have update_status events; 0 conflicts
+  chapter_inventory: ready           # 2469 physical releases, 2469 slots, 64014 pages across 84 mangas
+  external_reviews: sparse           # 23 external reviews across 9 mangas (MAL only)
+  external_aggregate_scores: sparse  # 36 AniList mean_score + 10 MAL score across 41 mangas
+  ocr_lexical: insufficient_data     # 80 panels on 30 scanned pages across 1 manga / 1 chapter
+  tierlists: sparse                  # 2 creator_tierlists, 11 ranked items, snapshot-only
+  reading_progress: snapshot_only    # 20 current-position snapshots, no session history
+
+marts_enabled:
+  gld_taste_calibration: true
+  gld_tag_synergy: true
+  gld_series_completion_friction: true
+  gld_creator_consistency: true
+  gld_review_aspect_profile: true    # mention-only; sentiment disabled until annotated evaluation gate passes
+  gld_backlog_velocity: true         # with explicit event-coverage caveat (34.99%)
+  gld_metadata_health: true
+  gld_external_consensus_gap: true   # low-n / sparse external sample warning enforced
+  gld_ocr_lexical_atlas: true        # marked insufficient_data / degraded coverage (1 manga, 30/64014 pages)
+
+entities:
+  mangas:
+    database: primary
+    collection: mangas
+    enabled: true
+    required: true
+    data_classification: personal_library
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 2864
+    fields:
+      title: title
+      alt_titles: alt_titles
+      personal_rating: personal_rating
+      read_status: read_status
+      publication_status: status
+      content_rating: content_rating
+      publication_demographic: publication_demographic
+      original_language: original_language
+      publication_year: year
+      published_start_date: published_start_date
+      published_end_date: published_end_date
+      declared_volumes: volumes
+      declared_chapters: chapters
+      tags_reference_array: tag_ids
+      creators_reference_array: creators
+      legacy_author: author
+      legacy_artist: artist
+      tracker_metadata: tracker_metadata
+      source_metrics: source_metrics
+      metadata_locks: metadata_locks
+      metadata_provenance: metadata_provenance
+      metadata_revision: metadata_revision
+      added_at: added_at
+      updated_at: updated_at
+      unread_at: unread_at
+      reading_at: reading_at
+      completed_at: completed_at
+      dropped_at: dropped_at
+      on_hold_at: on_hold_at
+      plan_to_read_at: plan_to_read_at
+      re_reading_at: re_reading_at
+
+  reviews:
+    database: primary
+    collection: reviews
+    enabled: true
+    required: true
+    data_classification: private_prose
+    contains_sensitive_text: true
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 612
+    fields:
+      manga_id: manga_id
+      title: title
+      rich_content: content_json
+      created_at: created_at
+      updated_at: updated_at
+      finalized_at: finalized_at
+      soft_delete: is_deleted
+
+  tags:
+    database: primary
+    collection: tags
+    enabled: true
+    required: true
+    data_classification: reference_dimension
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 79
+    fields:
+      localized_name: name
+      group: group
+      source: source
+      mangadex_id: mangadex_id
+      color: color
+      created_at: created_at
+      updated_at: updated_at
+
+  creators:
+    database: primary
+    collection: creators
+    enabled: true
+    required: true
+    data_classification: reference_dimension
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 3035
+    fields:
+      canonical_creator_id: creator_id
+      slug: slug
+      name: name
+      mangadex_id: mangadex_id
+      created_at: created_at
+      updated_at: updated_at
+
+  chapters:
+    database: primary
+    collection: chapters
+    enabled: true
+    required: true
+    data_classification: inventory_metadata
+    primary_key: _id
+    primary_key_bson_types: [ObjectId, string]
+    observed_document_count: 2469
+    fields:
+      manga_id: manga_id
+      logical_chapter_id: logical_chapter_id
+      chapter_number: chapter_number
+      chapter_numeric: chapter_numeric
+      volume: volume
+      title: title
+      source: source
+      source_id: source_id
+      source_work_id: source_work_id
+      language: language
+      scanlation_group: scanlation_group
+      state: state
+      pages: pages
+      page_count: page_count
+      pages_revision: pages_revision
+      created_at: created_at
+      updated_at: updated_at
+
+  chapter_slots:
+    database: primary
+    collection: chapter_slots
+    enabled: true
+    required: false
+    data_classification: inventory_metadata
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 2469
+    fields:
+      manga_id: manga_id
+      language: language
+      unit_kind: unit_kind
+      numbering_scope_id: numbering_scope_id
+      chapter_key: chapter_key
+      chapter_display: chapter_display
+      preferred_chapter_id: preferred_chapter_id
+      mapping_state: mapping_state
+      is_excluded: is_excluded
+      created_at: created_at
+      updated_at: updated_at
+
+  external_reviews:
+    database: primary
+    collection: external_reviews
+    enabled: true
+    required: false
+    data_classification: external_prose
+    contains_sensitive_text: true
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 23
+    fields:
+      manga_id: manga_id
+      source: source
+      source_work_id: source_work_id
+      source_review_id: source_review_id
+      overall_rating: overall_rating
+      recommendation_status: recommendation_status
+      is_preliminary: is_preliminary
+      is_spoiler: is_spoiler
+      content_text: content_text
+      word_count: word_count
+      character_count: character_count
+      reactions: reactions
+      posted_at: posted_at
+      fetched_at: fetched_at
+      updated_at: updated_at
+
+  manga_panels:
+    database: primary
+    collection: manga_panels
+    enabled: true
+    required: false
+    data_classification: ocr_private_text
+    contains_sensitive_text: true
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 80
+    fields:
+      manga_id: manga_id
+      chapter_id: chapter_id
+      chapter_number: chapter_number
+      page_number: page_number
+      panel_index: panel_index
+      cleaned_text: cleaned_text
+      raw_text: raw_text
+      lemmas: lemmas
+      vocabulary: vocabulary
+      language: language
+      scan_mode: scan_mode
+      pipeline_version: null
+      scan_generation: scan_generation
+      created_at: created_at
+
+  panel_scan_pages:
+    database: primary
+    collection: panel_scan_pages
+    enabled: true
+    required: false
+    data_classification: ocr_scan_state
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    natural_key: [chapter_id, page_number]
+    observed_document_count: 30
+    fields:
+      manga_id: manga_id
+      chapter_id: chapter_id
+      page_number: page_number
+      page_hash: page_hash
+      pipeline_version: pipeline_version
+      scanned_at: scanned_at
+
+  audit_logs:
+    database: primary
+    collection: audit_logs
+    enabled: true
+    required: false
+    data_classification: operational_events
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 10659
+    fields:
+      entity_type: entity_type
+      entity_id: entity_id
+      action: action
+      field: field
+      old_value: old_value
+      new_value: new_value
+      actor: actor
+      details: details
+      timestamp: timestamp
+
+  reading_progress:
+    database: primary
+    collection: reading_progress
+    enabled: true
+    required: false
+    data_classification: personal_snapshot
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    natural_key: [manga_id]
+    observed_document_count: 20
+    fields:
+      manga_id: manga_id
+      last_read_chapter_id: last_read_chapter_id
+      last_read_chapter_number: last_read_chapter_number
+      last_read_language: last_read_language
+      last_read_page: last_read_page
+      read_chapter_ids: read_chapter_ids
+      reading_mode: reading_mode
+      fit_mode: fit_mode
+      updated_at: updated_at
+
+  creator_tierlists:
+    database: primary
+    collection: creator_tierlists
+    enabled: true
+    required: false
+    data_classification: personal_ranking_snapshot
+    primary_key: _id
+    primary_key_bson_types: [ObjectId]
+    observed_document_count: 2
+    fields:
+      creator_name: creator_name
+      creator_name_normalized: creator_name_normalized
+      title: title
+      category_tag: category_tag
+      is_default: is_default
+      tiers: tiers
+      revision: revision
+      created_at: created_at
+      updated_at: updated_at
+
+  pool_mangas:
+    database: pool
+    collection: pool_mangas
+    enabled: false
+    required: false
+    data_classification: pool_lineage
+    primary_key: _id
+    observed_document_count: 30
+    fields: null

@@ -7,6 +7,7 @@ import {
 	ChevronDown,
 	ChevronUp,
 	Filter,
+	FlaskConical,
 	RefreshCw,
 	Search,
 	SlidersHorizontal,
@@ -16,7 +17,15 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import {
 	Area,
@@ -53,6 +62,10 @@ import {
 	TableRowsSkeleton,
 } from "../components/loading/PageSkeletons";
 import { CreatorMultiSelect } from "../components/ui/CreatorMultiSelect";
+
+const MedallionOlapLabTab = lazy(
+	() => import("../components/analytics/MedallionOlapLabTab"),
+);
 
 interface Tag {
 	_id: string;
@@ -1983,6 +1996,29 @@ export const AnalyticsPage: React.FC = () => {
 						AI Ready
 					</span>
 					{currentTab === "ai-export" && (
+						<motion.span
+							layoutId="analytics-tab-underline"
+							transition={MOTION_PILL_SPRING}
+							className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
+						/>
+					)}
+				</button>
+
+				<button
+					type="button"
+					onClick={() => setSearchParams({ tab: "olap-lab" })}
+					className={`relative pb-3 px-4 font-bold text-sm flex items-center space-x-2 transition-colors cursor-pointer ${
+						currentTab === "olap-lab"
+							? "text-[var(--brand-orange)]"
+							: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+					}`}
+				>
+					<FlaskConical size={17} />
+					<span>Medallion OLAP Lab</span>
+					<span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[var(--brand-orange)]/15 text-[var(--brand-orange)]">
+						OLAP
+					</span>
+					{currentTab === "olap-lab" && (
 						<motion.span
 							layoutId="analytics-tab-underline"
 							transition={MOTION_PILL_SPRING}
@@ -4671,6 +4707,13 @@ export const AnalyticsPage: React.FC = () => {
 					<div>
 						<ReviewCorpusExport />
 					</div>
+				)}
+
+				{/* TAB 6: MEDALLION OLAP LAB (PERSPECTIVE WASM) */}
+				{currentTab === "olap-lab" && (
+					<Suspense fallback={<ChartPanelSkeleton height="h-[540px]" />}>
+						<MedallionOlapLabTab />
+					</Suspense>
 				)}
 			</AnimatedTabPanel>
 		</div>

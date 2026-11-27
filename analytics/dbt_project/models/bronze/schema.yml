@@ -1,0 +1,78 @@
+version: 2
+
+models:
+  - name: brz_mangas
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB mangas."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+      - name: _snapshot_date
+        tests: [not_null]
+      - name: _document_ejson
+        tests: [not_null]
+  - name: brz_reviews
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB reviews (includes soft-deleted rows)."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+      - name: _snapshot_date
+        tests: [not_null]
+  - name: brz_tags
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB tags."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_creators
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB creators."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_chapters
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB chapters."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_chapter_slots
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB chapter_slots."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_reading_progress
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB reading_progress."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_audit_logs
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB audit_logs."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_external_reviews
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB external_reviews."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_manga_panels
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB manga_panels."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_panel_scan_pages
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB panel_scan_pages."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_creator_tierlists
+    description: "Thin Bronze view over daily Parquet snapshots of MongoDB creator_tierlists."
+    columns:
+      - name: _source_id
+        tests: [not_null]
+  - name: brz_snapshot_audit
+    description: "Audit view over per-collection Bronze snapshot manifests."
+    columns:
+      - name: entity
+        tests: [not_null]
+      - name: snapshot_date
+        tests: [not_null]
+      - name: status
+        tests: [not_null]

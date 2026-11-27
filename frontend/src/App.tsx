@@ -1,7 +1,7 @@
 import { MotionConfig } from "motion/react";
 import type React from "react";
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 
 const MangaListPage = lazy(() => import("./pages/MangaListPage"));
@@ -65,6 +65,12 @@ export const App: React.FC = () => {
 													element={<PanelWordsDetectorPage />}
 												/>
 												<Route path="analytics" element={<AnalyticsPage />} />
+												<Route
+													path="analytics-lab"
+													element={
+														<Navigate to="/analytics?tab=olap-lab" replace />
+													}
+												/>
 												<Route path="tags" element={<TagsPage />} />
 												<Route
 													path="author/:id/:slug"

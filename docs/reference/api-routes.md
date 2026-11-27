@@ -3,13 +3,17 @@
 > **Generated Statically**: Do not edit manually.
 > Run `python scripts/generate_api_routes.py` to regenerate.
 
-Total Endpoints Discovered: **245**
+Total Endpoints Discovered: **249**
 
 | Method | Path | Handler | Tags | Source File | In Schema |
 |:---|:---|:---|:---|:---|:---:|
 | `POST` | `/api/ai/generate` | `generate_ai_content` | AI | [`ai.py:90`](../../backend/routers/ai.py#L90) | Yes |
 | `POST` | `/api/ai/preview` | `preview_ai_request` | AI | [`ai.py:47`](../../backend/routers/ai.py#L47) | Yes |
 | `GET` | `/api/analytics` | `get_all_analytics` | Analytics | [`analytics.py:93`](../../backend/routers/analytics.py#L93) | Yes |
+| `GET` | `/api/analytics-lab/health` | `get_analytics_lab_health` | Analytics Lab | [`analytics_lab.py:41`](../../backend/routers/analytics_lab.py#L41) | Yes |
+| `GET` | `/api/analytics-lab/manifest` | `get_active_manifest` | Analytics Lab | [`analytics_lab.py:46`](../../backend/routers/analytics_lab.py#L46) | Yes |
+| `GET` | `/api/analytics-lab/releases/{release_id}/datasets/{dataset_name}.arrow` | `get_dataset_arrow_stream` | Analytics Lab | [`analytics_lab.py:62`](../../backend/routers/analytics_lab.py#L62) | Yes |
+| `GET` | `/api/analytics-lab/releases/{release_id}/manifest` | `get_release_manifest` | Analytics Lab | [`analytics_lab.py:54`](../../backend/routers/analytics_lab.py#L54) | Yes |
 | `GET` | `/api/analytics/completed-timeline` | `get_completed_timeline` | Analytics | [`analytics.py:418`](../../backend/routers/analytics.py#L418) | Yes |
 | `GET` | `/api/analytics/creators-details` | `get_creators_details` | Analytics | [`analytics.py:522`](../../backend/routers/analytics.py#L522) | Yes |
 | `GET` | `/api/analytics/manga-timeline` | `get_manga_timeline` | Analytics | [`analytics.py:309`](../../backend/routers/analytics.py#L309) | Yes |
@@ -249,6 +253,6 @@ Total Endpoints Discovered: **245**
 | `POST` | `/api/translation/results/{result_id}/publish` | `publish_result` | Translation Studio | [`translation.py:385`](../../backend/routers/translation.py#L385) | Yes |
 | `POST` | `/api/translation/results/{result_id}/regions` | `update_result_regions` | Translation Studio | [`translation.py:343`](../../backend/routers/translation.py#L343) | Yes |
 | `POST` | `/api/translation/results/{result_id}/rerender` | `rerender_result` | Translation Studio | [`translation.py:362`](../../backend/routers/translation.py#L362) | Yes |
-| `GET` | `/health` | `health_check` | - | [`main.py:151`](../../backend/main.py#L151) | Yes |
+| `GET` | `/health` | `health_check` | - | [`main.py:157`](../../backend/main.py#L157) | Yes |
 | `POST` | `/tasks/ocr` | `enqueue_ocr_task` | Tasks | [`tasks.py:128`](../../backend/routers/tasks.py#L128) | Yes |
 | `GET` | `/tasks/{task_id}` | `get_task_status` | Tasks | [`tasks.py:110`](../../backend/routers/tasks.py#L110) | Yes |
